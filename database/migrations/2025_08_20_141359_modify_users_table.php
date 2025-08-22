@@ -12,14 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->string('username', 100)->nullable()->after('id');
-            $table->integer('status')->default(1)->after('password');
-            $table->string('role', 25)->default('user')->after('status');
             $table->foreignId('clinic_id')->nullable()->constrained('clinics')->after('role');
-            
-            $table->index('username');
-            $table->index('status');
-            $table->index('role');
             $table->index('clinic_id');
         });
     }
@@ -30,12 +23,9 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->dropIndex(['username']);
-            $table->dropIndex(['status']);
-            $table->dropIndex(['role']);
             $table->dropIndex(['clinic_id']);
             $table->dropForeign(['clinic_id']);
-            $table->dropColumn(['username', 'status', 'role', 'clinic_id']);
+            $table->dropColumn(['clinic_id']);
         });
     }
 };

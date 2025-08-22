@@ -1,0 +1,52 @@
+# Cursor Rules для проекта Медицинский центр Laravel
+
+## Контекст проекта
+- Это портирование Flask Python приложения на Laravel
+- Основной функционал: Telegram бот для записи к врачу + админ-панель
+- Все сущности и API совместимы с оригинальным Flask проектом
+- Бот работает на BotMan framework с file storage
+- Используется Filament для админ-панели
+
+## Технический стек
+- Laravel 12.25.0 + PHP 8.3.16
+- SQLite database (для разработки)
+- BotMan для Telegram бота
+- Filament для админ-панели
+- Ngrok для локального тестирования webhook
+
+## Архитектура
+Основные сущности: User, Application, City, Clinic, Doctor, Review, Webhook
+Связи: City↔Clinic (M:M), Clinic↔Doctor (M:M), Doctor→Review (1:M)
+
+## Telegram бот функционал
+- /start команда с главным меню
+- Диалог записи на прием (ApplicationConversation)
+- Система отзывов с deep links (ReviewConversation)
+- Промо-коды в процессе записи
+- File storage для состояний бота
+
+## API endpoints (Flask-совместимые)
+- GET /api/v1/cities/ - список городов
+- POST /api/v1/applications/create/ - создание заявки
+- GET /api/v1/webhook/ - webhook CRUD
+
+## Важные команды
+- php artisan telegram:info - статус бота
+- php artisan telegram:webhook <url> - настройка webhook
+- php artisan bot:start-testing - автонастройка тестирования
+
+## Настройки
+- CSRF исключения: botman, api/*
+- BotMan storage: file (storage/botman/)
+- Админка: http://127.0.0.1:8000/admin (admin@admin.ru/password)
+- Бот: https://t.me/medical_center_test_bot
+
+## При работе с проектом
+1. Всегда читайте PROJECT_CONTEXT.md для полного контекста
+2. Сохраняйте совместимость с оригинальным Flask API
+3. Используйте существующие соглашения именования
+4. Тестируйте изменения через бота и админку
+5. Ведите лог изменений в PROJECT_CONTEXT.md
+
+
+

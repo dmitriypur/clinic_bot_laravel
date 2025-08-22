@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Reviews\Schemas;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
 
 class ReviewForm
@@ -14,19 +15,23 @@ class ReviewForm
         return $schema
             ->components([
                 Textarea::make('text')
+                    ->label('Текст')
                     ->columnSpanFull(),
                 TextInput::make('rating')
+                    ->label('Оценка')
                     ->required()
                     ->numeric(),
                 TextInput::make('user_id')
+                    ->label('Пользователь')
                     ->required()
                     ->numeric(),
                 Select::make('doctor_id')
-                    ->relationship('doctor', 'id')
+                    ->label('Врач')
+                    ->relationship('doctor', 'last_name')
                     ->required(),
-                TextInput::make('status')
-                    ->required()
-                    ->numeric(),
+                Toggle::make('status')
+                    ->label('Опубликовано')
+                    ->required(),
             ]);
     }
 }

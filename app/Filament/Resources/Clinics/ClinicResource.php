@@ -17,6 +17,8 @@ use Filament\Tables\Table;
 class ClinicResource extends Resource
 {
     protected static ?string $model = Clinic::class;
+    protected static ?string $navigationLabel = 'Клиники';
+    protected static ?string $pluralNavigationLabel = 'Клиника';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 

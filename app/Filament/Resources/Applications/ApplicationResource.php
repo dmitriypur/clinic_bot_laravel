@@ -18,6 +18,9 @@ class ApplicationResource extends Resource
 {
     protected static ?string $model = Application::class;
 
+    protected static ?string $navigationLabel = 'Заявки';
+    protected static ?string $pluralNavigationLabel = 'Заявки';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     public static function form(Schema $schema): Schema

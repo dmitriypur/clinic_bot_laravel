@@ -16,37 +16,23 @@ class ApplicationsTable
         return $table
             ->columns([
                 TextColumn::make('city.name')
+                    ->label('Город')
                     ->searchable(),
                 TextColumn::make('clinic.name')
+                    ->label('Клиника')
                     ->searchable(),
-                TextColumn::make('doctor.id')
-                    ->searchable(),
-                TextColumn::make('full_name_parent')
+                TextColumn::make('doctor.last_name')
+                    ->label('Врач')
                     ->searchable(),
                 TextColumn::make('full_name')
-                    ->searchable(),
-                TextColumn::make('birth_date')
+                    ->label('Имя ребенка')
                     ->searchable(),
                 TextColumn::make('phone')
+                    ->label('Телефон')
                     ->searchable(),
-                TextColumn::make('promo_code')
-                    ->searchable(),
-                TextColumn::make('tg_user_id')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('tg_chat_id')
-                    ->numeric()
-                    ->sortable(),
                 IconColumn::make('send_to_1c')
+                    ->label('Отправить в 1С')
                     ->boolean(),
-                TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 //

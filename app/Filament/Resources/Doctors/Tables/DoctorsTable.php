@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Doctors\Tables;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -15,49 +16,17 @@ class DoctorsTable
         return $table
             ->columns([
                 TextColumn::make('last_name')
+                    ->label('Фамилия')
                     ->searchable(),
                 TextColumn::make('first_name')
+                    ->label('Имя')
                     ->searchable(),
-                TextColumn::make('second_name')
+                TextColumn::make('clinics.name')
+                    ->label('Клиники')
                     ->searchable(),
-                TextColumn::make('experience')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('age')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('photo_src')
-                    ->searchable(),
-                TextColumn::make('diploma_src')
-                    ->searchable(),
-                TextColumn::make('status')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('age_admission_from')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('age_admission_to')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('sum_ratings')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('count_ratings')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('uuid')
-                    ->label('UUID')
-                    ->searchable(),
-                TextColumn::make('review_link')
-                    ->searchable(),
-                TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                IconColumn::make('status')
+                    ->label('Статус')
+                    ->boolean(),
             ])
             ->filters([
                 //

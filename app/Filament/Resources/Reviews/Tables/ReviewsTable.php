@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Reviews\Tables;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -14,16 +15,19 @@ class ReviewsTable
     {
         return $table
             ->columns([
-                TextColumn::make('rating')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('user_id')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('doctor.id')
+                TextColumn::make('text')
+                    ->label('Текст')
                     ->searchable(),
-                TextColumn::make('status')
+                TextColumn::make('rating')
+                    ->label('Оценка')
                     ->numeric()
+                    ->sortable(),
+                TextColumn::make('doctor.full_name')
+                    ->label('Врач')
+                    ->searchable(),
+                IconColumn::make('status')
+                    ->label('Опубликовано')
+                    ->boolean()
                     ->sortable(),
                 TextColumn::make('created_at')
                     ->dateTime()

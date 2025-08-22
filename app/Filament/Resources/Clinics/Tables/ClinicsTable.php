@@ -5,8 +5,10 @@ namespace App\Filament\Resources\Clinics\Tables;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+
 
 class ClinicsTable
 {
@@ -15,18 +17,14 @@ class ClinicsTable
         return $table
             ->columns([
                 TextColumn::make('name')
+                    ->label('Название')
                     ->searchable(),
-                TextColumn::make('status')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('cities.name')
+                    ->label('Города')
+                    ->searchable(),
+                IconColumn::make('status')
+                    ->label('Статус')
+                    ->boolean(),
             ])
             ->filters([
                 //

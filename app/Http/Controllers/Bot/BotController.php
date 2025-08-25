@@ -73,30 +73,30 @@ class BotController extends Controller
      */
     private function setupBotHandlers(BotMan $botman)
     {
-        // Обработчик команды /start - главная точка входа в бота
-        $botman->hears('/start', function (BotMan $bot) {
-            // Получаем полные данные сообщения от Telegram
-            $payload = $bot->getMessage()->getPayload();
-            $text = $payload['text'] ?? '';
+        // Обработчик команды /start с поддержкой deep links
+        $botman->hears('/start.*', function (BotMan $bot) {
+            $message = $bot->getMessage();
+            $text = $message->getText();
             
-            // Разбираем команду /start на параметры
-            // Формат: /start [параметр1] [параметр2] ...
-            $params = explode(' ', $text);
+            // Разбираем команду на части
+            $parts = preg_split('/\s+/', trim($text), 2);
             
-            // Проверяем есть ли параметры и начинается ли первый с 'review_'
-            // Это deep link для системы отзывов: /start review_doctor_uuid
-            if (count($params) > 1 && str_starts_with($params[1], 'review_')) {
-                // Извлекаем UUID врача из параметра
-                // Формат параметра: review_uuid_врача
-                $doctorUuid = str_replace('review_', '', $params[1]);
+            if (count($parts) > 1) {
+                $param = $parts[1];
                 
-                // Запускаем диалог оставления отзыва для конкретного врача
-                $bot->startConversation(new ReviewConversation($doctorUuid));
-                return;
+                // Проверяем начинается ли параметр с 'review_'
+                // Это deep link для системы отзывов: /start review_doctor_uuid
+                if (str_starts_with($param, 'review_')) {
+                    // Извлекаем UUID врача из параметра
+                    $doctorUuid = str_replace('review_', '', $param);
+                    
+                    // Запускаем диалог оставления отзыва для конкретного врача
+                    $bot->startConversation(new ReviewConversation($doctorUuid));
+                    return;
+                }
             }
-
-            // Если нет специальных параметров - запускаем обычный диалог записи
-            // ApplicationConversation обрабатывает весь процесс записи к врачу
+            
+            // Запускаем обычный диалог записи к врачу
             $bot->startConversation(new ApplicationConversation());
         });
 

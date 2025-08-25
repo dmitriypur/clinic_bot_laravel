@@ -58,13 +58,26 @@ class ReviewConversation extends Conversation
      */
     public function run()
     {
+        // Логируем запуск диалога отзыва
+        \Log::info('ReviewConversation started', [
+            'doctor_uuid' => $this->doctorUuid
+        ]);
+        
         // Ищем врача по UUID из deep link
         $doctor = Doctor::where('uuid', $this->doctorUuid)->first();
         
         if (!$doctor) {
+            \Log::error('Doctor not found for review', [
+                'doctor_uuid' => $this->doctorUuid
+            ]);
             $this->say('❌ Врач не найден');
             return;
         }
+
+        \Log::info('Doctor found for review', [
+            'doctor_id' => $doctor->id,
+            'doctor_name' => $doctor->full_name
+        ]);
 
         // Сохраняем ID врача для последующего создания отзыва
         $this->reviewData['doctor_id'] = $doctor->id;

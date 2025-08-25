@@ -2,6 +2,7 @@
 
 namespace App\Bot\Conversations;
 
+use App\Bot\Traits\HandlesDeepLinks;
 use App\Models\Application;
 use App\Models\City;
 use App\Models\Clinic;
@@ -27,6 +28,7 @@ use BotMan\BotMan\Messages\Outgoing\Question;
  */
 class ApplicationConversation extends Conversation
 {
+    use HandlesDeepLinks;
     /**
      * Массив для хранения данных заявки во время диалога
      * 
@@ -72,6 +74,11 @@ class ApplicationConversation extends Conversation
             ]);
 
         $this->ask($question, function (Answer $answer) {
+            // КРИТИЧНО: Проверяем deep links в первую очередь
+            if ($this->handleDeepLinks($answer)) {
+                return; // Deep link обработан, прекращаем выполнение
+            }
+            
             $value = $answer->getValue();
             
             // Определяем сценарий работы в зависимости от выбора пользователя
@@ -399,6 +406,11 @@ class ApplicationConversation extends Conversation
             ]);
 
         $this->ask($question, function (Answer $answer) use ($doctor) {
+            // КРИТИЧНО: Проверяем deep links в первую очередь
+            if ($this->handleDeepLinks($answer)) {
+                return; // Deep link обработан, прекращаем выполнение
+            }
+            
             switch ($answer->getValue()) {
                 case 'make_appointment':
                     $this->askPhone();

@@ -73,10 +73,14 @@ class BotController extends Controller
      */
     private function setupBotHandlers(BotMan $botman)
     {
+
+        
         // Обработчик команды /start с поддержкой deep links
         $botman->hears('/start.*', function (BotMan $bot) {
             $message = $bot->getMessage();
             $text = $message->getText();
+            
+
             
             // Разбираем команду на части
             $parts = preg_split('/\s+/', trim($text), 2);
@@ -89,6 +93,8 @@ class BotController extends Controller
                 if (str_starts_with($param, 'review_')) {
                     // Извлекаем UUID врача из параметра
                     $doctorUuid = str_replace('review_', '', $param);
+                    
+
                     
                     // Запускаем диалог оставления отзыва для конкретного врача
                     $bot->startConversation(new ReviewConversation($doctorUuid));

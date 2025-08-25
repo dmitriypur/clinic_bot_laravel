@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ApplicationResource\Pages;
 use App\Filament\Resources\ApplicationResource\RelationManagers;
 use App\Models\Application;
+use App\Models\Clinic;
 use Filament\Forms;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -27,6 +28,23 @@ class ApplicationResource extends Resource
     protected static ?string $pluralNavigationLabel = 'Заявки';
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        // Получаем текущего пользователя
+        $user = auth()->user();
+
+        // Если пользователь с ролью 'user' — показываем только их город
+        if ($user->hasRole('partner')) {
+            $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
+            $applications = $clinic->applications->pluck('id')->toArray();
+            $query->whereIn('id', $applications);
+        }
+
+        return $query;
+    }
 
     public static function form(Form $form): Form
     {

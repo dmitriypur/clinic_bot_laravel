@@ -26,6 +26,21 @@ class ClinicResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        // Получаем текущего пользователя
+        $user = auth()->user();
+
+        // Если пользователь с ролью 'user' — показываем только их город
+        if ($user->hasRole('partner')) {
+            $query->where('id', $user->clinic_id);
+        }
+
+        return $query;
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -39,6 +54,7 @@ class ClinicResource extends Resource
                     ->numeric(),
                 Select::make('city_id')
                     ->label('Города')
+                    ->multiple()
                     ->relationship('cities', 'name')
                     ->required(),
             ]);

@@ -347,8 +347,9 @@ class ApplicationConversation extends Conversation
 
     public function askPhone()
     {
-        $question = Question::create('📱 Введите номер телефона (например: +79991234567):')
+        $question = Question::create('📱 Поделитесь номером телефона или введите его вручную:')
             ->addButtons([
+                Button::create('📱 Поделиться номером телефона')->value('share_phone'),
                 Button::create('Назад')->value('back'),
                 Button::create('В меню')->value('menu'),
             ]);
@@ -365,6 +366,11 @@ class ApplicationConversation extends Conversation
                 return;
             }
 
+            if ($answer->getValue() === 'share_phone') {
+                $this->askPhoneWithKeyboard();
+                return;
+            }
+
             $phone = $answer->getText();
             
             // Простая проверка телефона
@@ -374,6 +380,91 @@ class ApplicationConversation extends Conversation
             } else {
                 $this->say('❌ Неверный формат номера телефона');
                 $this->askPhone();
+            }
+        });
+    }
+
+    public function askPhoneWithKeyboard()
+    {
+        // Используем прямой API вызов Telegram для отправки клавиатуры
+        $bot = $this->getBot();
+        $chatId = $bot->getUser()->getId();
+        $token = config('botman.drivers.telegram.token');
+        
+        $keyboard = [
+            'keyboard' => [
+                [
+                    [
+                        'text' => '📱 Поделиться номером телефона',
+                        'request_contact' => true
+                    ]
+                ]
+            ],
+            'resize_keyboard' => true,
+            'one_time_keyboard' => true
+        ];
+
+        // Прямой вызов Telegram API
+        $url = "https://api.telegram.org/bot{$token}/sendMessage";
+        $data = [
+            'chat_id' => $chatId,
+            'text' => '📱 Поделитесь номером телефона, который у вас в telegram и на который позвонит оператор колл-центра',
+            'reply_markup' => json_encode($keyboard)
+        ];
+
+        // Отправляем через curl
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_exec($ch);
+        curl_close($ch);
+
+        // Ожидаем контакт или текст
+        $this->ask('', function (Answer $answer) use ($token, $chatId) {
+            // Убираем клавиатуру через API
+            $removeUrl = "https://api.telegram.org/bot{$token}/sendMessage";
+            $removeData = [
+                'chat_id' => $chatId,
+                'text' => '⌨️ Клавиатура скрыта',
+                'reply_markup' => json_encode(['remove_keyboard' => true])
+            ];
+            
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $removeUrl);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $removeData);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_exec($ch);
+            curl_close($ch);
+
+            $message = $answer->getMessage();
+            
+            // Проверяем, был ли получен контакт
+            if ($message && isset($message->getPayload()['contact'])) {
+                $contact = $message->getPayload()['contact'];
+                $phone = $contact['phone_number'];
+                
+                // Добавляем + если нет
+                if (!str_starts_with($phone, '+')) {
+                    $phone = '+' . $phone;
+                }
+                
+                $this->applicationData['phone'] = $phone;
+                $this->say("✅ Номер телефона получен: {$phone}");
+                $this->askFullName();
+            } else {
+                // Если пользователь ввел текст вместо отправки контакта
+                $phone = $answer->getText();
+                
+                if (preg_match('/^\+?[0-9]{10,15}$/', str_replace([' ', '-', '(', ')'], '', $phone))) {
+                    $this->applicationData['phone'] = $phone;
+                    $this->askFullName();
+                } else {
+                    $this->say('❌ Неверный формат номера телефона');
+                    $this->askPhone();
+                }
             }
         });
     }

@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\CityResource\Pages;
 use App\Filament\Resources\CityResource\RelationManagers;
 use App\Models\City;
+use App\Models\Clinic;
 use Filament\Forms;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -25,6 +26,23 @@ class CityResource extends Resource
     protected static ?string $pluralNavigationLabel = 'Город';
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        // Получаем текущего пользователя
+        $user = auth()->user();
+
+        // Если пользователь с ролью 'user' — показываем только их город
+        if ($user->hasRole('partner')) {
+            $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
+            $cities = $clinic->cities->pluck('id')->toArray();
+            $query->whereIn('id', $cities);
+        }
+
+        return $query;
+    }
 
     public static function form(Form $form): Form
     {

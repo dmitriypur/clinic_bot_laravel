@@ -74,7 +74,7 @@ enable_maintenance() {
     
     if [ -f "$APP_DIR/artisan" ]; then
         cd "$APP_DIR"
-        php artisan down --message="Обновление системы" --retry=60
+        php artisan down --retry=60
     else
         warning "artisan не найден, режим обслуживания не включен"
     fi
@@ -90,96 +90,56 @@ disable_maintenance() {
     fi
 }
 
-# Загрузка нового кода
-download_code() {
-    log "Загрузка нового кода..."
+# Обновление кода через git pull
+update_code() {
+    log "Обновление кода через git..."
     
-    # Создаем временную директорию
-    mkdir -p "$TEMP_DIR"
-    cd "$TEMP_DIR"
+    cd "$APP_DIR"
     
-    # Клонируем репозиторий
-    git clone --branch "$BRANCH" --single-branch "$REPO_URL" .
+    # Обновляем код
+    git fetch origin
+    git reset --hard origin/$BRANCH
     
-    # Удаляем .git директорию
-    rm -rf .git
-    
-    log "Код загружен в $TEMP_DIR"
+    log "Код обновлен"
 }
 
 # Установка зависимостей
 install_dependencies() {
     log "Установка зависимостей..."
     
-    cd "$TEMP_DIR"
+    cd "$APP_DIR"
     
     # Composer зависимости
     composer install --no-dev --optimize-autoloader --no-interaction
     
-    # NPM зависимости и сборка
-    npm ci
+    # NPM зависимости и сборка (с принудительным разрешением конфликтов)
+    npm ci --legacy-peer-deps
     npm run build
     
     log "Зависимости установлены"
 }
 
-# Копирование конфигурации
-copy_config() {
-    log "Копирование конфигурации..."
-    
-    if [ -f "$APP_DIR/.env" ]; then
-        cp "$APP_DIR/.env" "$TEMP_DIR/.env"
-        log ".env файл скопирован"
-    else
-        error ".env файл не найден в текущей версии"
-    fi
-    
-    # Копируем storage (логи, сессии, кеш)
-    if [ -d "$APP_DIR/storage" ]; then
-        cp -r "$APP_DIR/storage"/* "$TEMP_DIR/storage/"
-        log "Директория storage скопирована"
-    fi
-}
-
 # Настройка прав доступа
-set_permissions() {
+setup_permissions() {
     log "Настройка прав доступа..."
     
+    cd "$APP_DIR"
+    
     # Владелец и группа
-    chown -R www-data:www-data "$TEMP_DIR"
+    chown -R www-data:www-data "$APP_DIR"
     
     # Права на файлы и директории
-    find "$TEMP_DIR" -type f -exec chmod 644 {} \;
-    find "$TEMP_DIR" -type d -exec chmod 755 {} \;
+    find "$APP_DIR" -type f -exec chmod 644 {} \;
+    find "$APP_DIR" -type d -exec chmod 755 {} \;
     
     # Специальные права для storage и cache
-    chmod -R 775 "$TEMP_DIR/storage"
-    chmod -R 775 "$TEMP_DIR/bootstrap/cache"
+    chmod -R 775 "$APP_DIR/storage"
+    chmod -R 775 "$APP_DIR/bootstrap/cache"
     
     log "Права доступа настроены"
 }
 
-# Атомарная замена
-atomic_deploy() {
-    log "Атомарная замена приложения..."
-    
-    # Создаем временную директорию для старой версии
-    OLD_DIR="/tmp/old-medical-center-$(date +%s)"
-    
-    # Атомарно перемещаем директории
-    if [ -d "$APP_DIR" ]; then
-        mv "$APP_DIR" "$OLD_DIR"
-    fi
-    
-    mv "$TEMP_DIR" "$APP_DIR"
-    
-    # Удаляем старую версию после успешного деплоя
-    if [ -d "$OLD_DIR" ]; then
-        rm -rf "$OLD_DIR"
-    fi
-    
-    log "Приложение заменено"
-}
+
 
 # Выполнение миграций и кеширование
 run_laravel_commands() {
@@ -206,10 +166,18 @@ restart_services() {
     log "Перезапуск сервисов..."
     
     # Перезапуск PHP-FPM
-    systemctl reload php8.2-fpm
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl reload php8.2-fpm
+        log "PHP-FPM перезапущен"
+    fi
     
-    # Перезапуск Supervisor воркеров
-    supervisorctl restart laravel-worker:*
+    # Перезапуск Supervisor воркеров (если установлен)
+    if command -v supervisorctl >/dev/null 2>&1; then
+        supervisorctl restart laravel-worker:* || log "Supervisor воркеры не настроены"
+        log "Supervisor воркеры перезапущены"
+    else
+        warning "Supervisor не установлен, пропускаем перезапуск воркеров"
+    fi
     
     # Очистка Redis кеша (если нужно)
     # redis-cli FLUSHDB
@@ -293,11 +261,9 @@ main() {
     check_permissions
     create_backup
     enable_maintenance
-    download_code
+    update_code
     install_dependencies
-    copy_config
-    set_permissions
-    atomic_deploy
+    setup_permissions
     run_laravel_commands
     restart_services
     health_check

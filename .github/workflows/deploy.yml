@@ -59,7 +59,7 @@ jobs:
           cp -r /var/www/medical-center /var/www/backups/medical-center-backup-$(date +%Y%m%d_%H%M%S)
           
           # Включаем режим обслуживания
-          php artisan down --message="Обновление системы" --retry=60
+          php artisan down --retry=60
           
           # Обновляем код из git
           git fetch origin
@@ -67,7 +67,7 @@ jobs:
           
           # Устанавливаем зависимости
           composer install --no-dev --optimize-autoloader --no-interaction
-          npm ci
+          npm ci --legacy-peer-deps
           npm run build
           
           # Настраиваем права
@@ -83,8 +83,12 @@ jobs:
           php artisan view:cache
           php artisan queue:restart
           
-          # Перезапускаем сервисы
-          supervisorctl restart laravel-worker:*
+          # Перезапускаем сервисы (если supervisor установлен)
+          if command -v supervisorctl >/dev/null 2>&1; then
+            supervisorctl restart laravel-worker:* || echo "Supervisor воркеры не настроены"
+          else
+            echo "Supervisor не установлен, пропускаем перезапуск воркеров"
+          fi
           
           # Отключаем режим обслуживания
           php artisan up

@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('applications', function (Blueprint $table) {
+        if (!Schema::hasTable('applications')) {
+            Schema::create('applications', function (Blueprint $table) {
             $table->bigInteger('id')->primary();
             $table->foreignId('city_id')->constrained('cities');
             $table->foreignId('clinic_id')->nullable()->constrained('clinics');
@@ -29,7 +30,8 @@ return new class extends Migration
             $table->index('city_id');
             $table->index('clinic_id');
             $table->index('doctor_id');
-        });
+            });
+        }
     }
 
     /**

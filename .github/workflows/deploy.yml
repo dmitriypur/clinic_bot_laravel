@@ -1,0 +1,96 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql, dom, filter, gd, iconv, json, mbstring, pdo, zip, redis
+        coverage: none
+
+    - name: Cache Composer packages
+      id: composer-cache
+      uses: actions/cache@v3
+      with:
+        path: vendor
+        key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-php-
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-dev --optimize-autoloader
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install NPM dependencies
+      run: npm ci
+
+    - name: Build assets
+      run: npm run build
+
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: ${{ secrets.PORT }}
+        script: |
+          # Переходим в директорию приложения
+          cd /var/www/medical-center
+          
+          # Создаем backup текущей версии
+          cp -r /var/www/medical-center /var/www/backups/medical-center-backup-$(date +%Y%m%d_%H%M%S)
+          
+          # Включаем режим обслуживания
+          php artisan down --message="Обновление системы" --retry=60
+          
+          # Обновляем код из git
+          git fetch origin
+          git reset --hard origin/main
+          
+          # Устанавливаем зависимости
+          composer install --no-dev --optimize-autoloader --no-interaction
+          npm ci
+          npm run build
+          
+          # Настраиваем права
+          chown -R www-data:www-data /var/www/medical-center
+          chmod -R 755 /var/www/medical-center
+          chmod -R 775 /var/www/medical-center/storage
+          chmod -R 775 /var/www/medical-center/bootstrap/cache
+          
+          # Выполняем Laravel команды
+          php artisan migrate --force
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+          php artisan queue:restart
+          
+          # Перезапускаем сервисы
+          supervisorctl restart laravel-worker:*
+          
+          # Отключаем режим обслуживания
+          php artisan up
+          
+          # Удаляем старые бэкапы (оставляем последние 5)
+          cd /var/www/backups
+          ls -1t | tail -n +6 | xargs -r rm -rf
+          
+          echo "Деплой завершен успешно!"

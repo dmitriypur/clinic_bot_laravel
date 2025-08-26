@@ -167,7 +167,7 @@ restart_services() {
     
     # Перезапуск PHP-FPM
     if command -v systemctl >/dev/null 2>&1; then
-        systemctl reload php8.2-fpm
+        systemctl reload php8.3-fpm
         log "PHP-FPM перезапущен"
     fi
     

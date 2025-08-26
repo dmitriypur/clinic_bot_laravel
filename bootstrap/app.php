@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'botman',
             'api/*',
+            'livewire/*',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

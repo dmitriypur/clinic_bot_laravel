@@ -15,16 +15,16 @@ class CityController extends Controller
     public function index(Request $request)
     {
         $query = City::where('status', 1); // Active cities only
-        
-        $perPage = $request->get('size', 5);
+
+        $perPage = $request->get('size', 20);
         $cities = $query->orderBy('name')->paginate($perPage);
-        
+
         if ($cities->isEmpty()) {
             return response()->json([
                 'error' => 'Cities not found'
             ], 404);
         }
-        
+
         return CityResource::collection($cities);
     }
 
@@ -39,7 +39,7 @@ class CityController extends Controller
         ]);
 
         $city = City::create($validated);
-        
+
         return new CityResource($city);
     }
 
@@ -62,7 +62,7 @@ class CityController extends Controller
         ]);
 
         $city->update($validated);
-        
+
         return new CityResource($city);
     }
 
@@ -72,7 +72,7 @@ class CityController extends Controller
     public function destroy(City $city)
     {
         $city->delete();
-        
+
         return response()->json(null, 204);
     }
 }

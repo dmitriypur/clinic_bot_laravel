@@ -11,19 +11,21 @@ use BotMan\BotMan\Messages\Conversations\Conversation;
 use BotMan\BotMan\Messages\Incoming\Answer;
 use BotMan\BotMan\Messages\Outgoing\Actions\Button;
 use BotMan\BotMan\Messages\Outgoing\Question;
+use BotMan\Drivers\Telegram\Extensions\Keyboard;
+use BotMan\Drivers\Telegram\Extensions\KeyboardButton;
 
 /**
  * Основной диалог для записи на прием к врачу
- * 
+ *
  * Этот класс обрабатывает весь процесс записи пациента к врачу:
  * - Показывает главное меню с опциями
  * - Собирает данные о пациенте пошагово
  * - Позволяет выбрать город, клинику, врача
  * - Создает заявку в базе данных
- * 
+ *
  * Поддерживаемые сценарии:
  * - Обычная запись на прием
- * - Запись с промокодом 
+ * - Запись с промокодом
  * - Просмотр врачей без записи
  */
 class ApplicationConversation extends Conversation
@@ -31,7 +33,7 @@ class ApplicationConversation extends Conversation
     use HandlesDeepLinks;
     /**
      * Массив для хранения данных заявки во время диалога
-     * 
+     *
      * Содержит поля:
      * - scenario: тип сценария (appointment, appointment_promo, view_doctors)
      * - city_id, city_name: выбранный город
@@ -56,7 +58,7 @@ class ApplicationConversation extends Conversation
 
     /**
      * Показывает главное меню бота с основными опциями
-     * 
+     *
      * Предлагает пользователю выбрать одно из действий:
      * - Записаться на прием (обычная запись)
      * - Просмотр врачей (без записи)
@@ -65,49 +67,77 @@ class ApplicationConversation extends Conversation
      */
     public function showMainMenu()
     {
-        $question = Question::create('🏥 Добро пожаловать в медицинский центр! Выберите действие:')
-            ->addButtons([
-                Button::create('📝 Записаться на прием')->value('make_appointment'),
-                Button::create('👩🏻‍⚕️ Просмотр врачей')->value('view_doctors'),
-                Button::create('🎁 Запись с промокодом')->value('appointment_promo'),
-                Button::create('👉 Телеграм канал')->url('https://t.me/kidsvision1'),
-            ]);
+//        $urlApp = "https://0c5bca5ded10.ngrok-free.app";
+//        $question = Question::create('🏥 Добро пожаловать в медицинский центр! Выберите действие:')
+//            ->addButtons([
+//                Button::create('📝 Записаться на прием')->value('make_appointment'),
+//                Button::create('👩🏻‍⚕️ Просмотр врачей')->value('view_doctors'),
+//                Button::create('🎁 Запись с промокодом')->value('appointment_promo'),
+//                Button::create('👉 Телеграм канал')->url('https://t.me/kidsvision1'),
+//                Button::create('👉 Телеграм канал')->url($urlApp),
+//            ]);
 
-        $this->ask($question, function (Answer $answer) {
-            // КРИТИЧНО: Проверяем deep links в первую очередь
-            if ($this->handleDeepLinks($answer)) {
-                return; // Deep link обработан, прекращаем выполнение
-            }
-            
-            $value = $answer->getValue();
-            
-            // Определяем сценарий работы в зависимости от выбора пользователя
-            switch ($value) {
-                case 'make_appointment':
-                    // Обычная запись - сначала запрашиваем дату рождения
-                    $this->applicationData['scenario'] = 'appointment';
-                    $this->askBirthDate();
-                    break;
-                case 'view_doctors':
-                    // Просмотр врачей - сразу переходим к выбору города
-                    $this->applicationData['scenario'] = 'view_doctors';
-                    $this->askCity();
-                    break;
-                case 'appointment_promo':
-                    // Запись с промокодом - сначала запрашиваем промокод
-                    $this->applicationData['scenario'] = 'appointment_promo';
-                    $this->askPromoCode();
-                    break;
-                default:
-                    // Если получен неожиданный ответ - показываем меню заново
-                    $this->showMainMenu();
-            }
-        });
+        $keyboard = [
+            'inline_keyboard' => [[
+                [
+                    'text' => 'Запустить приложение',
+                    'web_app' => ['url' => 'https://db727a1dcdf3.ngrok-free.app']
+                ]
+            ]]
+        ];
+
+        $this->bot->reply('Добро пожаловать! 🚀', [
+            'reply_markup' => json_encode($keyboard)
+        ]);
+
+//        $keyboard = Keyboard::create()
+//            ->type(Keyboard::TYPE_KEYBOARD)
+//            ->oneTimeKeyboard(true)
+//            ->addRow(
+//                KeyboardButton::create('Да')->callbackData('first_inline'),
+//                KeyboardButton::create('Нет')->callbackData('second_inline')
+//            )
+//            ->toArray();
+//
+//        $this->ask('Выберите вариант:', function (Answer $answer) {
+//            $this->bot->reply('Вы выбрали: ' . $answer->getText());
+//        }, $keyboard);
+
+//        $this->ask($question, function (Answer $answer) {
+//            // КРИТИЧНО: Проверяем deep links в первую очередь
+//            if ($this->handleDeepLinks($answer)) {
+//                return; // Deep link обработан, прекращаем выполнение
+//            }
+//
+//            $value = $answer->getValue();
+//
+//            // Определяем сценарий работы в зависимости от выбора пользователя
+//            switch ($value) {
+//                case 'make_appointment':
+//                    // Обычная запись - сначала запрашиваем дату рождения
+//                    $this->applicationData['scenario'] = 'appointment';
+//                    $this->askBirthDate();
+//                    break;
+//                case 'view_doctors':
+//                    // Просмотр врачей - сразу переходим к выбору города
+//                    $this->applicationData['scenario'] = 'view_doctors';
+//                    $this->askCity();
+//                    break;
+//                case 'appointment_promo':
+//                    // Запись с промокодом - сначала запрашиваем промокод
+//                    $this->applicationData['scenario'] = 'appointment_promo';
+//                    $this->askPromoCode();
+//                    break;
+//                default:
+//                    // Если получен неожиданный ответ - показываем меню заново
+//                    $this->showMainMenu();
+//            }
+//        });
     }
 
     /**
      * Запрашивает дату рождения пациента (опциональное поле)
-     * 
+     *
      * Проверяет формат даты на соответствие dd.mm.yyyy
      * Пользователь может пропустить этот шаг
      */
@@ -121,13 +151,13 @@ class ApplicationConversation extends Conversation
 
         $this->ask($question, function (Answer $answer) {
             $text = $answer->getText();
-            
+
             // Если пользователь пропускает - переходим к выбору города
             if ($answer->getValue() === 'skip') {
                 $this->askCity();
                 return;
             }
-            
+
             // Возврат в главное меню
             if ($answer->getValue() === 'menu') {
                 $this->showMainMenu();
@@ -149,7 +179,7 @@ class ApplicationConversation extends Conversation
 
     /**
      * Запрашивает промокод для записи со скидкой
-     * 
+     *
      * Валидация промокода не выполняется в боте,
      * проверка происходит при обработке заявки в 1C
      */
@@ -175,7 +205,7 @@ class ApplicationConversation extends Conversation
 
     /**
      * Показывает список доступных городов для выбора
-     * 
+     *
      * Загружает активные города из базы данных (status = 1)
      * Ограничивается 10 городами для соблюдения лимитов Telegram
      */
@@ -183,19 +213,19 @@ class ApplicationConversation extends Conversation
     {
         // Получаем только активные города, отсортированные по названию
         $cities = City::where('status', 1)->orderBy('name')->get();
-        
+
         if ($cities->isEmpty()) {
             $this->say('❌ Города не найдены');
             return;
         }
 
         $question = Question::create('🏙️ Выберите город:');
-        
+
         // Добавляем города как кнопки (максимум 10 для соблюдения лимитов Telegram API)
         foreach ($cities->take(10) as $city) {
             $question->addButton(Button::create($city->name)->value('city_' . $city->id));
         }
-        
+
         $question->addButton(Button::create('В меню')->value('menu'));
 
         $this->ask($question, function (Answer $answer) {
@@ -208,12 +238,12 @@ class ApplicationConversation extends Conversation
             if (str_starts_with($answer->getValue(), 'city_')) {
                 $cityId = str_replace('city_', '', $answer->getValue());
                 $city = City::find($cityId);
-                
+
                 if ($city) {
                     // Сохраняем выбранный город
                     $this->applicationData['city_id'] = $cityId;
                     $this->applicationData['city_name'] = $city->name;
-                    
+
                     // Выбираем следующий шаг в зависимости от сценария
                     if ($this->applicationData['scenario'] === 'view_doctors') {
                         // Для просмотра врачей - сразу показываем список
@@ -236,7 +266,7 @@ class ApplicationConversation extends Conversation
     public function askClinicOrDoctor()
     {
         $question = Question::create('👀 Узнайте, как сохранить детям зрение.
-💯 Эффективные методы лечения и рекомендации ведущих детских офтальмологов России в нашем телеграм канале 
+💯 Эффективные методы лечения и рекомендации ведущих детских офтальмологов России в нашем телеграм канале
 "Национального Фонда защиты детского зрения"')
             ->addButtons([
                 Button::create('👩🏻‍⚕️ Смотреть врачей')->value('doctors'),
@@ -279,11 +309,11 @@ class ApplicationConversation extends Conversation
         }
 
         $question = Question::create('🏥 Выберите клинику:');
-        
+
         foreach ($clinics->take(10) as $clinic) {
             $question->addButton(Button::create($clinic->name)->value('clinic_' . $clinic->id));
         }
-        
+
         $question->addButton(Button::create('Назад')->value('back'));
         $question->addButton(Button::create('В меню')->value('menu'));
 
@@ -292,7 +322,7 @@ class ApplicationConversation extends Conversation
                 $this->showMainMenu();
                 return;
             }
-            
+
             if ($answer->getValue() === 'back') {
                 $this->askClinicOrDoctor();
                 return;
@@ -301,7 +331,7 @@ class ApplicationConversation extends Conversation
             if (str_starts_with($answer->getValue(), 'clinic_')) {
                 $clinicId = str_replace('clinic_', '', $answer->getValue());
                 $clinic = $clinics->find($clinicId);
-                
+
                 if ($clinic) {
                     $this->applicationData['clinic_id'] = $clinicId;
                     $this->applicationData['clinic_name'] = $clinic->name;
@@ -319,17 +349,17 @@ class ApplicationConversation extends Conversation
     public function showDoctors($clinicId = null)
     {
         $cityId = $this->applicationData['city_id'];
-        
+
         $query = Doctor::whereHas('clinics.cities', function ($q) use ($cityId) {
             $q->where('city_id', $cityId);
         })->where('status', 1);
-        
+
         if ($clinicId) {
             $query->whereHas('clinics', function ($q) use ($clinicId) {
                 $q->where('clinic_id', $clinicId);
             });
         }
-        
+
         $doctors = $query->get();
 
         if ($doctors->isEmpty()) {
@@ -338,12 +368,12 @@ class ApplicationConversation extends Conversation
         }
 
         $question = Question::create('👩🏻‍⚕️ Выберите врача:');
-        
+
         foreach ($doctors->take(10) as $doctor) {
             $name = $doctor->full_name;
             $question->addButton(Button::create($name)->value('doctor_' . $doctor->id));
         }
-        
+
         $question->addButton(Button::create('Назад')->value('back'));
         $question->addButton(Button::create('В меню')->value('menu'));
 
@@ -352,7 +382,7 @@ class ApplicationConversation extends Conversation
                 $this->showMainMenu();
                 return;
             }
-            
+
             if ($answer->getValue() === 'back') {
                 $this->askClinicOrDoctor();
                 return;
@@ -361,7 +391,7 @@ class ApplicationConversation extends Conversation
             if (str_starts_with($answer->getValue(), 'doctor_')) {
                 $doctorId = str_replace('doctor_', '', $answer->getValue());
                 $doctor = $doctors->find($doctorId);
-                
+
                 if ($doctor) {
                     $this->applicationData['doctor_id'] = $doctorId;
                     $this->showDoctorInfo($doctor);
@@ -387,7 +417,7 @@ class ApplicationConversation extends Conversation
         $info .= "🎓 *Стаж (лет)*: {$doctor->experience}\n";
         $info .= "⭐ *Рейтинг*: {$doctor->rating}\n";
         $info .= "📅 *Возраст приема*: с {$doctor->age_admission_from} до {$doctor->age_admission_to} лет\n\n";
-        
+
         $clinics = $doctor->clinics;
         if ($clinics->isNotEmpty()) {
             $info .= "🏥 *Клиники приема*:\n";
@@ -410,7 +440,7 @@ class ApplicationConversation extends Conversation
             if ($this->handleDeepLinks($answer)) {
                 return; // Deep link обработан, прекращаем выполнение
             }
-            
+
             switch ($answer->getValue()) {
                 case 'make_appointment':
                     $this->askPhone();
@@ -448,7 +478,7 @@ class ApplicationConversation extends Conversation
                 $this->showMainMenu();
                 return;
             }
-            
+
             if ($answer->getValue() === 'back') {
                 $doctor = Doctor::find($this->applicationData['doctor_id']);
                 $this->showDoctorInfo($doctor);
@@ -456,7 +486,7 @@ class ApplicationConversation extends Conversation
             }
 
             $phone = $answer->getText();
-            
+
             // Простая проверка телефона
             if (preg_match('/^\+?[0-9]{10,15}$/', str_replace([' ', '-', '(', ')'], '', $phone))) {
                 $this->applicationData['phone'] = $phone;
@@ -481,14 +511,14 @@ class ApplicationConversation extends Conversation
                 $this->showMainMenu();
                 return;
             }
-            
+
             if ($answer->getValue() === 'back') {
                 $this->askPhone();
                 return;
             }
 
             $fullName = trim($answer->getText());
-            
+
             if (strlen($fullName) >= 3) {
                 $this->applicationData['full_name'] = $fullName;
                 $this->askParentName();
@@ -513,12 +543,12 @@ class ApplicationConversation extends Conversation
                 $this->showMainMenu();
                 return;
             }
-            
+
             if ($answer->getValue() === 'back') {
                 $this->askFullName();
                 return;
             }
-            
+
             if ($answer->getValue() === 'skip') {
                 $this->askConsent();
                 return;
@@ -544,12 +574,12 @@ class ApplicationConversation extends Conversation
                 $this->showMainMenu();
                 return;
             }
-            
+
             if ($answer->getValue() === 'back') {
                 $this->askParentName();
                 return;
             }
-            
+
             if ($answer->getValue() === 'consent') {
                 $this->createApplication();
             } else {
@@ -562,10 +592,10 @@ class ApplicationConversation extends Conversation
     {
         try {
             $user = $this->getBot()->getUser();
-            
+
             // Генерируем ID как в оригинале
             $applicationId = now()->format('YmdHis') . rand(1000, 9999);
-            
+
             $applicationData = [
                 'id' => $applicationId,
                 'city_id' => $this->applicationData['city_id'],
@@ -584,10 +614,10 @@ class ApplicationConversation extends Conversation
             $application = Application::create($applicationData);
 
             $this->say("✅ *Заявка успешно создана!*\n\n📋 Номер заявки: `{$application->id}`\n\n🏥 Наш менеджер свяжется с вами в ближайшее время для подтверждения записи.");
-            
+
             // TODO: Отправка в 1C через очередь
             // TODO: Уведомления через webhook
-            
+
         } catch (\Exception $e) {
             $this->say('❌ Произошла ошибка при создании заявки. Попробуйте еще раз.');
             \Log::error('Bot application creation error: ' . $e->getMessage());
@@ -597,7 +627,7 @@ class ApplicationConversation extends Conversation
     public function showReviews(Doctor $doctor)
     {
         $reviews = $doctor->reviews()->where('status', 1)->latest()->take(5)->get();
-        
+
         if ($reviews->isEmpty()) {
             $this->say('📝 Отзывов пока нет');
             $this->showDoctorInfo($doctor);
@@ -605,7 +635,7 @@ class ApplicationConversation extends Conversation
         }
 
         $message = "⭐ *Отзывы о враче {$doctor->full_name}*:\n\n";
-        
+
         foreach ($reviews as $review) {
             $stars = str_repeat('⭐', $review->rating);
             $message .= "{$stars} ({$review->rating}/5)\n";
@@ -626,7 +656,7 @@ class ApplicationConversation extends Conversation
                 $this->showMainMenu();
                 return;
             }
-            
+
             $this->showDoctorInfo($doctor);
         });
     }

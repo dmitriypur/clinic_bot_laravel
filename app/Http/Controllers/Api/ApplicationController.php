@@ -14,10 +14,13 @@ class ApplicationController extends Controller
      */
     public function index()
     {
+        return response()->json([
+            'error' => 'Page not found'
+        ], 404);
         $applications = Application::with(['city', 'clinic', 'doctor'])
             ->orderBy('created_at', 'desc')
             ->paginate(15);
-            
+
         return ApplicationResource::collection($applications);
     }
 
@@ -44,10 +47,10 @@ class ApplicationController extends Controller
         $validated['id'] = now()->format('YmdHis') . rand(1000, 9999);
 
         $application = Application::create($validated);
-        
+
         // TODO: Отправка в 1C через очередь
         // TODO: Отправка уведомлений через вебхуки
-        
+
         return new ApplicationResource($application->load(['city', 'clinic', 'doctor']));
     }
 
@@ -77,7 +80,7 @@ class ApplicationController extends Controller
         ]);
 
         $application->update($validated);
-        
+
         return new ApplicationResource($application->load(['city', 'clinic', 'doctor']));
     }
 
@@ -87,7 +90,7 @@ class ApplicationController extends Controller
     public function destroy(Application $application)
     {
         $application->delete();
-        
+
         return response()->json(null, 204);
     }
 }

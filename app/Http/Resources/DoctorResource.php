@@ -14,6 +14,19 @@ class DoctorResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        return parent::toArray($request);
+        return [
+            "id" => $this->id,
+            "name" => $this->full_name,
+            "experience" => $this->experience,
+            "age" => $this->age,
+            "photo_src" => $this->photo_src,
+            "diploma_src" => $this->diploma_src,
+            "status" => $this->status,
+            "age_admission_from" => $this->age_admission_from,
+            "age_admission_to" => $this->age_admission_to,
+            "ratings" => round($this->sum_ratings / $this->count_ratings),
+            "uuid" => $this->uuid,
+            "review_link" => $this->review_link,
+        ];
     }
 }

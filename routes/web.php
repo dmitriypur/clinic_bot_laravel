@@ -2,9 +2,10 @@
 
 use App\Http\Controllers\Bot\BotController;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
 Route::get('/', function () {
-    return view('welcome');
+    return Inertia::render('Booking');
 });
 
 // Telegram Bot webhook

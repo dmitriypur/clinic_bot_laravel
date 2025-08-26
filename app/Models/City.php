@@ -26,4 +26,11 @@ class City extends Model
     {
         return $this->hasMany(Application::class);
     }
+
+    public function allDoctors()
+    {
+        return Doctor::whereHas('clinics.cities', function ($q) {
+            $q->where('cities.id', $this->id);
+        })->distinct();
+    }
 }

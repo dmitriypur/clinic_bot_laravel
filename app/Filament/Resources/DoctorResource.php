@@ -72,18 +72,15 @@ class DoctorResource extends Resource
                     ->required()
                     ->numeric()
                     ->default(0),
-                TextInput::make('uuid')
-                    ->label('UUID врача')
-                    ->required(),
                 TextInput::make('review_link')
                     ->label('Ссылка на отзывы'),
-
+                Toggle::make('status')
+                    ->label('Статус'),
                 FileUpload::make('photo_src')
                     ->label('Фото'),
                 FileUpload::make('diploma_src')
                     ->label('Диплом'),
-                Toggle::make('status')
-                    ->label('Статус'),
+                
             ]);
     }
 

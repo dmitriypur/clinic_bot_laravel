@@ -7,9 +7,11 @@ use App\Filament\Resources\UserResource\RelationManagers;
 use App\Models\User;
 use Filament\Forms;
 use Filament\Forms\Components\Section;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
@@ -18,6 +20,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
+use App\Models\Doctor;
 
 class UserResource extends Resource
 {
@@ -32,6 +35,22 @@ class UserResource extends Resource
     {
         return $form
             ->schema([
+                Section::make('Роли и разрешения')
+                    ->schema([
+                        CheckboxList::make('roles')
+                            ->label('Роли')
+                            ->relationship('roles', 'name')
+                            ->options(Role::all()->pluck('name', 'id'))
+                            ->descriptions([
+                                'super_admin' => 'Полный доступ ко всем функциям',
+                                'admin' => 'Административный доступ',
+                                'editor' => 'Редактирование контента',
+                                'doctor' => 'Доктор',
+                                'partner' => 'Партнёр',
+                            ])
+                            ->columns(3)
+                            ->live(),
+                    ]),
                 Section::make('Основная информация')
                     ->schema([
                         TextInput::make('name')
@@ -46,7 +65,25 @@ class UserResource extends Resource
                             ->maxLength(255),
                         Select::make('clinic_id')
                             ->label('Клиника')
-                            ->relationship('clinic', 'name'),
+                            ->relationship('clinic', 'name')
+                            ->visible(function (Get $get): bool {
+                                $roleIds = $get('roles') ?? [];
+                                $partnerRole = Role::where('name', 'partner')->first();
+                                return $partnerRole && in_array($partnerRole->id, $roleIds);
+                            })
+                            ->live(),
+                        Select::make('doctor_id')
+                            ->label('Врач')
+                            ->relationship('doctor', 'id')
+                            ->getOptionLabelFromRecordUsing(fn (Doctor $record): string => $record->full_name)
+                            ->searchable()
+                            ->preload()
+                            ->visible(function (Get $get): bool {
+                                $roleIds = $get('roles') ?? [];
+                                $doctorRole = Role::where('name', 'doctor')->first();
+                                return $doctorRole && in_array($doctorRole->id, $roleIds);
+                            })
+                            ->live(),
                     ])->columnSpanFull(),
 
                 Section::make('Пароль')
@@ -66,19 +103,7 @@ class UserResource extends Resource
                             ->minLength(5)
                             ->dehydrated(false),
                     ])->columnSpanFull(),
-                Forms\Components\Section::make('Роли и разрешения')
-                    ->schema([
-                        Forms\Components\CheckboxList::make('roles')
-                            ->label('Роли')
-                            ->relationship('roles', 'name')
-                            ->options(Role::all()->pluck('name', 'id'))
-                            ->descriptions([
-                                'super_admin' => 'Полный доступ ко всем функциям',
-                                'admin' => 'Административный доступ',
-                                'editor' => 'Редактирование контента',
-                            ])
-                            ->columns(3),
-                    ]),
+                
             ]);
     }
 
@@ -96,6 +121,9 @@ class UserResource extends Resource
                 TextColumn::make('clinic.name')
                     ->label('Клиника')
                     ->searchable(),
+                TextColumn::make('doctor.full_name')
+                    ->label('Врач')
+                    ->searchable(),
                 TextColumn::make('roles.name')
                     ->label('Роли')
                     ->badge()
@@ -104,6 +132,8 @@ class UserResource extends Resource
                         'super_admin' => 'danger',
                         'admin' => 'warning',
                         'editor' => 'success',
+                        'doctor' => 'info',
+                        'partner' => 'primary',
                         default => 'gray',
                     }),
             ])

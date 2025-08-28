@@ -35,11 +35,17 @@ class DoctorResource extends Resource
         // Получаем текущего пользователя
         $user = auth()->user();
 
-        // Если пользователь с ролью 'partner' — показываем только врачей их клиники
-        if ($user->hasRole('partner')) {
-            $query->whereHas('clinics', function ($query) use ($user) {
-                $query->where('clinic_id', $user->clinic_id);
-            });
+        if ($user) {
+            // Если пользователь с ролью 'doctor' — показываем только его самого
+            if ($user->hasRole('doctor')) {
+                $query->where('id', $user->doctor_id);
+            }
+            // Если пользователь с ролью 'partner' — показываем только врачей их клиники
+            elseif ($user->hasRole('partner')) {
+                $query->whereHas('clinics', function ($query) use ($user) {
+                    $query->where('clinic_id', $user->clinic_id);
+                });
+            }
         }
 
         return $query;
@@ -47,16 +53,22 @@ class DoctorResource extends Resource
 
     public static function form(Form $form): Form
     {
+        $user = auth()->user();
+        $isDoctor = $user && $user->hasRole('doctor');
+        
         return $form
             ->schema([
                 TextInput::make('last_name')
                     ->label('Фамилия')
-                    ->required(),
+                    ->required()
+                    ->disabled($isDoctor),
                 TextInput::make('first_name')
                     ->label('Имя')
-                    ->required(),
+                    ->required()
+                    ->disabled($isDoctor),
                 TextInput::make('second_name')
-                    ->label('Отчество'),
+                    ->label('Отчество')
+                    ->disabled($isDoctor),
                 TextInput::make('experience')
                     ->label('Опыт')
                     ->required()
@@ -64,13 +76,15 @@ class DoctorResource extends Resource
                 TextInput::make('age')
                     ->label('Возраст')
                     ->required()
-                    ->numeric(),
+                    ->numeric()
+                    ->disabled($isDoctor),
 
                 Select::make('clinic_id')
                     ->label('Клиника')
                     ->multiple()
                     ->relationship('clinics', 'name')
-                    ->required(),
+                    ->required()
+                    ->disabled($isDoctor),
                 TextInput::make('age_admission_from')
                     ->label('Возраст приёма с')
                     ->required()
@@ -85,7 +99,8 @@ class DoctorResource extends Resource
                     ->label('Диплом'),
                 Toggle::make('status')
                     ->label('Активен')
-                    ->default(true),
+                    ->default(true)
+                    ->disabled($isDoctor),
             ]);
     }
 
@@ -114,7 +129,11 @@ class DoctorResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(function () {
+                            $user = auth()->user();
+                            return !$user || !$user->hasRole('doctor');
+                        }),
                 ]),
             ]);
     }
@@ -128,10 +147,19 @@ class DoctorResource extends Resource
 
     public static function getPages(): array
     {
-        return [
+        $user = auth()->user();
+        
+        $pages = [
             'index' => Pages\ListDoctors::route('/'),
-            'create' => Pages\CreateDoctor::route('/create'),
-            'edit' => Pages\EditDoctor::route('/{record}/edit'),
         ];
+        
+        // Только не-doctor пользователи могут создавать врачей
+        if (!$user || !$user->hasRole('doctor')) {
+            $pages['create'] = Pages\CreateDoctor::route('/create');
+        }
+        
+        $pages['edit'] = Pages\EditDoctor::route('/{record}/edit');
+        
+        return $pages;
     }
 }

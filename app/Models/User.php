@@ -28,6 +28,7 @@ class User extends Authenticatable implements FilamentUser
         'status',
         'role',
         'clinic_id',
+        'doctor_id',
     ];
 
     /**
@@ -52,12 +53,18 @@ class User extends Authenticatable implements FilamentUser
             'password' => 'hashed',
             'status' => 'integer',
             'clinic_id' => 'integer',
+            'doctor_id' => 'integer',
         ];
     }
 
     public function clinic()
     {
         return $this->belongsTo(Clinic::class);
+    }
+
+    public function doctor()
+    {
+        return $this->belongsTo(Doctor::class);
     }
 
     /**

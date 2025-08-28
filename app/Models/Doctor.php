@@ -63,6 +63,11 @@ class Doctor extends Model
         return $this->hasMany(Review::class);
     }
 
+    public function user()
+    {
+        return $this->hasOne(User::class);
+    }
+
     public function getRatingAttribute(): float
     {
         if ($this->count_ratings == 0) {

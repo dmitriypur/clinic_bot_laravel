@@ -28,6 +28,23 @@ class DoctorResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        // Получаем текущего пользователя
+        $user = auth()->user();
+
+        // Если пользователь с ролью 'partner' — показываем только врачей их клиники
+        if ($user->hasRole('partner')) {
+            $query->whereHas('clinics', function ($query) use ($user) {
+                $query->where('clinic_id', $user->clinic_id);
+            });
+        }
+
+        return $query;
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -62,25 +79,13 @@ class DoctorResource extends Resource
                     ->label('Возраст приёма до')
                     ->required()
                     ->numeric(),
-                TextInput::make('sum_ratings')
-                    ->label('Оценка')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
-                TextInput::make('count_ratings')
-                    ->label('Количество оценок')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
-                TextInput::make('review_link')
-                    ->label('Ссылка на отзывы'),
-                Toggle::make('status')
-                    ->label('Статус'),
                 FileUpload::make('photo_src')
                     ->label('Фото'),
                 FileUpload::make('diploma_src')
                     ->label('Диплом'),
-                
+                Toggle::make('status')
+                    ->label('Активен')
+                    ->default(true),
             ]);
     }
 

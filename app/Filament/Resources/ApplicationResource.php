@@ -50,20 +50,10 @@ class ApplicationResource extends Resource
     {
         return $form
             ->schema([
-                Select::make('city_id')
-                    ->label('Город')
-                    ->relationship('city', 'name')
-                    ->required(),
-                Select::make('clinic_id')
-                    ->label('Клиника')
-                    ->relationship('clinic', 'name'),
-                Select::make('doctor_id')
-                    ->label('Врач')
-                    ->relationship('doctor', 'last_name'),
                 TextInput::make('full_name_parent')
-                    ->label('Имя родителя'),
+                    ->label('ФИО родителя'),
                 TextInput::make('full_name')
-                    ->label('Имя ребенка')
+                    ->label('ФИО ребенка')
                     ->required(),
                 DatePicker::make('birth_date')
                     ->label('Дата рождения'),
@@ -73,15 +63,72 @@ class ApplicationResource extends Resource
                     ->required(),
                 TextInput::make('promo_code')
                     ->label('Промокод'),
+                Select::make('city_id')
+                    ->label('Город')
+                    ->reactive()
+                    ->relationship('city', 'name')
+                    ->required()
+                    ->afterStateUpdated(function (callable $set) {
+                        $set('clinic_id', null);
+                        $set('doctor_id', null);
+                    }),
+                Select::make('clinic_id')
+                    ->label('Клиника')
+                    ->reactive()
+                    ->options(function (callable $get) {
+                        $cityId = $get('city_id');
+                        if (!$cityId) {
+                            return [];
+                        }
+                        return \App\Models\Clinic::whereHas('cities', function ($query) use ($cityId) {
+                            $query->where('cities.id', $cityId);
+                        })->pluck('name', 'id');
+                    })
+                    ->afterStateUpdated(function (callable $set) {
+                        $set('doctor_id', null);
+                    }),
+                Select::make('doctor_id')
+                    ->label('Врач')
+                    ->options(function (callable $get) {
+                        $cityId = $get('city_id');
+                        $clinicId = $get('clinic_id');
+                        
+                        if (!$cityId) {
+                            return [];
+                        }
+                        
+                        $query = \App\Models\Doctor::query();
+                        
+                        if ($clinicId) {
+                            // Если выбрана клиника - показываем только докторов этой клиники
+                            $query->whereHas('clinics', function ($q) use ($clinicId) {
+                                $q->where('clinics.id', $clinicId);
+                            });
+                        } else {
+                            // Если клиника не выбрана - берем всех докторов всех клиник выбранного города
+                            $query->whereHas('clinics', function ($q) use ($cityId) {
+                                $q->whereHas('cities', function ($cityQuery) use ($cityId) {
+                                    $cityQuery->where('cities.id', $cityId);
+                                });
+                            });
+                        }
+                        
+                        return $query->get()->mapWithKeys(function ($doctor) {
+                            return [$doctor->id => $doctor->last_name . ' ' . $doctor->first_name];
+                        });
+                    }),
+
                 TextInput::make('tg_user_id')
                     ->label('ID пользователя в Telegram')
-                    ->numeric(),
+                    ->numeric()
+                    ->hidden(),
                 TextInput::make('tg_chat_id')
                     ->label('ID чата в Telegram')
-                    ->numeric(),
+                    ->numeric()
+                    ->hidden(),
                 Toggle::make('send_to_1c')
                     ->label('Отправить в 1С')
-                    ->required(),
+                    ->hidden(),
             ]);
     }
 

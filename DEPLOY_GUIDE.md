@@ -529,7 +529,7 @@ cd /var/www/medical-center
 php artisan telegram:info
 
 # Установка webhook
-php artisan telegram:webhook https://your-domain.com/botman
+php artisan telegram:webhook https://app.fondzrenie.ru/botman
 ```
 
 ### 10.2 Проверка работы бота

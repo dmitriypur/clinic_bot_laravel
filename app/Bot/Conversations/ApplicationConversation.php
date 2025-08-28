@@ -81,7 +81,7 @@ class ApplicationConversation extends Conversation
             'inline_keyboard' => [[
                 [
                     'text' => 'Запустить приложение',
-                    'web_app' => ['url' => 'https://db727a1dcdf3.ngrok-free.app']
+                    'web_app' => ['url' => 'https://app.fondzrenie.ru']
                 ]
             ]]
         ];

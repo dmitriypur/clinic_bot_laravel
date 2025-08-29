@@ -156,7 +156,7 @@ class ApplicationResource extends Resource
                         }
                         
                         return $query->get()->mapWithKeys(function ($doctor) {
-                            return [$doctor->id => $doctor->last_name . ' ' . $doctor->first_name . ' (' . $doctor->specialty . ')'];
+                            return [$doctor->id => $doctor->full_name];
                         });
                     })
                     ->required(),
@@ -200,9 +200,6 @@ class ApplicationResource extends Resource
                 TextColumn::make('phone')
                     ->label('Телефон')
                     ->searchable(),
-                IconColumn::make('send_to_1c')
-                    ->label('Отправить в 1С')
-                    ->boolean(),
             ])
             ->filters([
                 //

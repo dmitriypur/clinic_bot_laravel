@@ -25,6 +25,8 @@ class ReviewResource extends Resource
 
     protected static ?string $navigationLabel = 'Отзывы';
     protected static ?string $pluralNavigationLabel = 'Отзыв';
+    protected static ?string $pluralLabel = 'Отзывы';
+    protected static ?string $label = 'Отзыв';
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
     protected static ?int $navigationSort = 6;

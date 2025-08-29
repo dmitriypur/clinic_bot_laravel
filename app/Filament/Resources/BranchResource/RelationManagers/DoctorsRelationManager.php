@@ -56,7 +56,11 @@ class DoctorsRelationManager extends RelationManager
                 // Только просмотр - нет действий создания
             ])
             ->actions([
-                // Только просмотр - нет действий редактирования/удаления
+                Tables\Actions\Action::make('edit')
+                    ->label('Редактировать')
+                    ->icon('heroicon-o-pencil')
+                    ->url(fn ($record) => route('filament.admin.resources.doctors.edit', $record))
+                    ->openUrlInNewTab(false),
             ])
             ->bulkActions([
                 // Только просмотр - нет массовых действий

@@ -28,6 +28,8 @@ class UserResource extends Resource
 
     protected static ?string $navigationLabel = 'Пользователи';
     protected static ?string $pluralNavigationLabel = 'Пользователь';
+    protected static ?string $pluralLabel = 'Пользователи';
+    protected static ?string $label = 'Пользователь';
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
     protected static ?int $navigationSort = 7;

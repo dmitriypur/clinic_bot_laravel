@@ -25,6 +25,8 @@ class DoctorResource extends Resource
 
     protected static ?string $navigationLabel = 'Врачи';
     protected static ?string $pluralNavigationLabel = 'Врач';
+    protected static ?string $pluralLabel = 'Врачи';
+    protected static ?string $label = 'Врач';
     protected static ?int $navigationSort = 4;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';

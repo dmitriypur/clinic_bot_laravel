@@ -24,6 +24,8 @@ class CityResource extends Resource
 
     protected static ?string $navigationLabel = 'Города';
     protected static ?string $pluralNavigationLabel = 'Город';
+    protected static ?string $pluralLabel = 'Города';
+    protected static ?string $label = 'Город';
     protected static ?int $navigationSort = 1;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';

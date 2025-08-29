@@ -22,6 +22,8 @@ class BranchResource extends Resource
     protected static ?string $modelLabel = 'Филиал';
     protected static ?string $pluralModelLabel = 'Филиалы';
     protected static ?string $navigationLabel = 'Филиалы';
+    protected static ?string $pluralLabel = 'Филиалы';
+    protected static ?string $label = 'Филиал';
     protected static ?int $navigationSort = 3;
 
     public static function form(Form $form): Form

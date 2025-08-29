@@ -18,65 +18,7 @@ class DoctorsRelationManager extends RelationManager
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('last_name')
-                    ->label('Фамилия')
-                    ->required()
-                    ->maxLength(255),
-                    
-                Forms\Components\TextInput::make('first_name')
-                    ->label('Имя')
-                    ->required()
-                    ->maxLength(255),
-                    
-                Forms\Components\TextInput::make('second_name')
-                    ->label('Отчество')
-                    ->maxLength(255),
-                    
-                Forms\Components\TextInput::make('experience')
-                    ->label('Опыт работы (лет)')
-                    ->required()
-                    ->numeric()
-                    ->minValue(0),
-                    
-                Forms\Components\TextInput::make('age')
-                    ->label('Возраст')
-                    ->required()
-                    ->numeric()
-                    ->minValue(18)
-                    ->maxValue(100),
-                    
-                Forms\Components\TextInput::make('age_admission_from')
-                    ->label('Прием от (лет)')
-                    ->required()
-                    ->numeric()
-                    ->minValue(0),
-                    
-                Forms\Components\TextInput::make('age_admission_to')
-                    ->label('Прием до (лет)')
-                    ->required()
-                    ->numeric()
-                    ->minValue(0),
-
-                Forms\Components\Select::make('status')
-                    ->label('Статус')
-                    ->options([
-                        1 => 'Активный',
-                        0 => 'Неактивный',
-                    ])
-                    ->default(1)
-                    ->required(),
-                    
-                Forms\Components\FileUpload::make('photo_src')
-                    ->label('Фото')
-                    ->image()
-                    ->directory('doctors/photos'),
-                    
-                Forms\Components\FileUpload::make('diploma_src')
-                    ->label('Диплом')
-                    ->image()
-                    ->directory('doctors/diplomas'),
-                    
-                
+                // Форма не используется для read-only связи
             ]);
     }
 
@@ -111,16 +53,13 @@ class DoctorsRelationManager extends RelationManager
                 //
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make(),
+                // Только просмотр - нет действий создания
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                // Только просмотр - нет действий редактирования/удаления
             ])
             ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
+                // Только просмотр - нет массовых действий
             ]);
     }
 }

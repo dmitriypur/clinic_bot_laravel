@@ -16,6 +16,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Filament\Forms\Components\Toggle;
 
 class ClinicResource extends Resource
 {
@@ -25,6 +26,8 @@ class ClinicResource extends Resource
     protected static ?string $pluralNavigationLabel = 'Клиника';
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+
+    protected static ?int $navigationSort = 2;
 
     public static function getEloquentQuery(): Builder
     {
@@ -48,13 +51,19 @@ class ClinicResource extends Resource
                 TextInput::make('name')
                     ->label('Название')
                     ->required(),
-                TextInput::make('status')
+                Select::make('status')
                     ->label('Статус')
-                    ->required()
-                    ->numeric(),
+                    ->options([
+                        1 => 'Активный',
+                        0 => 'Неактивный',
+                    ])
+                    ->default(1)
+                    ->required(),
                 Select::make('city_id')
                     ->label('Города')
                     ->multiple()
+                    ->searchable()
+                    ->preload()
                     ->relationship('cities', 'name')
                     ->required(),
             ]);
@@ -70,6 +79,10 @@ class ClinicResource extends Resource
                 TextColumn::make('cities.name')
                     ->label('Города')
                     ->searchable(),
+                TextColumn::make('branches_count')
+                    ->label('Филиалов')
+                    ->counts('branches')
+                    ->sortable(),
                 IconColumn::make('status')
                     ->label('Статус')
                     ->boolean(),
@@ -90,7 +103,7 @@ class ClinicResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\BranchesRelationManager::class,
         ];
     }
 

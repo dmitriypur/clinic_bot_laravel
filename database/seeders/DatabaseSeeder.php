@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
             CitySeeder::class,
             ClinicSeeder::class,
             DoctorSeeder::class,
+            BranchSeeder::class,
         ]);
 
         User::factory()->create([

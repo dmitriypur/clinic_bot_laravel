@@ -28,6 +28,7 @@ class ApplicationResource extends Resource
     protected static ?string $pluralNavigationLabel = 'Заявки';
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?int $navigationSort = 5;
 
     public static function getEloquentQuery(): Builder
     {
@@ -70,6 +71,7 @@ class ApplicationResource extends Resource
                     ->required()
                     ->afterStateUpdated(function (callable $set) {
                         $set('clinic_id', null);
+                        $set('branch_id', null);
                         $set('doctor_id', null);
                     }),
                 Select::make('clinic_id')
@@ -85,10 +87,14 @@ class ApplicationResource extends Resource
                         })->pluck('name', 'id');
                     })
                     ->afterStateUpdated(function (callable $set) {
+                        $set('branch_id', null);
                         $set('doctor_id', null);
-                    }),
-                Select::make('doctor_id')
-                    ->label('Врач')
+                    })
+                    ->required(),
+                
+                Select::make('branch_id')
+                    ->label('Филиал')
+                    ->reactive()
                     ->options(function (callable $get) {
                         $cityId = $get('city_id');
                         $clinicId = $get('clinic_id');
@@ -97,26 +103,61 @@ class ApplicationResource extends Resource
                             return [];
                         }
                         
-                        $query = \App\Models\Doctor::query();
+                        $query = \App\Models\Branch::with('clinic')->where('city_id', $cityId);
                         
                         if ($clinicId) {
-                            // Если выбрана клиника - показываем только докторов этой клиники
+                            // Если выбрана клиника - показываем только её филиалы в выбранном городе
+                            $query->where('clinic_id', $clinicId);
+                        }
+                        // Если клиника не выбрана - показываем все филиалы выбранного города
+                        
+                        return $query->get()->mapWithKeys(function ($branch) {
+                            if ($branch->clinic) {
+                                return [$branch->id => $branch->clinic->name . ' - ' . $branch->name];
+                            }
+                            return [$branch->id => $branch->name];
+                        });
+                    })
+                    ->afterStateUpdated(function (callable $set) {
+                        $set('doctor_id', null);
+                    }),
+                Select::make('doctor_id')
+                    ->label('Врач')
+                    ->reactive()
+                    ->options(function (callable $get) {
+                        $cityId = $get('city_id');
+                        $clinicId = $get('clinic_id');
+                        $branchId = $get('branch_id');
+                        
+                        $query = \App\Models\Doctor::query();
+                        
+                        if ($branchId) {
+                            // Если выбран филиал - показываем только врачей этого филиала
+                            $query->whereHas('branches', function ($q) use ($branchId) {
+                                $q->where('branches.id', $branchId);
+                            });
+                        } elseif ($clinicId) {
+                            // Если выбрана клиника - показываем врачей этой клиники
                             $query->whereHas('clinics', function ($q) use ($clinicId) {
                                 $q->where('clinics.id', $clinicId);
                             });
-                        } else {
-                            // Если клиника не выбрана - берем всех докторов всех клиник выбранного города
+                        } elseif ($cityId) {
+                            // Если выбран только город - показываем врачей всех клиник города
                             $query->whereHas('clinics', function ($q) use ($cityId) {
                                 $q->whereHas('cities', function ($cityQuery) use ($cityId) {
                                     $cityQuery->where('cities.id', $cityId);
                                 });
                             });
+                        } else {
+                            // Если ничего не выбрано - пустой список
+                            return [];
                         }
                         
                         return $query->get()->mapWithKeys(function ($doctor) {
-                            return [$doctor->id => $doctor->last_name . ' ' . $doctor->first_name];
+                            return [$doctor->id => $doctor->last_name . ' ' . $doctor->first_name . ' (' . $doctor->specialty . ')'];
                         });
-                    }),
+                    })
+                    ->required(),
 
                 TextInput::make('tg_user_id')
                     ->label('ID пользователя в Telegram')
@@ -142,6 +183,12 @@ class ApplicationResource extends Resource
                 TextColumn::make('clinic.name')
                     ->label('Клиника')
                     ->searchable(),
+                TextColumn::make('branch.name')
+                    ->label('Филиал')
+                    ->searchable()
+                    ->formatStateUsing(function ($record) {
+                        return $record->branch ? $record->branch->name : '-';
+                    }),
                 TextColumn::make('doctor.last_name')
                     ->label('Врач')
                     ->searchable(),

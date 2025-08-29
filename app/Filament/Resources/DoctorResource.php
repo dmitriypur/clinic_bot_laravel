@@ -25,6 +25,7 @@ class DoctorResource extends Resource
 
     protected static ?string $navigationLabel = 'Врачи';
     protected static ?string $pluralNavigationLabel = 'Врач';
+    protected static ?int $navigationSort = 4;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
@@ -80,11 +81,40 @@ class DoctorResource extends Resource
                     ->disabled($isDoctor),
 
                 Select::make('clinic_id')
-                    ->label('Клиника')
+                    ->label('Клиники')
                     ->multiple()
                     ->relationship('clinics', 'name')
-                    ->required()
-                    ->disabled($isDoctor),
+                    ->disabled($isDoctor)
+                    ->live()
+                    ->searchable()
+                    ->preload()
+                    ->afterStateUpdated(function (callable $set) {
+                        // Сбрасываем филиалы при изменении клиник
+                        $set('branch_ids', []);
+                    })
+                    ->columnSpanFull(),
+                
+                Select::make('branch_ids')
+                    ->label('Филиалы')
+                    ->multiple()
+                    ->live()
+                    ->options(function (callable $get) {
+                        $clinicIds = $get('clinic_id');
+                        
+                        if (empty($clinicIds)) {
+                            return [];
+                        }
+                        
+                        return \App\Models\Branch::with(['clinic', 'city'])
+                            ->whereIn('clinic_id', $clinicIds)
+                            ->get()
+                            ->mapWithKeys(function ($branch) {
+                                return [$branch->id => $branch->clinic->name . ' - ' . $branch->name . ' (' . $branch->city->name . ')'];
+                            });
+                    })
+                    ->searchable()
+                    ->disabled($isDoctor)
+                    ->columnSpanFull(),
                 TextInput::make('age_admission_from')
                     ->label('Возраст приёма с')
                     ->required()
@@ -116,7 +146,21 @@ class DoctorResource extends Resource
                     ->searchable(),
                 TextColumn::make('clinics.name')
                     ->label('Клиники')
-                    ->searchable(),
+                    ->searchable()
+                    ->limit(30),
+                TextColumn::make('branches.name')
+                    ->label('Филиалы')
+                    ->formatStateUsing(function ($record) {
+                        return $record->branches->map(function ($branch) {
+                            return $branch->clinic->name . ' - ' . $branch->name;
+                        })->join(', ');
+                    })
+                    ->limit(50)
+                    ->tooltip(function ($record) {
+                        return $record->branches->map(function ($branch) {
+                            return $branch->clinic->name . ' - ' . $branch->name . ' (' . $branch->city->name . ')';
+                        })->join("\n");
+                    }),
                 IconColumn::make('status')
                     ->label('Статус')
                     ->boolean(),

@@ -27,10 +27,22 @@ class City extends Model
         return $this->hasMany(Application::class);
     }
 
+    public function branches(): HasMany
+    {
+        return $this->hasMany(Branch::class);
+    }
+
     public function allDoctors()
     {
         return Doctor::whereHas('clinics.cities', function ($q) {
             $q->where('cities.id', $this->id);
+        })->distinct();
+    }
+
+    public function allDoctorsByBranches()
+    {
+        return Doctor::whereHas('branches', function ($q) {
+            $q->where('city_id', $this->id);
         })->distinct();
     }
 }

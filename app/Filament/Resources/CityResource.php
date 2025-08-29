@@ -24,6 +24,7 @@ class CityResource extends Resource
 
     protected static ?string $navigationLabel = 'Города';
     protected static ?string $pluralNavigationLabel = 'Город';
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
@@ -64,6 +65,10 @@ class CityResource extends Resource
                 TextColumn::make('name')
                     ->label('Название')
                     ->searchable(),
+                TextColumn::make('branches_count')
+                    ->label('Филиалов')
+                    ->counts('branches')
+                    ->sortable(),
                 IconColumn::make('status')
                     ->label('Статус')
                     ->boolean(),
@@ -84,7 +89,7 @@ class CityResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\BranchesRelationManager::class,
         ];
     }
 

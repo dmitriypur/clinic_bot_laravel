@@ -14,6 +14,7 @@ class Application extends Model
         'id',
         'city_id',
         'clinic_id',
+        'branch_id',
         'doctor_id',
         'full_name_parent',
         'full_name',
@@ -29,6 +30,7 @@ class Application extends Model
         'id' => 'integer',
         'city_id' => 'integer',
         'clinic_id' => 'integer',
+        'branch_id' => 'integer',
         'doctor_id' => 'integer',
         'tg_user_id' => 'integer',
         'tg_chat_id' => 'integer',
@@ -48,5 +50,10 @@ class Application extends Model
     public function doctor(): BelongsTo
     {
         return $this->belongsTo(Doctor::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 }

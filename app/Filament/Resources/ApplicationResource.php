@@ -69,7 +69,21 @@ class ApplicationResource extends Resource
                 Select::make('city_id')
                     ->label('Город')
                     ->reactive()
-                    ->relationship('city', 'name')
+                    ->options(function (callable $get) {
+                        $user = auth()->user();
+                        
+                        // Если пользователь с ролью partner - показываем только города его клиники
+                        if ($user->hasRole('partner')) {
+                            $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
+                            if ($clinic) {
+                                return $clinic->cities->pluck('name', 'id');
+                            }
+                            return [];
+                        }
+                        
+                        // Для остальных пользователей - все города
+                        return \App\Models\City::pluck('name', 'id');
+                    })
                     ->required()
                     ->afterStateUpdated(function (callable $set) {
                         $set('clinic_id', null);
@@ -84,6 +98,19 @@ class ApplicationResource extends Resource
                         if (!$cityId) {
                             return [];
                         }
+                        
+                        $user = auth()->user();
+                        
+                        // Если пользователь с ролью partner - показываем только его клинику
+                        if ($user->hasRole('partner')) {
+                            $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
+                            if ($clinic && $clinic->cities->contains('id', $cityId)) {
+                                return [$clinic->id => $clinic->name];
+                            }
+                            return [];
+                        }
+                        
+                        // Для остальных пользователей - клиники выбранного города
                         return \App\Models\Clinic::whereHas('cities', function ($query) use ($cityId) {
                             $query->where('cities.id', $cityId);
                         })->pluck('name', 'id');
@@ -105,6 +132,24 @@ class ApplicationResource extends Resource
                             return [];
                         }
                         
+                        $user = auth()->user();
+                        
+                        // Если пользователь с ролью partner - показываем только филиалы его клиники
+                        if ($user->hasRole('partner')) {
+                            $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
+                            if ($clinic) {
+                                $query = \App\Models\Branch::with('clinic')
+                                    ->where('city_id', $cityId)
+                                    ->where('clinic_id', $clinic->id);
+                                
+                                return $query->get()->mapWithKeys(function ($branch) use ($clinic) {
+                                    return [$branch->id => $clinic->name . ' - ' . $branch->name];
+                                });
+                            }
+                            return [];
+                        }
+                        
+                        // Для остальных пользователей - все филиалы
                         $query = \App\Models\Branch::with('clinic')->where('city_id', $cityId);
                         
                         if ($clinicId) {

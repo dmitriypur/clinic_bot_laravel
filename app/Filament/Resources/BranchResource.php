@@ -26,17 +26,45 @@ class BranchResource extends Resource
     protected static ?string $label = 'Филиал';
     protected static ?int $navigationSort = 3;
 
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        // Получаем текущего пользователя
+        $user = auth()->user();
+
+        // Если пользователь с ролью 'doctor' — не показываем ничего
+        if ($user && $user->hasRole('doctor')) {
+            $query->whereRaw('1 = 0'); // Всегда false
+        }
+        // Если пользователь с ролью 'partner' — показываем только филиалы их клиники
+        elseif ($user && $user->hasRole('partner')) {
+            $query->where('clinic_id', $user->clinic_id);
+        }
+
+        return $query;
+    }
+
     public static function form(Form $form): Form
     {
+        $user = auth()->user();
+        $isPartner = $user && $user->hasRole('partner');
+        
         return $form
             ->schema([
                 Forms\Components\Select::make('clinic_id')
-                    ->relationship('clinic', 'name')
+                    ->relationship(
+                        'clinic', 
+                        'name',
+                        fn ($query) => $isPartner ? $query->where('id', $user->clinic_id) : $query
+                    )
                     ->required()
                     ->label('Клиника')
                     ->searchable()
                     ->preload()
                     ->reactive()
+                    ->default($isPartner ? $user->clinic_id : null)
+                    ->disabled($isPartner)
                     ->afterStateUpdated(fn (callable $set) => $set('city_id', null)),
                 Forms\Components\Select::make('city_id')
                     ->label('Город')
@@ -160,10 +188,18 @@ class BranchResource extends Resource
 
     public static function getPages(): array
     {
-        return [
+        $user = auth()->user();
+        
+        $pages = [
             'index' => Pages\ListBranches::route('/'),
-            'create' => Pages\CreateBranch::route('/create'),
-            'edit' => Pages\EditBranch::route('/{record}/edit'),
         ];
+        
+        // Только не-doctor пользователи могут создавать и редактировать филиалы
+        if (!$user || !$user->hasRole('doctor')) {
+            $pages['create'] = Pages\CreateBranch::route('/create');
+            $pages['edit'] = Pages\EditBranch::route('/{record}/edit');
+        }
+        
+        return $pages;
     }
 }

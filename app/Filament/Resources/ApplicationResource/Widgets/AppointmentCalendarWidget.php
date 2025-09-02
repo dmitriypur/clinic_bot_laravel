@@ -21,8 +21,8 @@ use Carbon\Carbon;
 /**
  * Виджет календаря записи пациентов
  * 
- * Отображает календарь с доступными слотами для записи пациентов.
- * Позволяет создавать записи на прием с выбором времени из доступных слотов.
+ * Отображает календарь с заявками на прием.
+ * Позволяет создавать, редактировать и удалять записи с разграничением по ролям.
  */
 class AppointmentCalendarWidget extends FullCalendarWidget
 {
@@ -37,6 +37,9 @@ class AppointmentCalendarWidget extends FullCalendarWidget
      */
     public function config(): array
     {
+        $user = auth()->user();
+        $isDoctor = $user && $user->isDoctor();
+        
         return [
             'firstDay' => 1, // Понедельник - первый день недели
             'headerToolbar' => [
@@ -46,9 +49,9 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             ],
             'initialView' => 'timeGridWeek',
             'navLinks' => true,
-            'editable' => true,
-            'selectable' => true,
-            'selectMirror' => true,
+            'editable' => !$isDoctor, // Врач не может редактировать
+            'selectable' => !$isDoctor, // Врач не может выбирать время
+            'selectMirror' => !$isDoctor, // Отображение выбранного времени
             'dayMaxEvents' => true,
             'weekends' => true,
             'locale' => 'ru',
@@ -69,10 +72,6 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 'minute' => '2-digit',
                 'hour12' => false,            // 24-часовой формат
             ],
-
-
-
-
         ];
     }
 
@@ -81,13 +80,27 @@ class AppointmentCalendarWidget extends FullCalendarWidget
      */
     public function fetchEvents(array $fetchInfo): array
     {
+        $user = auth()->user();
         $events = [];
 
-        // Получаем все смены врачей в указанном диапазоне
-        $shifts = DoctorShift::query()
+        // Базовый запрос смен в указанном диапазоне
+        $shiftsQuery = DoctorShift::query()
             ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
-            ->with(['doctor', 'cabinet.branch.clinic', 'cabinet.branch.city'])
-            ->get();
+            ->with(['doctor', 'cabinet.branch.clinic', 'cabinet.branch.city']);
+
+        // Фильтрация по ролям
+        if ($user->isPartner()) {
+            // Партнер видит только смены в кабинетах своих клиник
+            $shiftsQuery->whereHas('cabinet.branch', function($q) use ($user) {
+                $q->where('clinic_id', $user->clinic_id);
+            });
+        } elseif ($user->isDoctor()) {
+            // Врач видит только смены где он назначен врачом
+            $shiftsQuery->where('doctor_id', $user->doctor_id);
+        }
+        // super_admin видит все смены
+
+        $shifts = $shiftsQuery->get();
 
         foreach ($shifts as $shift) {
             // Получаем длительность слота для этой смены
@@ -103,10 +116,20 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 // Получаем информацию о заявке, если слот занят
                 $application = null;
                 if ($isOccupied) {
-                    $application = Application::query()
+                    $applicationQuery = Application::query()
                         ->where('cabinet_id', $shift->cabinet_id)
-                        ->where('appointment_datetime', $slot['start'])
-                        ->first();
+                        ->where('appointment_datetime', $slot['start']);
+                    
+                    // Дополнительная фильтрация заявок по ролям
+                    if ($user->isPartner()) {
+                        // Партнер видит только заявки в своих клиниках
+                        $applicationQuery->where('clinic_id', $user->clinic_id);
+                    } elseif ($user->isDoctor()) {
+                        // Врач видит только заявки где он назначен врачом
+                        $applicationQuery->where('doctor_id', $user->doctor_id);
+                    }
+                    
+                    $application = $applicationQuery->first();
                 }
                 
                 $events[] = [
@@ -141,11 +164,220 @@ class AppointmentCalendarWidget extends FullCalendarWidget
      */
     private function isSlotOccupied(int $cabinetId, Carbon $slotStart): bool
     {
-        // Проверяем, есть ли запись в этом кабинете на это время
-        return Application::query()
+        $user = auth()->user();
+        
+        // Базовый запрос
+        $query = Application::query()
             ->where('cabinet_id', $cabinetId)
-            ->where('appointment_datetime', $slotStart)
-            ->exists();
+            ->where('appointment_datetime', $slotStart);
+        
+        // Фильтрация по ролям
+        if ($user->isPartner()) {
+            // Партнер видит только заявки в своих клиниках
+            $query->where('clinic_id', $user->clinic_id);
+        } elseif ($user->isDoctor()) {
+            // Врач видит только заявки где он назначен врачом
+            $query->where('doctor_id', $user->doctor_id);
+        }
+        // super_admin видит все заявки
+        
+        return $query->exists();
+    }
+
+    /**
+     * Схема формы для создания и редактирования заявок
+     */
+    public function getFormSchema(): array
+    {
+        return [
+            Grid::make(2)
+                ->schema([
+                    Select::make('city_id')
+                        ->label('Город')
+                        ->required()
+                        ->searchable()
+                        ->options(function () {
+                            return \App\Models\City::pluck('name', 'id')->toArray();
+                        })
+                        ->reactive()
+                        ->disabled()
+                        ->afterStateUpdated(fn (Set $set) => $set('clinic_id', null)),
+                    
+                    Select::make('clinic_id')
+                        ->label('Клиника')
+                        ->required()
+                        ->searchable()
+                        ->options(function (Get $get) {
+                            $cityId = $get('city_id');
+                            if (!$cityId) return [];
+                            return \App\Models\Clinic::whereIn('id', function($q) use ($cityId) {
+                                $q->select('clinic_id')->from('branches')->where('city_id', $cityId);
+                            })->pluck('name', 'id')->toArray();
+                        })
+                        ->reactive()
+                        ->disabled()
+                        ->afterStateUpdated(fn (Set $set) => $set('branch_id', null)),
+                    
+                    Select::make('branch_id')
+                        ->label('Филиал')
+                        ->required()
+                        ->searchable()
+                        ->options(function (Get $get) {
+                            $clinicId = $get('clinic_id');
+                            if (!$clinicId) return [];
+                            return \App\Models\Branch::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
+                        })
+                        ->reactive()
+                        ->disabled()
+                        ->afterStateUpdated(fn (Set $set) => $set('cabinet_id', null)),
+                    
+                    Select::make('cabinet_id')
+                        ->label('Кабинет')
+                        ->required()
+                        ->searchable()
+                        ->options(function (Get $get) {
+                            $branchId = $get('branch_id');
+                            if (!$branchId) return [];
+                            return \App\Models\Cabinet::where('branch_id', $branchId)->pluck('name', 'id')->toArray();
+                        })
+                        ->reactive()
+                        ->disabled()
+                        ->afterStateUpdated(fn (Set $set) => $set('doctor_id', null)),
+                    
+                    Select::make('doctor_id')
+                        ->label('Врач')
+                        ->required()
+                        ->disabled()
+                        ->searchable()
+                        ->options(function (Get $get) {
+                            $cabinetId = $get('cabinet_id');
+                            if (!$cabinetId) return [];
+                            $cabinet = \App\Models\Cabinet::with('branch.doctors')->find($cabinetId);
+                            if (!$cabinet || !$cabinet->branch) return [];
+                            return $cabinet->branch->doctors->pluck('full_name', 'id')->toArray();
+                        }),
+                    
+                    DateTimePicker::make('appointment_datetime')
+                        ->label('Дата и время приема')
+                        ->required()
+                        ->seconds(false)
+                        ->minutesStep(15),
+                ]),
+            
+            Grid::make(2)
+                ->schema([
+                    TextInput::make('full_name_parent')
+                        ->label('ФИО родителя'),
+                    
+                    TextInput::make('full_name')
+                        ->label('ФИО ребенка')
+                        ->required(),
+                    
+                    TextInput::make('birth_date')
+                        ->label('Дата рождения')
+                        ->type('date'),
+                    
+                    TextInput::make('phone')
+                        ->label('Телефон')
+                        ->tel()
+                        ->required(),
+                    
+                    TextInput::make('promo_code')
+                        ->label('Промокод'),
+                ]),
+        ];
+    }
+
+    /**
+     * Модальные действия для событий
+     */
+    protected function modalActions(): array
+    {
+        $user = auth()->user();
+        
+        // Врач может только просматривать
+        if ($user->isDoctor()) {
+            return [
+                \Saade\FilamentFullCalendar\Actions\ViewAction::make()
+                    ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {
+                        $form->fill([
+                            'full_name' => $this->record->full_name,
+                            'full_name_parent' => $this->record->full_name_parent ?? '',
+                            'birth_date' => $this->record->birth_date,
+                            'phone' => $this->record->phone,
+                            'appointment_datetime' => $this->record->appointment_datetime,
+                            'promo_code' => $this->record->promo_code ?? '',
+                        ]);
+                    })
+            ];
+        }
+        
+        return [
+            \Saade\FilamentFullCalendar\Actions\EditAction::make()
+                ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {
+                    $form->fill([
+                        'city_id' => $this->record->city_id,
+                        'clinic_id' => $this->record->clinic_id,
+                        'branch_id' => $this->record->branch_id,
+                        'cabinet_id' => $this->record->cabinet_id,
+                        'doctor_id' => $this->record->doctor_id,
+                        'appointment_datetime' => $arguments['event']['start'] ?? $this->record->appointment_datetime,
+                        'full_name' => $this->record->full_name,
+                        'phone' => $this->record->phone,
+                        'full_name_parent' => $this->record->full_name_parent,
+                        'birth_date' => $this->record->birth_date,
+                        'promo_code' => $this->record->promo_code,
+                    ]);
+                })
+                ->action(function (array $data) {
+                    $user = auth()->user();
+                    
+                    // Проверяем права доступа
+                    if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
+                        Notification::make()
+                            ->title('Ошибка доступа')
+                            ->body('Вы можете редактировать заявки только своей клиники')
+                            ->danger()
+                            ->send();
+                        return;
+                    }
+                    
+                    $this->record->update($data);
+                    
+                    Notification::make()
+                        ->title('Заявка обновлена')
+                        ->body('Заявка успешно обновлена')
+                        ->success()
+                        ->send();
+                        
+                    $this->refreshRecords();
+                }),
+                
+            \Saade\FilamentFullCalendar\Actions\DeleteAction::make()
+                ->action(function () {
+                    $user = auth()->user();
+                    
+                    // Проверяем права доступа
+                    if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
+                        Notification::make()
+                            ->title('Ошибка доступа')
+                            ->body('Вы можете удалять заявки только своей клиники')
+                            ->danger()
+                            ->send();
+                        return;
+                    }
+                    
+                    $this->record->delete();
+                    
+                    Notification::make()
+                        ->title('Заявка удалена')
+                        ->body('Заявка удалена из календаря')
+                        ->success()
+                        ->send();
+                        
+                    $this->refreshRecords();
+                }),
+        ];
     }
 
     /**
@@ -153,16 +385,27 @@ class AppointmentCalendarWidget extends FullCalendarWidget
      */
     public function onEventClick(array $data): void
     {
+        $user = auth()->user();
         $event = $data;
         $extendedProps = $event['extendedProps'] ?? [];
         
-        // Если слот занят - открываем форму редактирования
+        // Если слот занят - открываем форму просмотра/редактирования
         if (isset($extendedProps['is_occupied']) && $extendedProps['is_occupied']) {
             $this->onOccupiedSlotClick($extendedProps);
             return;
         }
 
         // Если слот свободен - открываем форму создания
+        // Врач не может создавать заявки
+        if ($user->isDoctor()) {
+            Notification::make()
+                ->title('Ограничение')
+                ->body('Врачи не могут создавать заявки')
+                ->warning()
+                ->send();
+            return;
+        }
+
         $shift = DoctorShift::with(['cabinet.branch.clinic', 'cabinet.branch.city', 'doctor'])
             ->find($extendedProps['shift_id']);
 
@@ -199,6 +442,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
      */
     public function onOccupiedSlotClick(array $data): void
     {
+        $user = auth()->user();
         $extendedProps = $data;
         
         // Находим заявку по кабинету и времени
@@ -207,11 +451,21 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             $slotStart = \Carbon\Carbon::parse($slotStart);
         }
         
-        $application = Application::query()
+        $applicationQuery = Application::query()
             ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
             ->where('cabinet_id', $extendedProps['cabinet_id'])
-            ->where('appointment_datetime', $slotStart)
-            ->first();
+            ->where('appointment_datetime', $slotStart);
+        
+        // Фильтрация по ролям
+        if ($user->isPartner()) {
+            // Партнер видит только заявки в своих клиниках
+            $applicationQuery->where('clinic_id', $user->clinic_id);
+        } elseif ($user->isDoctor()) {
+            // Врач видит только заявки где он назначен врачом
+            $applicationQuery->where('doctor_id', $user->doctor_id);
+        }
+        
+        $application = $applicationQuery->first();
 
         if (!$application) {
             Notification::make()
@@ -243,304 +497,190 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             'promo_code' => $application->promo_code,
         ];
 
-        // Открываем форму редактирования
-        $this->mountAction('editAppointment');
+        // Если врач - показываем модальное окно с информацией, если партнер или админ - редактирование
+        if ($user->isDoctor()) {
+            // Для врача показываем модальное окно с информацией о заявке
+            $this->mountAction('viewAppointment');
+        } else {
+            // Открываем форму редактирования для партнеров и админов
+            $this->mountAction('editAppointment');
+        }
     }
 
     /**
-     * Действия виджета
+     * Действия в заголовке виджета
      */
     protected function headerActions(): array
     {
+        $user = auth()->user();
+        
+        // Врач не может создавать заявки
+        if ($user->isDoctor()) {
+            return [];
+        }
+        
         return [
             \Filament\Actions\Action::make('createAppointment')
-                ->label('Создать запись')
+                ->label('Создать заявку')
                 ->icon('heroicon-o-plus')
-                ->form([
-                    Grid::make(2)
-                        ->schema([
-                            TextInput::make('city_name')
-                                ->label('Город')
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->default(fn() => $this->slotData['city_name'] ?? ''),
-                            
-                            TextInput::make('clinic_name')
-                                ->label('Клиника')
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->default(fn() => $this->slotData['clinic_name'] ?? ''),
-                            
-                            TextInput::make('branch_name')
-                                ->label('Филиал')
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->default(fn() => $this->slotData['branch_name'] ?? ''),
-                            
-                            TextInput::make('cabinet_name')
-                                ->label('Кабинет')
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->default(fn() => $this->slotData['cabinet_name'] ?? ''),
-                            
-                            TextInput::make('doctor_name')
-                                ->label('Врач')
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->default(fn() => $this->slotData['doctor_name'] ?? ''),
-                            
-                            DateTimePicker::make('appointment_datetime')
-                                ->label('Дата и время приема')
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->default(fn() => $this->slotData['appointment_datetime'] ?? null),
-                            
-                            // Скрытые поля для сохранения
-                            TextInput::make('city_id')
-                                ->hidden()
-                                ->required()
-                                ->default(fn() => $this->slotData['city_id'] ?? null),
-                            TextInput::make('clinic_id')
-                                ->hidden()
-                                ->required()
-                                ->default(fn() => $this->slotData['clinic_id'] ?? null),
-                            TextInput::make('branch_id')
-                                ->hidden()
-                                ->required()
-                                ->default(fn() => $this->slotData['branch_id'] ?? null),
-                            TextInput::make('cabinet_id')
-                                ->hidden()
-                                ->required()
-                                ->default(fn() => $this->slotData['cabinet_id'] ?? null),
-                            TextInput::make('doctor_id')
-                                ->hidden()
-                                ->required()
-                                ->default(fn() => $this->slotData['doctor_id'] ?? null),
-                        ]),
-                    
-                    Grid::make(2)
-                        ->schema([
-                            TextInput::make('full_name_parent')
-                                ->label('ФИО родителя'),
-                            
-                            TextInput::make('full_name')
-                                ->label('ФИО ребенка')
-                                ->required(),
-                            
-                            TextInput::make('birth_date')
-                                ->label('Дата рождения')
-                                ->type('date'),
-                            
-                            TextInput::make('phone')
-                                ->label('Телефон')
-                                ->tel()
-                                ->required(),
-                            
-                            TextInput::make('promo_code')
-                                ->label('Промокод'),
-                        ]),
-                ])
+                ->form($this->getFormSchema())
+                ->mountUsing(function (\Filament\Forms\Form $form) {
+                    // Заполняем форму данными из слота
+                    if (!empty($this->slotData)) {
+                        // Для Select полей нужно передавать ID, а не название
+                        $form->fill([
+                            'city_id' => $this->slotData['city_id'] ?? null,
+                            'clinic_id' => $this->slotData['clinic_id'] ?? null,
+                            'branch_id' => $this->slotData['branch_id'] ?? null,
+                            'cabinet_id' => $this->slotData['cabinet_id'] ?? null,
+                            'doctor_id' => $this->slotData['doctor_id'] ?? null,
+                            'appointment_datetime' => $this->slotData['appointment_datetime'] ?? null,
+                        ]);
+                    }
+                })
                 ->action(function (array $data) {
-                    // Создаем запись используя данные из slotData
-                    $applicationData = [
-                        'city_id' => $this->slotData['city_id'],
-                        'clinic_id' => $this->slotData['clinic_id'],
-                        'branch_id' => $this->slotData['branch_id'],
-                        'cabinet_id' => $this->slotData['cabinet_id'],
-                        'doctor_id' => $this->slotData['doctor_id'],
-                        'appointment_datetime' => $this->slotData['appointment_datetime'],
-                        'full_name' => $data['full_name'],
-                        'phone' => $data['phone'],
-                        'full_name_parent' => $data['full_name_parent'] ?? null,
-                        'birth_date' => $data['birth_date'] ?? null,
-                        'promo_code' => $data['promo_code'] ?? null,
-                    ];
+                    $user = auth()->user();
                     
-                    Application::create($applicationData);
+                    // Проверяем права доступа для партнеров
+                    if ($user->isPartner()) {
+                        // Проверяем, что создаваемая заявка относится к клинике партнера
+                        if ($data['clinic_id'] !== $user->clinic_id) {
+                            Notification::make()
+                                ->title('Ошибка доступа')
+                                ->body('Вы можете создавать заявки только в своей клинике')
+                                ->danger()
+                                ->send();
+                            return;
+                        }
+                    }
+                    
+                    Application::create($data);
                     
                     Notification::make()
-                        ->title('Успешно')
-                        ->body('Запись на прием создана')
+                        ->title('Заявка создана')
+                        ->body('Заявка успешно добавлена в календарь')
                         ->success()
                         ->send();
-                    
-                    // Обновляем календарь
+                        
                     $this->refreshRecords();
-                    
-
                 }),
                 
-            \Filament\Actions\Action::make('editAppointment')
-                ->label('Редактировать запись')
-                ->icon('heroicon-o-pencil')
+            \Filament\Actions\Action::make('viewAppointment')
+                ->label('Информация о записи')
+                ->icon('heroicon-o-eye')
+                ->visible(fn() => auth()->user()->isDoctor())
                 ->form([
                     Grid::make(2)
                         ->schema([
-                            TextInput::make('city_name')
-                                ->label('Город')
+                            TextInput::make('full_name')
+                                ->label('ФИО ребенка')
                                 ->disabled()
-                                ->dehydrated(false)
-                                ->default(fn() => $this->slotData['city_name'] ?? ''),
+                                ->dehydrated(false),
                             
-                            TextInput::make('clinic_name')
-                                ->label('Клиника')
+                            TextInput::make('full_name_parent')
+                                ->label('ФИО родителя')
                                 ->disabled()
-                                ->dehydrated(false)
-                                ->default(fn() => $this->slotData['clinic_name'] ?? ''),
+                                ->dehydrated(false),
                             
-                            TextInput::make('branch_name')
-                                ->label('Филиал')
+                            TextInput::make('birth_date')
+                                ->label('Дата рождения')
                                 ->disabled()
-                                ->dehydrated(false)
-                                ->default(fn() => $this->slotData['branch_name'] ?? ''),
+                                ->dehydrated(false),
                             
-                            TextInput::make('cabinet_name')
-                                ->label('Кабинет')
+                            TextInput::make('phone')
+                                ->label('Телефон')
                                 ->disabled()
-                                ->dehydrated(false)
-                                ->default(fn() => $this->slotData['cabinet_name'] ?? ''),
-                            
-                            TextInput::make('doctor_name')
-                                ->label('Врач')
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->default(fn() => $this->slotData['doctor_name'] ?? ''),
+                                ->dehydrated(false),
                             
                             DateTimePicker::make('appointment_datetime')
                                 ->label('Дата и время приема')
                                 ->disabled()
-                                ->dehydrated(false)
-                                ->default(fn() => $this->slotData['appointment_datetime'] ?? null),
-                            
-                            // Скрытые поля для сохранения
-                            TextInput::make('application_id')->hidden()->required()->default(fn() => $this->slotData['application_id'] ?? null),
-                            TextInput::make('city_id')->hidden()->required()->default(fn() => $this->slotData['city_id'] ?? null),
-                            TextInput::make('clinic_id')->hidden()->required()->default(fn() => $this->slotData['clinic_id'] ?? null),
-                            TextInput::make('branch_id')->hidden()->required()->default(fn() => $this->slotData['branch_id'] ?? null),
-                            TextInput::make('cabinet_id')->hidden()->required()->default(fn() => $this->slotData['cabinet_id'] ?? null),
-                            TextInput::make('doctor_id')->hidden()->required()->default(fn() => $this->slotData['doctor_id'] ?? null),
-                        ]),
-                    
-                    Grid::make(2)
-                        ->schema([
-                            TextInput::make('full_name_parent')
-                                ->label('ФИО родителя')
-                                ->default(fn() => $this->slotData['full_name_parent'] ?? ''),
-                            
-                            TextInput::make('full_name')
-                                ->label('ФИО ребенка')
-                                ->required()
-                                ->default(fn() => $this->slotData['full_name'] ?? ''),
-                            
-                            TextInput::make('birth_date')
-                                ->label('Дата рождения')
-                                ->type('date')
-                                ->default(fn() => $this->slotData['birth_date'] ?? null),
-                            
-                            TextInput::make('phone')
-                                ->label('Телефон')
-                                ->tel()
-                                ->required()
-                                ->default(fn() => $this->slotData['phone'] ?? ''),
+                                ->dehydrated(false),
                             
                             TextInput::make('promo_code')
                                 ->label('Промокод')
-                                ->default(fn() => $this->slotData['promo_code'] ?? ''),
+                                ->disabled()
+                                ->dehydrated(false),
                         ]),
                 ])
-                ->action(function (array $data) {
-                    // Получаем application_id из slotData
-                    $applicationId = $this->slotData['application_id'] ?? null;
-                    
-                    if (!$applicationId) {
-                        Notification::make()
-                            ->title('Ошибка')
-                            ->body('ID заявки не найден')
-                            ->danger()
-                            ->send();
-                        return;
+                ->mountUsing(function (\Filament\Forms\Form $form) {
+                    // Заполняем форму данными из слота
+                    if (!empty($this->slotData)) {
+                        // Для просмотра используем только поля с данными пациента
+                        $form->fill([
+                            'full_name' => $this->slotData['full_name'] ?? '',
+                            'full_name_parent' => $this->slotData['full_name_parent'] ?? '',
+                            'birth_date' => $this->slotData['birth_date'] ?? '',
+                            'phone' => $this->slotData['phone'] ?? '',
+                            'appointment_datetime' => $this->slotData['appointment_datetime'] ?? '',
+                            'promo_code' => $this->slotData['promo_code'] ?? '',
+                        ]);
                     }
-                    
-                    // Находим заявку
-                    $application = Application::find($applicationId);
-                    
-                    if (!$application) {
-                        Notification::make()
-                            ->title('Ошибка')
-                            ->body('Заявка не найдена')
-                            ->danger()
-                            ->send();
-                        return;
-                    }
-                    
-                    // Обновляем заявку
-                    $application->update([
-                        'full_name' => $data['full_name'],
-                        'phone' => $data['phone'],
-                        'full_name_parent' => $data['full_name_parent'] ?? null,
-                        'birth_date' => $data['birth_date'] ?? null,
-                        'promo_code' => $data['promo_code'] ?? null,
-                    ]);
-                    
-                    Notification::make()
-                        ->title('Успешно')
-                        ->body('Заявка обновлена')
-                        ->success()
-                        ->send();
-                    
-                    // Обновляем календарь
-                    $this->refreshRecords();
-                    
-
                 })
                 ->extraModalFooterActions([
-                    \Filament\Actions\Action::make('delete')
-                        ->label('Удалить запись')
-                        ->icon('heroicon-o-trash')
-                        ->color('danger')
-                        ->requiresConfirmation()
-                        ->modalHeading('Удаление записи')
-                        ->modalDescription('Вы уверены, что хотите удалить эту запись? Это действие нельзя отменить.')
-                        ->action(function () {
-                            // Получаем application_id из slotData
-                            $applicationId = $this->slotData['application_id'] ?? null;
-                            
-                            if (!$applicationId) {
-                                Notification::make()
-                                    ->title('Ошибка')
-                                    ->body('ID заявки не найден')
-                                    ->danger()
-                                    ->send();
-                                return;
-                            }
-                            
-                            // Находим заявку
-                            $application = Application::find($applicationId);
-                            
-                            if (!$application) {
-                                Notification::make()
-                                    ->title('Ошибка')
-                                    ->body('Заявка не найдена')
-                                    ->danger()
-                                    ->send();
-                                return;
-                            }
-                            
-                            // Удаляем заявку
-                            $application->delete();
-                            
+                    \Filament\Actions\Action::make('close')
+                        ->label('Закрыть')
+                        ->color('gray')
+                        ->action(fn() => $this->closeModal()),
+                ]),
+                
+            \Filament\Actions\Action::make('editAppointment')
+                ->label('Редактировать заявку')
+                ->icon('heroicon-o-pencil')
+                ->visible(fn() => !auth()->user()->isDoctor())
+                ->form($this->getFormSchema())
+                ->mountUsing(function (\Filament\Forms\Form $form) {
+                    // Заполняем форму данными из слота
+                    if (!empty($this->slotData)) {
+                        // Для Select полей нужно передавать ID, а не название
+                        $form->fill([
+                            'city_id' => $this->slotData['city_id'] ?? null,
+                            'clinic_id' => $this->slotData['clinic_id'] ?? null,
+                            'branch_id' => $this->slotData['branch_id'] ?? null,
+                            'cabinet_id' => $this->slotData['cabinet_id'] ?? null,
+                            'doctor_id' => $this->slotData['doctor_id'] ?? null,
+                            'appointment_datetime' => $this->slotData['appointment_datetime'] ?? null,
+                            'full_name' => $this->slotData['full_name'] ?? '',
+                            'phone' => $this->slotData['phone'] ?? '',
+                            'full_name_parent' => $this->slotData['full_name_parent'] ?? '',
+                            'birth_date' => $this->slotData['birth_date'] ?? '',
+                            'promo_code' => $this->slotData['promo_code'] ?? '',
+                        ]);
+                    }
+                })
+                ->action(function (array $data) {
+                    $user = auth()->user();
+                    
+                    // Проверяем права доступа
+                    if ($user->isPartner()) {
+                        // Находим заявку для проверки прав
+                        $application = Application::find($this->slotData['application_id'] ?? null);
+                        if (!$application || $application->clinic_id !== $user->clinic_id) {
                             Notification::make()
-                                ->title('Успешно')
-                                ->body('Заявка удалена')
-                                ->success()
+                                ->title('Ошибка доступа')
+                                ->body('Вы можете редактировать заявки только своей клиники')
+                                ->danger()
                                 ->send();
-                            
-                            // Обновляем календарь
-                            $this->refreshRecords();
-                            
-
-                        })
-                ])
+                            return;
+                        }
+                        
+                        $application->update($data);
+                    } else {
+                        // Для админов обновляем заявку
+                        $application = Application::find($this->slotData['application_id'] ?? null);
+                        if ($application) {
+                            $application->update($data);
+                        }
+                    }
+                    
+                    Notification::make()
+                        ->title('Заявка обновлена')
+                        ->body('Заявка успешно обновлена')
+                        ->success()
+                        ->send();
+                        
+                    $this->refreshRecords();
+                }),
         ];
     }
     

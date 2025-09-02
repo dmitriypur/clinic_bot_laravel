@@ -50,10 +50,24 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('doctor_shifts', function (Blueprint $table) {
-            // Удаляем новые индексы
-            $table->dropIndex('idx_cabinet_start_time');
-            $table->dropIndex('idx_doctor_start_time');
-            $table->dropUnique('unique_doctor_shift');
+            // Удаляем новые индексы (если они существуют)
+            try {
+                $table->dropIndex('idx_cabinet_start_time');
+            } catch (\Exception $e) {
+                // Индекс может не существовать
+            }
+            
+            try {
+                $table->dropIndex('idx_doctor_start_time');
+            } catch (\Exception $e) {
+                // Индекс может не существовать
+            }
+            
+            try {
+                $table->dropUnique('unique_doctor_shift');
+            } catch (\Exception $e) {
+                // Уникальное ограничение может не существовать
+            }
             
             // Удаляем foreign key constraints для возможности изменения структуры
             $table->dropForeign(['cabinet_id']);

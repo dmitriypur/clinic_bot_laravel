@@ -424,23 +424,28 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     Grid::make(2)
                         ->schema([
                             TextInput::make('full_name_parent')
-                                ->label('ФИО родителя'),
+                                ->label('ФИО родителя')
+                                ->default(fn() => $this->slotData['full_name_parent'] ?? ''),
                             
                             TextInput::make('full_name')
                                 ->label('ФИО ребенка')
-                                ->required(),
+                                ->required()
+                                ->default(fn() => $this->slotData['full_name'] ?? ''),
                             
                             TextInput::make('birth_date')
                                 ->label('Дата рождения')
-                                ->type('date'),
+                                ->type('date')
+                                ->default(fn() => $this->slotData['birth_date'] ?? null),
                             
                             TextInput::make('phone')
                                 ->label('Телефон')
                                 ->tel()
-                                ->required(),
+                                ->required()
+                                ->default(fn() => $this->slotData['phone'] ?? ''),
                             
                             TextInput::make('promo_code')
-                                ->label('Промокод'),
+                                ->label('Промокод')
+                                ->default(fn() => $this->slotData['promo_code'] ?? ''),
                         ]),
                 ])
                 ->action(function (array $data) {

@@ -15,7 +15,7 @@ return new class extends Migration
             Schema::create('applications', function (Blueprint $table) {
                 $table->bigInteger('id')->primary();
                 $table->foreignId('city_id')->constrained('cities');
-                $table->foreignId('clinic_id')->nullable()->constrained('clinics');
+                $table->foreignId('clinic_id')->nullable()->constrained('clinics')->onDelete('cascade');
                 $table->foreignId('doctor_id')->nullable()->constrained('doctors');
                 $table->string('full_name_parent', 255)->nullable();
                 $table->string('full_name', 255);

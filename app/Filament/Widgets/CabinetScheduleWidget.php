@@ -92,6 +92,9 @@ class CabinetScheduleWidget extends FullCalendarWidget
 
     public function config(): array
     {
+        $user = auth()->user();
+        $isDoctor = $user && $user->isDoctor();
+        
         return [
             'firstDay' => 1, // Понедельник
             'headerToolbar' => [
@@ -101,9 +104,9 @@ class CabinetScheduleWidget extends FullCalendarWidget
             ],
             'initialView' => 'timeGridWeek',
             'navLinks' => true,
-            'editable' => true,
-            'selectable' => true,
-            'selectMirror' => true,
+            'editable' => !$isDoctor, // Врач не может редактировать
+            'selectable' => !$isDoctor, // Врач не может выбирать
+            'selectMirror' => !$isDoctor,
             'dayMaxEvents' => true,
             'weekends' => true,
             'locale' => 'ru',
@@ -130,11 +133,26 @@ class CabinetScheduleWidget extends FullCalendarWidget
             return [];
         }
 
-        return DoctorShift::query()
+        $user = auth()->user();
+        
+        $query = DoctorShift::query()
             ->where('cabinet_id', $cabinetId)
             ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
-            ->with(['doctor'])
-            ->get()
+            ->with(['doctor']);
+        
+        // Дополнительная фильтрация по ролям
+        if ($user->isDoctor()) {
+            $query->where('doctor_id', $user->doctor_id);
+        } elseif ($user->isPartner()) {
+            // Проверяем, что кабинет принадлежит клинике партнера
+            $cabinet = \App\Models\Cabinet::with('branch')->find($cabinetId);
+            if (!$cabinet || $cabinet->branch->clinic_id !== $user->clinic_id) {
+                return [];
+            }
+        }
+        // super_admin видит все
+        
+        return $query->get()
             ->map(function (DoctorShift $shift) {
                 return [
                     'id' => $shift->id,
@@ -226,6 +244,13 @@ class CabinetScheduleWidget extends FullCalendarWidget
 
     protected function modalActions(): array
     {
+        $user = auth()->user();
+        
+        // Врач может только просматривать
+        if ($user->isDoctor()) {
+            return [];
+        }
+        
         return [
             \Saade\FilamentFullCalendar\Actions\EditAction::make()
                 ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {
@@ -293,6 +318,13 @@ class CabinetScheduleWidget extends FullCalendarWidget
 
     protected function headerActions(): array
     {
+        $user = auth()->user();
+        
+        // Врач не может создавать смены
+        if ($user->isDoctor()) {
+            return [];
+        }
+        
         return [
             \Saade\FilamentFullCalendar\Actions\CreateAction::make()
                 ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {

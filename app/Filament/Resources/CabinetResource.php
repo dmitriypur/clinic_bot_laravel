@@ -108,6 +108,27 @@ class CabinetResource extends Resource
             ]);
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        $user = auth()->user();
+        
+        $query = parent::getEloquentQuery();
+        
+        // Фильтрация по ролям
+        if ($user->isPartner()) {
+            $query->whereHas('branch', function($q) use ($user) {
+                $q->where('clinic_id', $user->clinic_id);
+            });
+        } elseif ($user->isDoctor()) {
+            $query->whereHas('branch.doctors', function($q) use ($user) {
+                $q->where('doctor_id', $user->doctor_id);
+            });
+        }
+        // super_admin видит все
+        
+        return $query;
+    }
+
     public static function getRelations(): array
     {
         return [

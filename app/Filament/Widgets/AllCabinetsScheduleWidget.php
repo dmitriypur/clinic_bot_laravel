@@ -18,6 +18,9 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
 
     public function config(): array
     {
+        $user = auth()->user();
+        $isDoctor = $user && $user->isDoctor();
+        
         return [
             'firstDay' => 1, // Понедельник
             'headerToolbar' => [
@@ -27,9 +30,9 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
             ],
             'initialView' => 'timeGridWeek',
             'navLinks' => true,
-            'editable' => true,
-            'selectable' => true,
-            'selectMirror' => true,
+            'editable' => !$isDoctor, // Врач не может редактировать
+            'selectable' => !$isDoctor, // Врач не может выбирать
+            'selectMirror' => !$isDoctor,
             'dayMaxEvents' => true,
             'weekends' => true,
             'locale' => 'ru',
@@ -50,10 +53,23 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
 
     public function fetchEvents(array $fetchInfo): array
     {
-        return DoctorShift::query()
+        $user = auth()->user();
+        
+        $query = DoctorShift::query()
             ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
-            ->with(['doctor', 'cabinet.branch'])
-            ->get()
+            ->with(['doctor', 'cabinet.branch']);
+        
+        // Фильтрация по ролям
+        if ($user->isPartner()) {
+            $query->whereHas('cabinet.branch', function($q) use ($user) {
+                $q->where('clinic_id', $user->clinic_id);
+            });
+        } elseif ($user->isDoctor()) {
+            $query->where('doctor_id', $user->doctor_id);
+        }
+        // super_admin видит все
+        
+        return $query->get()
             ->map(function (DoctorShift $shift) {
                 return [
                     'id' => $shift->id,
@@ -83,7 +99,23 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                 ->required()
                 ->searchable()
                 ->options(function () {
-                    return Cabinet::with('branch')->get()->mapWithKeys(function ($cabinet) {
+                    $user = auth()->user();
+                    
+                    $query = Cabinet::with('branch');
+                    
+                    // Фильтрация по ролям
+                    if ($user->isPartner()) {
+                        $query->whereHas('branch', function($q) use ($user) {
+                            $q->where('clinic_id', $user->clinic_id);
+                        });
+                    } elseif ($user->isDoctor()) {
+                        $query->whereHas('branch.doctors', function($q) use ($user) {
+                            $q->where('doctor_id', $user->doctor_id);
+                        });
+                    }
+                    // super_admin видит все
+                    
+                    return $query->get()->mapWithKeys(function ($cabinet) {
                         return [$cabinet->id => $cabinet->branch->name . ' - ' . $cabinet->name];
                     })->toArray();
                 }),
@@ -151,6 +183,13 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
 
     protected function modalActions(): array
     {
+        $user = auth()->user();
+        
+        // Врач может только просматривать
+        if ($user->isDoctor()) {
+            return [];
+        }
+        
         return [
             \Saade\FilamentFullCalendar\Actions\EditAction::make()
                 ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {
@@ -191,6 +230,13 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
 
     protected function headerActions(): array
     {
+        $user = auth()->user();
+        
+        // Врач не может создавать смены
+        if ($user->isDoctor()) {
+            return [];
+        }
+        
         return [
             \Saade\FilamentFullCalendar\Actions\CreateAction::make()
                 ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {

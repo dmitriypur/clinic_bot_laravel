@@ -72,8 +72,77 @@ class User extends Authenticatable implements FilamentUser
      */
     public function canAccessPanel(Panel $panel): bool
     {
-        // Разрешаем доступ пользователям с ролью super_admin, panel_user или partner
-        return true;
-        // return $this->hasRole(['super_admin', 'panel_user', 'partner']);
+        // Разрешаем доступ пользователям с ролью super_admin, partner или doctor
+        return $this->hasRole(['super_admin', 'partner', 'doctor']);
+    }
+    
+    /**
+     * Проверяет, является ли пользователь супер-администратором
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole('super_admin');
+    }
+    
+    /**
+     * Проверяет, является ли пользователь партнером
+     */
+    public function isPartner(): bool
+    {
+        return $this->hasRole('partner');
+    }
+    
+    /**
+     * Проверяет, является ли пользователь врачом
+     */
+    public function isDoctor(): bool
+    {
+        return $this->hasRole('doctor');
+    }
+    
+    /**
+     * Получает кабинеты, к которым имеет доступ пользователь
+     */
+    public function getAccessibleCabinets()
+    {
+        if ($this->isSuperAdmin()) {
+            return \App\Models\Cabinet::all();
+        }
+        
+        if ($this->isPartner()) {
+            return \App\Models\Cabinet::whereHas('branch', function($query) {
+                $query->where('clinic_id', $this->clinic_id);
+            })->get();
+        }
+        
+        if ($this->isDoctor()) {
+            return \App\Models\Cabinet::whereHas('branch.doctors', function($query) {
+                $query->where('doctor_id', $this->doctor_id);
+            })->get();
+        }
+        
+        return collect();
+    }
+    
+    /**
+     * Получает смены, к которым имеет доступ пользователь
+     */
+    public function getAccessibleShifts()
+    {
+        if ($this->isSuperAdmin()) {
+            return \App\Models\DoctorShift::all();
+        }
+        
+        if ($this->isPartner()) {
+            return \App\Models\DoctorShift::whereHas('cabinet.branch', function($query) {
+                $query->where('clinic_id', $this->clinic_id);
+            })->get();
+        }
+        
+        if ($this->isDoctor()) {
+            return \App\Models\DoctorShift::where('doctor_id', $this->doctor_id)->get();
+        }
+        
+        return collect();
     }
 }

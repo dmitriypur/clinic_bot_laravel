@@ -97,6 +97,7 @@ class CabinetResource extends Resource
                 //
             ])
             ->actions([
+                Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])
@@ -121,6 +122,7 @@ class CabinetResource extends Resource
         return [
             'index' => Pages\ListCabinets::route('/'),
             'create' => Pages\CreateCabinet::route('/create'),
+            'view' => Pages\ViewCabinet::route('/{record}'),
             'edit' => Pages\EditCabinet::route('/{record}/edit'),
         ];
     }

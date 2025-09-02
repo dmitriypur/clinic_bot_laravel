@@ -5,90 +5,16 @@ namespace App\Filament\Widgets;
 use App\Models\DoctorShift;
 use App\Models\Doctor;
 use App\Models\Cabinet;
-use Filament\Widgets\Widget;
 use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Grid;
 use Filament\Forms\Get;
-use Filament\Forms\Set;
 use Filament\Notifications\Notification;
 
-class CabinetScheduleWidget extends FullCalendarWidget
+class AllCabinetsScheduleWidget extends FullCalendarWidget
 {
     public \Illuminate\Database\Eloquent\Model | string | null $model = DoctorShift::class;
-    
-    public ?int $cabinetId = null;
-    
-    public function getCabinetId(): ?int
-    {
-        return $this->cabinetId;
-    }
-    
-    public function setCabinetId(?int $cabinetId): void
-    {
-        $this->cabinetId = $cabinetId;
-    }
-    
-    public function boot(): void
-    {
-        // Получаем cabinet_id из параметров запроса
-        if (!$this->cabinetId) {
-            $this->cabinetId = request()->route('record');
-        }
-    }
-    
-    public function mount(): void
-    {
-        // Устанавливаем cabinet_id при монтировании компонента
-        if (!$this->cabinetId) {
-            $this->cabinetId = request()->route('record');
-        }
-    }
-    
-    public function getCabinetIdFromContext(): ?int
-    {
-        // В первую очередь используем сохраненное значение
-        if ($this->cabinetId) {
-            return $this->cabinetId;
-        }
-        
-        // Если не установлено, пытаемся получить из маршрута
-        $record = request()->route('record');
-        if ($record) {
-            $this->cabinetId = (int) $record;
-            return $this->cabinetId;
-        }
-        
-        // Из Livewire компонента (если мы на странице кабинета)
-        try {
-            $livewire = app('livewire')->current();
-            if ($livewire && method_exists($livewire, 'getRecord')) {
-                $record = $livewire->getRecord();
-                if ($record) {
-                    $this->cabinetId = $record->id;
-                    return $this->cabinetId;
-                }
-            }
-        } catch (\Exception $e) {
-            // Игнорируем ошибки при попытке получить record
-        }
-        
-        return null;
-    }
-    
-    public static function canView(): bool
-    {
-        // Показываем виджет только на страницах кабинетов
-        $route = request()->route();
-        if (!$route) {
-            return false;
-        }
-        
-        $routeName = $route->getName();
-        return str_contains($routeName, 'cabinets') && $route->parameter('record');
-    }
 
     public function config(): array
     {
@@ -124,21 +50,14 @@ class CabinetScheduleWidget extends FullCalendarWidget
 
     public function fetchEvents(array $fetchInfo): array
     {
-        $cabinetId = $this->getCabinetIdFromContext();
-        
-        if (!$cabinetId) {
-            return [];
-        }
-
         return DoctorShift::query()
-            ->where('cabinet_id', $cabinetId)
             ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
-            ->with(['doctor'])
+            ->with(['doctor', 'cabinet.branch'])
             ->get()
             ->map(function (DoctorShift $shift) {
                 return [
                     'id' => $shift->id,
-                    'title' => $shift->doctor->full_name ?? 'Врач не назначен',
+                    'title' => ($shift->doctor->full_name ?? 'Врач не назначен') . ' - ' . ($shift->cabinet->name ?? 'Кабинет не указан'),
                     'start' => $shift->start_time,
                     'end' => $shift->end_time,
                     'backgroundColor' => $this->getShiftColor($shift),
@@ -146,6 +65,9 @@ class CabinetScheduleWidget extends FullCalendarWidget
                     'extendedProps' => [
                         'doctor_id' => $shift->doctor_id,
                         'doctor_name' => $shift->doctor->full_name ?? 'Врач не назначен',
+                        'cabinet_id' => $shift->cabinet_id,
+                        'cabinet_name' => $shift->cabinet->name ?? 'Кабинет не указан',
+                        'branch_name' => $shift->cabinet->branch->name ?? 'Филиал не указан',
                         'slot_duration' => $shift->slot_duration,
                     ]
                 ];
@@ -153,25 +75,30 @@ class CabinetScheduleWidget extends FullCalendarWidget
             ->toArray();
     }
 
-
-
-
-
     public function getFormSchema(): array
     {
         return [
+            Select::make('cabinet_id')
+                ->label('Кабинет')
+                ->required()
+                ->searchable()
+                ->options(function () {
+                    return Cabinet::with('branch')->get()->mapWithKeys(function ($cabinet) {
+                        return [$cabinet->id => $cabinet->branch->name . ' - ' . $cabinet->name];
+                    })->toArray();
+                }),
+            
             Select::make('doctor_id')
                 ->label('Врач')
                 ->required()
                 ->searchable()
-                ->options(function () {
-                    $cabinetId = $this->getCabinetIdFromContext();
-                    
+                ->options(function (Get $get) {
+                    $cabinetId = $get('cabinet_id');
                     if (!$cabinetId) {
                         return [];
                     }
                     
-                    $cabinet = \App\Models\Cabinet::with('branch.doctors')->find($cabinetId);
+                    $cabinet = Cabinet::with('branch.doctors')->find($cabinetId);
                     
                     if (!$cabinet || !$cabinet->branch) {
                         return [];
@@ -204,11 +131,9 @@ class CabinetScheduleWidget extends FullCalendarWidget
         ];
     }
 
-
-
     protected function getShiftColor(DoctorShift $shift): string
     {
-        // Цвета для разных врачей
+        // Цвета для разных кабинетов
         $colors = [
             '#3B82F6', // синий
             '#10B981', // зеленый
@@ -220,8 +145,8 @@ class CabinetScheduleWidget extends FullCalendarWidget
             '#F97316', // оранжевый
         ];
         
-        $doctorId = $shift->doctor_id ?? 0;
-        return $colors[$doctorId % count($colors)];
+        $cabinetId = $shift->cabinet_id ?? 0;
+        return $colors[$cabinetId % count($colors)];
     }
 
     protected function modalActions(): array
@@ -230,6 +155,7 @@ class CabinetScheduleWidget extends FullCalendarWidget
             \Saade\FilamentFullCalendar\Actions\EditAction::make()
                 ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {
                     $form->fill([
+                        'cabinet_id' => $this->record->cabinet_id,
                         'doctor_id' => $this->record->doctor_id,
                         'slot_duration' => $this->record->slot_duration,
                         'start_time' => $arguments['event']['start'] ?? $this->record->start_time,
@@ -260,34 +186,6 @@ class CabinetScheduleWidget extends FullCalendarWidget
                         
                     $this->refreshRecords();
                 }),
-                
-            \Filament\Actions\Action::make('duplicate')
-                ->label('Дублировать')
-                ->icon('heroicon-o-document-duplicate')
-                ->color('info')
-                ->action(function () {
-                    $originalShift = $this->record;
-                    
-                    // Создаем копию смены на следующий день
-                    $newStartTime = \Carbon\Carbon::parse($originalShift->start_time)->addDay();
-                    $newEndTime = \Carbon\Carbon::parse($originalShift->end_time)->addDay();
-                    
-                    DoctorShift::create([
-                        'doctor_id' => $originalShift->doctor_id,
-                        'cabinet_id' => $originalShift->cabinet_id,
-                        'start_time' => $newStartTime,
-                        'end_time' => $newEndTime,
-                        'slot_duration' => $originalShift->slot_duration,
-                    ]);
-                    
-                    Notification::make()
-                        ->title('Смена дублирована')
-                        ->body('Смена врача скопирована на следующий день')
-                        ->success()
-                        ->send();
-                        
-                    $this->refreshRecords();
-                }),
         ];
     }
 
@@ -302,20 +200,7 @@ class CabinetScheduleWidget extends FullCalendarWidget
                         'slot_duration' => 30,
                     ]);
                 })
-                                ->action(function (array $data) {
-                    $cabinetId = $this->getCabinetIdFromContext();
-                    
-                    if (!$cabinetId) {
-                        Notification::make()
-                            ->title('Ошибка')
-                            ->body('Не указан ID кабинета')
-                            ->danger()
-                            ->send();
-                        return;
-                    }
-                    
-                    $data['cabinet_id'] = $cabinetId;
-                    
+                ->action(function (array $data) {
                     DoctorShift::create($data);
                     
                     Notification::make()
@@ -328,6 +213,4 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 }),
         ];
     }
-
-
 }

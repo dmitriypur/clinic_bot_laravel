@@ -16,6 +16,8 @@ class Application extends Model
         'clinic_id',
         'branch_id',
         'doctor_id',
+        'cabinet_id',
+        'appointment_datetime',
         'full_name_parent',
         'full_name',
         'birth_date',
@@ -32,6 +34,8 @@ class Application extends Model
         'clinic_id' => 'integer',
         'branch_id' => 'integer',
         'doctor_id' => 'integer',
+        'cabinet_id' => 'integer',
+        'appointment_datetime' => 'datetime',
         'tg_user_id' => 'integer',
         'tg_chat_id' => 'integer',
         'send_to_1c' => 'boolean',
@@ -55,5 +59,10 @@ class Application extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function cabinet(): BelongsTo
+    {
+        return $this->belongsTo(Cabinet::class);
     }
 }

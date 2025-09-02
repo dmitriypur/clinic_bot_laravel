@@ -4,10 +4,12 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\ApplicationResource\Pages;
 use App\Filament\Resources\ApplicationResource\RelationManagers;
+use App\Filament\Resources\ApplicationResource\Widgets\AppointmentCalendarWidget;
 use App\Models\Application;
 use App\Models\Clinic;
 use Filament\Forms;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -206,6 +208,53 @@ class ApplicationResource extends Resource
                     })
                     ->required(),
 
+                Select::make('cabinet_id')
+                    ->label('Кабинет')
+                    ->reactive()
+                    ->options(function (callable $get) {
+                        $branchId = $get('branch_id');
+                        if (!$branchId) {
+                            return [];
+                        }
+                        
+                        return \App\Models\Cabinet::where('branch_id', $branchId)
+                            ->pluck('name', 'id');
+                    })
+                    ->required(),
+
+                DateTimePicker::make('appointment_datetime')
+                    ->label('Дата и время приема')
+                    ->required()
+                    ->native(false)
+                    ->displayFormat('d.m.Y H:i')
+                    ->seconds(false)
+                    ->rules([
+                        function () {
+                            return function (string $attribute, $value, \Closure $fail) {
+                                if (!$value) return;
+                                
+                                $cabinetId = request()->input('cabinet_id');
+                                if (!$cabinetId) return;
+                                
+                                // Проверяем, не занят ли слот (исключаем текущую запись при редактировании)
+                                $query = Application::query()
+                                    ->where('cabinet_id', $cabinetId)
+                                    ->where('appointment_datetime', $value);
+                                
+                                // Если это редактирование, исключаем текущую запись
+                                if (request()->route('record')) {
+                                    $query->where('id', '!=', request()->route('record'));
+                                }
+                                
+                                $isOccupied = $query->exists();
+                                
+                                if ($isOccupied) {
+                                    $fail('Этот временной слот уже занят.');
+                                }
+                            };
+                        }
+                    ]),
+
                 TextInput::make('tg_user_id')
                     ->label('ID пользователя в Telegram')
                     ->numeric()
@@ -222,41 +271,49 @@ class ApplicationResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return $table
-            ->columns([
-                TextColumn::make('city.name')
-                    ->label('Город')
-                    ->searchable(),
-                TextColumn::make('clinic.name')
-                    ->label('Клиника')
-                    ->searchable(),
-                TextColumn::make('branch.name')
-                    ->label('Филиал')
-                    ->searchable()
-                    ->formatStateUsing(function ($record) {
-                        return $record->branch ? $record->branch->name : '-';
-                    }),
-                TextColumn::make('doctor.last_name')
-                    ->label('Врач')
-                    ->searchable(),
-                TextColumn::make('full_name')
-                    ->label('Имя ребенка')
-                    ->searchable(),
-                TextColumn::make('phone')
-                    ->label('Телефон')
-                    ->searchable(),
-            ])
-            ->filters([
-                //
-            ])
-            ->actions([
-                Tables\Actions\EditAction::make(),
-            ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
-            ]);
+        return parent::table($table);
+        // return $table
+        //     ->columns([
+        //         TextColumn::make('city.name')
+        //             ->label('Город')
+        //             ->searchable(),
+        //         TextColumn::make('clinic.name')
+        //             ->label('Клиника')
+        //             ->searchable(),
+        //         TextColumn::make('branch.name')
+        //             ->label('Филиал')
+        //             ->searchable()
+        //             ->formatStateUsing(function ($record) {
+        //                 return $record->branch ? $record->branch->name : '-';
+        //             }),
+        //         TextColumn::make('doctor.last_name')
+        //             ->label('Врач')
+        //             ->searchable(),
+        //         TextColumn::make('full_name')
+        //             ->label('Имя ребенка')
+        //             ->searchable(),
+        //         TextColumn::make('phone')
+        //             ->label('Телефон')
+        //             ->searchable(),
+        //         TextColumn::make('appointment_datetime')
+        //             ->label('Дата и время приема')
+        //             ->dateTime('d.m.Y H:i')
+        //             ->sortable(),
+        //         TextColumn::make('cabinet.name')
+        //             ->label('Кабинет')
+        //             ->searchable(),
+        //     ])
+        //     ->filters([
+        //         //
+        //     ])
+        //     ->actions([
+        //         Tables\Actions\EditAction::make(),
+        //     ])
+        //     ->bulkActions([
+        //         Tables\Actions\BulkActionGroup::make([
+        //             Tables\Actions\DeleteBulkAction::make(),
+        //         ]),
+        //     ]);
     }
 
     public static function getRelations(): array
@@ -272,6 +329,13 @@ class ApplicationResource extends Resource
             'index' => Pages\ListApplications::route('/'),
             'create' => Pages\CreateApplication::route('/create'),
             'edit' => Pages\EditApplication::route('/{record}/edit'),
+        ];
+    }
+
+    public static function getWidgets(): array
+    {
+        return [
+            AppointmentCalendarWidget::class,
         ];
     }
 }

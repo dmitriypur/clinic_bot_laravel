@@ -49,9 +49,9 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             ],
             'initialView' => 'timeGridWeek',
             'navLinks' => true,
-            'editable' => !$isDoctor, // Врач не может редактировать
-            'selectable' => !$isDoctor, // Врач не может выбирать время
-            'selectMirror' => !$isDoctor, // Отображение выбранного времени
+            'editable' => false, // Отключаем редактирование для всех
+            'selectable' => false, // Отключаем выбор для всех
+            'selectMirror' => false, // Отключаем отображение выбранного времени
             'dayMaxEvents' => true,
             'weekends' => true,
             'locale' => 'ru',
@@ -164,24 +164,11 @@ class AppointmentCalendarWidget extends FullCalendarWidget
      */
     private function isSlotOccupied(int $cabinetId, Carbon $slotStart): bool
     {
-        $user = auth()->user();
-        
-        // Базовый запрос
-        $query = Application::query()
+        // Проверяем, есть ли вообще заявка в этом слоте (без фильтрации по ролям)
+        return Application::query()
             ->where('cabinet_id', $cabinetId)
-            ->where('appointment_datetime', $slotStart);
-        
-        // Фильтрация по ролям
-        if ($user->isPartner()) {
-            // Партнер видит только заявки в своих клиниках
-            $query->where('clinic_id', $user->clinic_id);
-        } elseif ($user->isDoctor()) {
-            // Врач видит только заявки где он назначен врачом
-            $query->where('doctor_id', $user->doctor_id);
-        }
-        // super_admin видит все заявки
-        
-        return $query->exists();
+            ->where('appointment_datetime', $slotStart)
+            ->exists();
     }
 
     /**
@@ -295,21 +282,9 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     {
         $user = auth()->user();
         
-        // Врач может только просматривать
+        // Врач может только просматривать - возвращаем пустой массив, чтобы не было стандартных действий
         if ($user->isDoctor()) {
-            return [
-                \Saade\FilamentFullCalendar\Actions\ViewAction::make()
-                    ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {
-                        $form->fill([
-                            'full_name' => $this->record->full_name,
-                            'full_name_parent' => $this->record->full_name_parent ?? '',
-                            'birth_date' => $this->record->birth_date,
-                            'phone' => $this->record->phone,
-                            'appointment_datetime' => $this->record->appointment_datetime,
-                            'promo_code' => $this->record->promo_code ?? '',
-                        ]);
-                    })
-            ];
+            return [];
         }
         
         return [
@@ -468,13 +443,13 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         $application = $applicationQuery->first();
 
         if (!$application) {
-            Notification::make()
-                ->title('Ошибка')
-                ->body('Заявка не найдена')
-                ->danger()
-                ->send();
-            return;
-        }
+                    Notification::make()
+            ->title('Ошибка')
+            ->body('Заявка не найдена')
+            ->danger()
+            ->send();
+        return;
+    }
 
         // Заполняем данные для формы
         $this->slotData = [
@@ -497,10 +472,13 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             'promo_code' => $application->promo_code,
         ];
 
-        // Если врач - показываем модальное окно с информацией, если партнер или админ - редактирование
+        // Устанавливаем запись для действий
+        $this->record = $application;
+        
+        // Открываем форму для всех ролей, но с разными правами
         if ($user->isDoctor()) {
-            // Для врача показываем модальное окно с информацией о заявке
-            $this->mountAction('viewAppointment');
+            // Для врача показываем форму только для просмотра
+            $this->mountAction('view');
         } else {
             // Открываем форму редактирования для партнеров и админов
             $this->mountAction('editAppointment');
@@ -514,9 +492,132 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     {
         $user = auth()->user();
         
-        // Врач не может создавать заявки
+        // Врач не может создавать заявки, но может просматривать
         if ($user->isDoctor()) {
-            return [];
+            return [
+                \Filament\Actions\Action::make('viewAppointment')
+                    ->label('Информация о записи')
+                    ->icon('heroicon-o-eye')
+                    ->visible(fn() => auth()->user()->isDoctor())
+                    ->form([
+                        Grid::make(2)
+                            ->schema([
+                                Select::make('city_id')
+                                    ->label('Город')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->options(function () {
+                                        return \App\Models\City::pluck('name', 'id')->toArray();
+                                    }),
+                                
+                                Select::make('clinic_id')
+                                    ->label('Клиника')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->options(function (Get $get) {
+                                        $cityId = $get('city_id');
+                                        if (!$cityId) return [];
+                                        return \App\Models\Clinic::whereIn('id', function($q) use ($cityId) {
+                                            $q->select('clinic_id')->from('branches')->where('city_id', $cityId);
+                                        })->pluck('name', 'id')->toArray();
+                                    }),
+                                
+                                Select::make('branch_id')
+                                    ->label('Филиал')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->options(function (Get $get) {
+                                        $clinicId = $get('clinic_id');
+                                        if (!$clinicId) return [];
+                                        return \App\Models\Branch::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
+                                    }),
+                                
+                                Select::make('cabinet_id')
+                                    ->label('Кабинет')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->options(function (Get $get) {
+                                        $branchId = $get('branch_id');
+                                        if (!$branchId) return [];
+                                        return \App\Models\Cabinet::where('branch_id', $branchId)->pluck('name', 'id')->toArray();
+                                    }),
+                                
+                                Select::make('doctor_id')
+                                    ->label('Врач')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->options(function (Get $get) {
+                                        $cabinetId = $get('cabinet_id');
+                                        if (!$cabinetId) return [];
+                                        $cabinet = \App\Models\Cabinet::with('branch.doctors')->find($cabinetId);
+                                        if (!$cabinet || !$cabinet->branch) return [];
+                                        return $cabinet->branch->doctors->pluck('full_name', 'id')->toArray();
+                                    }),
+                                
+                                DateTimePicker::make('appointment_datetime')
+                                    ->label('Дата и время приема')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->seconds(false)
+                                    ->minutesStep(15),
+                            ]),
+                        
+                        Grid::make(2)
+                            ->schema([
+                                TextInput::make('full_name_parent')
+                                    ->label('ФИО родителя')
+                                    ->disabled()
+                                    ->dehydrated(false),
+                                
+                                TextInput::make('full_name')
+                                    ->label('ФИО ребенка')
+                                    ->disabled()
+                                    ->dehydrated(false),
+                                
+                                TextInput::make('birth_date')
+                                    ->label('Дата рождения')
+                                    ->type('date')
+                                    ->disabled()
+                                    ->dehydrated(false),
+                                
+                                TextInput::make('phone')
+                                    ->label('Телефон')
+                                    ->tel()
+                                    ->disabled()
+                                    ->dehydrated(false),
+                                
+                                TextInput::make('promo_code')
+                                    ->label('Промокод')
+                                    ->disabled()
+                                    ->dehydrated(false),
+                            ]),
+                    ])
+                    ->mountUsing(function (\Filament\Forms\Form $form) {
+                        // Заполняем форму данными из слота
+                        if (!empty($this->slotData)) {
+                            // Для просмотра заполняем все поля
+                            $form->fill([
+                                'city_id' => $this->slotData['city_id'] ?? null,
+                                'clinic_id' => $this->slotData['clinic_id'] ?? null,
+                                'branch_id' => $this->slotData['branch_id'] ?? null,
+                                'cabinet_id' => $this->slotData['cabinet_id'] ?? null,
+                                'doctor_id' => $this->slotData['doctor_id'] ?? null,
+                                'appointment_datetime' => $this->slotData['appointment_datetime'] ?? null,
+                                'full_name' => $this->slotData['full_name'] ?? '',
+                                'phone' => $this->slotData['phone'] ?? '',
+                                'full_name_parent' => $this->slotData['full_name_parent'] ?? '',
+                                'birth_date' => $this->slotData['birth_date'] ?? '',
+                                'promo_code' => $this->slotData['promo_code'] ?? '',
+                            ]);
+                        }
+                    })
+                    ->extraModalFooterActions([
+                        \Filament\Actions\Action::make('close')
+                            ->label('Закрыть')
+                            ->color('gray')
+                            ->action(fn() => $this->closeModal()),
+                    ]),
+            ];
         }
         
         return [
@@ -569,31 +670,91 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 ->label('Информация о записи')
                 ->icon('heroicon-o-eye')
                 ->visible(fn() => auth()->user()->isDoctor())
+                ->modalHeading('Информация о записи пациента')
                 ->form([
                     Grid::make(2)
                         ->schema([
-                            TextInput::make('full_name')
-                                ->label('ФИО ребенка')
+                            Select::make('city_id')
+                                ->label('Город')
                                 ->disabled()
-                                ->dehydrated(false),
+                                ->dehydrated(false)
+                                ->options(function () {
+                                    return \App\Models\City::pluck('name', 'id')->toArray();
+                                }),
                             
+                            Select::make('clinic_id')
+                                ->label('Клиника')
+                                ->disabled()
+                                ->dehydrated(false)
+                                ->options(function (Get $get) {
+                                    $cityId = $get('city_id');
+                                    if (!$cityId) return [];
+                                    return \App\Models\Clinic::whereIn('id', function($q) use ($cityId) {
+                                        $q->select('clinic_id')->from('branches')->where('city_id', $cityId);
+                                    })->pluck('name', 'id')->toArray();
+                                }),
+                            
+                            Select::make('branch_id')
+                                ->label('Филиал')
+                                ->disabled()
+                                ->dehydrated(false)
+                                ->options(function (Get $get) {
+                                    $clinicId = $get('clinic_id');
+                                    if (!$clinicId) return [];
+                                    return \App\Models\Branch::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
+                                }),
+                            
+                            Select::make('cabinet_id')
+                                ->label('Кабинет')
+                                ->disabled()
+                                ->dehydrated(false)
+                                ->options(function (Get $get) {
+                                    $branchId = $get('branch_id');
+                                    if (!$branchId) return [];
+                                    return \App\Models\Cabinet::where('branch_id', $branchId)->pluck('name', 'id')->toArray();
+                                }),
+                            
+                            Select::make('doctor_id')
+                                ->label('Врач')
+                                ->disabled()
+                                ->dehydrated(false)
+                                ->options(function (Get $get) {
+                                    $cabinetId = $get('cabinet_id');
+                                    if (!$cabinetId) return [];
+                                    $cabinet = \App\Models\Cabinet::with('branch.doctors')->find($cabinetId);
+                                    if (!$cabinet || !$cabinet->branch) return [];
+                                    return $cabinet->branch->doctors->pluck('full_name', 'id')->toArray();
+                                }),
+                            
+                            DateTimePicker::make('appointment_datetime')
+                                ->label('Дата и время приема')
+                                ->disabled()
+                                ->dehydrated(false)
+                                ->seconds(false)
+                                ->minutesStep(15),
+                        ]),
+                    
+                    Grid::make(2)
+                        ->schema([
                             TextInput::make('full_name_parent')
                                 ->label('ФИО родителя')
                                 ->disabled()
                                 ->dehydrated(false),
                             
+                            TextInput::make('full_name')
+                                ->label('ФИО ребенка')
+                                ->disabled()
+                                ->dehydrated(false),
+                            
                             TextInput::make('birth_date')
                                 ->label('Дата рождения')
+                                ->type('date')
                                 ->disabled()
                                 ->dehydrated(false),
                             
                             TextInput::make('phone')
                                 ->label('Телефон')
-                                ->disabled()
-                                ->dehydrated(false),
-                            
-                            DateTimePicker::make('appointment_datetime')
-                                ->label('Дата и время приема')
+                                ->tel()
                                 ->disabled()
                                 ->dehydrated(false),
                             
@@ -604,15 +765,26 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                         ]),
                 ])
                 ->mountUsing(function (\Filament\Forms\Form $form) {
+                    Notification::make()
+                        ->title('Отладка')
+                        ->body('mountUsing вызван для viewAppointment')
+                        ->info()
+                        ->send();
+                    
                     // Заполняем форму данными из слота
                     if (!empty($this->slotData)) {
-                        // Для просмотра используем только поля с данными пациента
+                        // Для просмотра заполняем все поля
                         $form->fill([
+                            'city_id' => $this->slotData['city_id'] ?? null,
+                            'clinic_id' => $this->slotData['clinic_id'] ?? null,
+                            'branch_id' => $this->slotData['branch_id'] ?? null,
+                            'cabinet_id' => $this->slotData['cabinet_id'] ?? null,
+                            'doctor_id' => $this->slotData['doctor_id'] ?? null,
+                            'appointment_datetime' => $this->slotData['appointment_datetime'] ?? null,
                             'full_name' => $this->slotData['full_name'] ?? '',
+                            'phone' => $this->slotData['phone'] ?? '',
                             'full_name_parent' => $this->slotData['full_name_parent'] ?? '',
                             'birth_date' => $this->slotData['birth_date'] ?? '',
-                            'phone' => $this->slotData['phone'] ?? '',
-                            'appointment_datetime' => $this->slotData['appointment_datetime'] ?? '',
                             'promo_code' => $this->slotData['promo_code'] ?? '',
                         ]);
                     }

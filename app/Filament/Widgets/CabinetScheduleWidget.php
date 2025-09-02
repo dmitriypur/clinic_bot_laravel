@@ -15,38 +15,63 @@ use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Notifications\Notification;
 
+/**
+ * Виджет календаря расписания для конкретного кабинета
+ * 
+ * Отображает календарь с расписанием врачей для выбранного кабинета.
+ * Позволяет создавать, редактировать и удалять смены врачей.
+ * Включает фильтрацию по ролям пользователей и автоматическое определение ID кабинета.
+ */
 class CabinetScheduleWidget extends FullCalendarWidget
 {
+    // Модель для работы с данными
     public \Illuminate\Database\Eloquent\Model | string | null $model = DoctorShift::class;
     
+    // ID кабинета для которого отображается расписание
     public ?int $cabinetId = null;
     
+    /**
+     * Получение ID кабинета
+     */
     public function getCabinetId(): ?int
     {
         return $this->cabinetId;
     }
     
+    /**
+     * Установка ID кабинета
+     */
     public function setCabinetId(?int $cabinetId): void
     {
         $this->cabinetId = $cabinetId;
     }
     
+    /**
+     * Инициализация при загрузке виджета
+     * Получаем cabinet_id из параметров запроса
+     */
     public function boot(): void
     {
-        // Получаем cabinet_id из параметров запроса
         if (!$this->cabinetId) {
             $this->cabinetId = request()->route('record');
         }
     }
     
+    /**
+     * Инициализация при монтировании компонента
+     * Устанавливаем cabinet_id при монтировании компонента
+     */
     public function mount(): void
     {
-        // Устанавливаем cabinet_id при монтировании компонента
         if (!$this->cabinetId) {
             $this->cabinetId = request()->route('record');
         }
     }
     
+    /**
+     * Получение ID кабинета из контекста
+     * Пытается получить ID кабинета из различных источников
+     */
     public function getCabinetIdFromContext(): ?int
     {
         // В первую очередь используем сохраненное значение
@@ -78,9 +103,12 @@ class CabinetScheduleWidget extends FullCalendarWidget
         return null;
     }
     
+    /**
+     * Проверка возможности отображения виджета
+     * Показываем виджет только на страницах кабинетов
+     */
     public static function canView(): bool
     {
-        // Показываем виджет только на страницах кабинетов
         $route = request()->route();
         if (!$route) {
             return false;
@@ -90,26 +118,30 @@ class CabinetScheduleWidget extends FullCalendarWidget
         return str_contains($routeName, 'cabinets') && $route->parameter('record');
     }
 
+    /**
+     * Конфигурация календаря
+     * Настройки отображения и поведения календаря
+     */
     public function config(): array
     {
         $user = auth()->user();
         $isDoctor = $user && $user->isDoctor();
         
         return [
-            'firstDay' => 1, // Понедельник
+            'firstDay' => 1, // Понедельник - первый день недели
             'headerToolbar' => [
-                'left' => 'prev,next today',
-                'center' => 'title',
-                'right' => 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+                'left' => 'prev,next today',  // Навигация по датам
+                'center' => 'title',          // Заголовок с текущей датой
+                'right' => 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'  // Переключатели видов
             ],
-            'initialView' => 'timeGridWeek',
-            'navLinks' => true,
-            'editable' => !$isDoctor, // Врач не может редактировать
-            'selectable' => !$isDoctor, // Врач не может выбирать
-            'selectMirror' => !$isDoctor,
-            'dayMaxEvents' => true,
-            'weekends' => true,
-            'locale' => 'ru',
+            'initialView' => 'timeGridWeek',  // Начальный вид - неделя по времени
+            'navLinks' => true,               // Кликабельные даты
+            'editable' => !$isDoctor,         // Врач не может редактировать
+            'selectable' => !$isDoctor,       // Врач не может выбирать время
+            'selectMirror' => !$isDoctor,     // Отображение выбранного времени
+            'dayMaxEvents' => true,           // Показывать "+X еще" при переполнении
+            'weekends' => true,               // Показывать выходные
+            'locale' => 'ru',                 // Русская локализация
             'buttonText' => [
                 'today' => 'Сегодня',
                 'month' => 'Месяц',
@@ -117,14 +149,18 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 'day' => 'День',
                 'list' => 'Список'
             ],
-            'allDaySlot' => false,
-            'slotMinTime' => '08:00:00',
-            'slotMaxTime' => '20:00:00',
-            'slotDuration' => '00:30:00',
-            'snapDuration' => '00:15:00',
+            'allDaySlot' => false,            // Не показывать слот "Весь день"
+            'slotMinTime' => '08:00:00',      // Минимальное время отображения
+            'slotMaxTime' => '20:00:00',      // Максимальное время отображения
+            'slotDuration' => '00:30:00',     // Длительность слота (30 минут)
+            'snapDuration' => '00:15:00',     // Шаг привязки времени (15 минут)
         ];
     }
 
+    /**
+     * Получение событий для отображения в календаре
+     * Загружает смены врачей для конкретного кабинета с фильтрацией по ролям
+     */
     public function fetchEvents(array $fetchInfo): array
     {
         $cabinetId = $this->getCabinetIdFromContext();
@@ -135,6 +171,7 @@ class CabinetScheduleWidget extends FullCalendarWidget
 
         $user = auth()->user();
         
+        // Базовый запрос смен для кабинета в указанном диапазоне дат
         $query = DoctorShift::query()
             ->where('cabinet_id', $cabinetId)
             ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
@@ -142,6 +179,7 @@ class CabinetScheduleWidget extends FullCalendarWidget
         
         // Дополнительная фильтрация по ролям
         if ($user->isDoctor()) {
+            // Врач видит только свои смены
             $query->where('doctor_id', $user->doctor_id);
         } elseif ($user->isPartner()) {
             // Проверяем, что кабинет принадлежит клинике партнера
@@ -150,8 +188,9 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 return [];
             }
         }
-        // super_admin видит все
+        // super_admin видит все смены
         
+        // Преобразуем смены в формат FullCalendar
         return $query->get()
             ->map(function (DoctorShift $shift) {
                 return [
@@ -175,9 +214,14 @@ class CabinetScheduleWidget extends FullCalendarWidget
 
 
 
+    /**
+     * Схема формы для создания/редактирования смены
+     * Включает выбор врача, длительность слота и время смены
+     */
     public function getFormSchema(): array
     {
         return [
+            // Выбор врача из филиала кабинета
             Select::make('doctor_id')
                 ->label('Врач')
                 ->required()
@@ -195,11 +239,13 @@ class CabinetScheduleWidget extends FullCalendarWidget
                         return [];
                     }
                     
+                    // Показываем только врачей из филиала кабинета
                     return $cabinet->branch->doctors->mapWithKeys(function ($doctor) {
                         return [$doctor->id => $doctor->full_name];
                     })->toArray();
                 }),
             
+            // Длительность слота для записи пациентов
             TextInput::make('slot_duration')
                 ->label('Длительность слота (минуты)')
                 ->numeric()
@@ -208,12 +254,14 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 ->minValue(15)
                 ->maxValue(120),
             
+            // Время начала смены
             DateTimePicker::make('start_time')
                 ->label('Начало смены')
                 ->required()
                 ->seconds(false)
                 ->minutesStep(15),
             
+            // Время окончания смены
             DateTimePicker::make('end_time')
                 ->label('Конец смены')
                 ->required()
@@ -224,9 +272,13 @@ class CabinetScheduleWidget extends FullCalendarWidget
 
 
 
+    /**
+     * Получение цвета для смены врача
+     * Каждый врач получает свой цвет на основе ID
+     */
     protected function getShiftColor(DoctorShift $shift): string
     {
-        // Цвета для разных врачей
+        // Палитра цветов для разных врачей
         $colors = [
             '#3B82F6', // синий
             '#10B981', // зеленый

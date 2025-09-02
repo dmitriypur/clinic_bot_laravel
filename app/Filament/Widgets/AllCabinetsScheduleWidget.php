@@ -12,30 +12,42 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 
+/**
+ * Виджет календаря расписания для всех кабинетов
+ * 
+ * Отображает календарь с расписанием врачей по всем кабинетам.
+ * Позволяет создавать, редактировать и удалять смены врачей.
+ * Включает фильтрацию по ролям пользователей и выбор кабинета при создании смены.
+ */
 class AllCabinetsScheduleWidget extends FullCalendarWidget
 {
+    // Модель для работы с данными
     public \Illuminate\Database\Eloquent\Model | string | null $model = DoctorShift::class;
 
+    /**
+     * Конфигурация календаря
+     * Настройки отображения и поведения календаря для всех кабинетов
+     */
     public function config(): array
     {
         $user = auth()->user();
         $isDoctor = $user && $user->isDoctor();
         
         return [
-            'firstDay' => 1, // Понедельник
+            'firstDay' => 1, // Понедельник - первый день недели
             'headerToolbar' => [
-                'left' => 'prev,next today',
-                'center' => 'title',
-                'right' => 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+                'left' => 'prev,next today',  // Навигация по датам
+                'center' => 'title',          // Заголовок с текущей датой
+                'right' => 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'  // Переключатели видов
             ],
-            'initialView' => 'timeGridWeek',
-            'navLinks' => true,
-            'editable' => !$isDoctor, // Врач не может редактировать
-            'selectable' => !$isDoctor, // Врач не может выбирать
-            'selectMirror' => !$isDoctor,
-            'dayMaxEvents' => true,
-            'weekends' => true,
-            'locale' => 'ru',
+            'initialView' => 'timeGridWeek',  // Начальный вид - неделя по времени
+            'navLinks' => true,               // Кликабельные даты
+            'editable' => !$isDoctor,         // Врач не может редактировать
+            'selectable' => !$isDoctor,       // Врач не может выбирать время
+            'selectMirror' => !$isDoctor,     // Отображение выбранного времени
+            'dayMaxEvents' => true,           // Показывать "+X еще" при переполнении
+            'weekends' => true,               // Показывать выходные
+            'locale' => 'ru',                 // Русская локализация
             'buttonText' => [
                 'today' => 'Сегодня',
                 'month' => 'Месяц',
@@ -43,32 +55,40 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                 'day' => 'День',
                 'list' => 'Список'
             ],
-            'allDaySlot' => false,
-            'slotMinTime' => '08:00:00',
-            'slotMaxTime' => '20:00:00',
-            'slotDuration' => '00:30:00',
-            'snapDuration' => '00:15:00',
+            'allDaySlot' => false,            // Не показывать слот "Весь день"
+            'slotMinTime' => '08:00:00',      // Минимальное время отображения
+            'slotMaxTime' => '20:00:00',      // Максимальное время отображения
+            'slotDuration' => '00:30:00',     // Длительность слота (30 минут)
+            'snapDuration' => '00:15:00',     // Шаг привязки времени (15 минут)
         ];
     }
 
+    /**
+     * Получение событий для отображения в календаре
+     * Загружает смены врачей по всем кабинетам с фильтрацией по ролям
+     */
     public function fetchEvents(array $fetchInfo): array
     {
         $user = auth()->user();
         
+        // Базовый запрос смен в указанном диапазоне дат
         $query = DoctorShift::query()
             ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
             ->with(['doctor', 'cabinet.branch']);
         
         // Фильтрация по ролям
         if ($user->isPartner()) {
+            // Партнер видит только смены в кабинетах своих клиник
             $query->whereHas('cabinet.branch', function($q) use ($user) {
                 $q->where('clinic_id', $user->clinic_id);
             });
         } elseif ($user->isDoctor()) {
+            // Врач видит только свои смены
             $query->where('doctor_id', $user->doctor_id);
         }
-        // super_admin видит все
+        // super_admin видит все смены
         
+        // Преобразуем смены в формат FullCalendar
         return $query->get()
             ->map(function (DoctorShift $shift) {
                 return [

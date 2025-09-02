@@ -10,14 +10,26 @@ use App\Services\ShiftService;
 use App\Http\Requests\StoreShiftRequest;
 use App\Http\Requests\UpdateShiftRequest;
 
+/**
+ * Контроллер для управления сменами врачей в кабинетах
+ * 
+ * Предоставляет API endpoints для работы с расписанием врачей в кабинетах.
+ * Включает методы для получения, создания, обновления и удаления смен.
+ * Использует ShiftService для бизнес-логики работы со сменами.
+ */
 class CabinetShiftController extends Controller
 {
+    /**
+     * Получение событий (смен) для календаря
+     * Возвращает смены врачей для конкретного кабинета в указанном диапазоне дат
+     */
     public function events(Request $request, Cabinet $cabinet)
     {
-        // проверка доступа: менеджер может видеть только свои кабинеты — добавь авторизацию если нужно
-        $from = $request->query('start');
-        $to   = $request->query('end');
+        // TODO: Добавить проверку доступа - менеджер может видеть только свои кабинеты
+        $from = $request->query('start');  // Начальная дата диапазона
+        $to   = $request->query('end');    // Конечная дата диапазона
 
+        // Получаем смены для кабинета в указанном диапазоне дат
         $shifts = DoctorShift::where('cabinet_id', $cabinet->id)
             ->whereBetween('start_time', [ $from, $to ])
             ->get();
@@ -34,17 +46,21 @@ class CabinetShiftController extends Controller
                     'cabinet_id' => $s->cabinet_id,
                     'slot_duration' => $s->slot_duration,
                 ],
-                // можем пометить как background, если нужно
+                // TODO: Можно пометить как background, если нужно
             ];
         });
 
         return response()->json($events);
     }
 
+    /**
+     * Создание новой смены врача
+     * Создает смену для указанного кабинета
+     */
     public function store(StoreShiftRequest $req, Cabinet $cabinet, ShiftService $service)
     {
         $data = $req->validated();
-        $data['cabinet_id'] = $cabinet->id;
+        $data['cabinet_id'] = $cabinet->id;  // Привязываем смену к кабинету
 
         $shift = $service->create($data);
 
@@ -56,12 +72,17 @@ class CabinetShiftController extends Controller
         ], 201);
     }
 
+    /**
+     * Обновление существующей смены врача
+     * Обновляет смену с проверкой принадлежности к кабинету
+     */
     public function update(UpdateShiftRequest $req, Cabinet $cabinet, DoctorShift $shift, ShiftService $service)
     {
-        // убедиться, что shift.cabinet_id == cabinet.id или авторизовать
+        // Проверяем, что смена принадлежит указанному кабинету
         if ($shift->cabinet_id !== $cabinet->id) {
             return response()->json(['message'=>'Shift не в этом кабинете'], 403);
         }
+        
         $data = $req->validated();
         $data['cabinet_id'] = $cabinet->id;
 
@@ -75,11 +96,17 @@ class CabinetShiftController extends Controller
         ]);
     }
 
+    /**
+     * Удаление смены врача
+     * Удаляет смену с проверкой принадлежности к кабинету
+     */
     public function destroy(Cabinet $cabinet, DoctorShift $shift, ShiftService $service)
     {
+        // Проверяем, что смена принадлежит указанному кабинету
         if ($shift->cabinet_id !== $cabinet->id) {
             return response()->json(['message'=>'Shift не в этом кабинете'], 403);
         }
+        
         $service->delete($shift);
         return response()->json([], 204);
     }

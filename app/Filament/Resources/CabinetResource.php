@@ -17,29 +17,42 @@ use Filament\Forms\Components\TextInput;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
 
+/**
+ * Filament ресурс для управления кабинетами
+ * 
+ * Предоставляет CRUD интерфейс для управления кабинетами в админ-панели.
+ * Включает фильтрацию по ролям пользователей (super_admin, partner, doctor).
+ * Партнеры видят только кабинеты своих клиник, врачи - только кабинеты филиалов где работают.
+ */
 class CabinetResource extends Resource
 {
     protected static ?string $model = Cabinet::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
-    protected static ?string $modelLabel = 'Кабинет';
-    protected static ?string $pluralModelLabel = 'Кабинеты';
-    protected static ?string $navigationLabel = 'Кабинеты';
-    protected static ?string $pluralLabel = 'Кабинеты';
-    protected static ?string $label = 'Кабинет';
-    protected static ?int $navigationSort = 3;
+    // Настройки интерфейса Filament
+    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';  // Иконка в навигации
+    protected static ?string $modelLabel = 'Кабинет';  // Единственное число
+    protected static ?string $pluralModelLabel = 'Кабинеты';  // Множественное число
+    protected static ?string $navigationLabel = 'Кабинеты';  // Название в навигации
+    protected static ?string $pluralLabel = 'Кабинеты';  // Альтернативное множественное число
+    protected static ?string $label = 'Кабинет';  // Альтернативное единственное число
+    protected static ?int $navigationSort = 3;  // Порядок в навигации
 
-
+    /**
+     * Форма для создания/редактирования кабинета
+     * Включает выбор филиала, название кабинета и статус
+     */
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
+                // Выбор филиала с фильтрацией по ролям
                 Select::make('branch_id')
                     ->label('Филиал')
                     ->required()
                     ->searchable()
                     ->options(function () {
                         $user = auth()->user();
+                        // Партнеры видят только филиалы своих клиник
                         if ($user && $user->hasRole('partner')) {
                             return \App\Models\Branch::with('clinic')
                                 ->where('clinic_id', $user->clinic_id)
@@ -49,6 +62,7 @@ class CabinetResource extends Resource
                                 })
                                 ->toArray();
                         }
+                        // Super admin видит все филиалы
                         return \App\Models\Branch::with('clinic')
                             ->get()
                             ->mapWithKeys(function ($branch) {
@@ -56,10 +70,12 @@ class CabinetResource extends Resource
                             })
                             ->toArray();
                     }),
+                // Название кабинета
                 TextInput::make('name')
                     ->required()
                     ->label('Название кабинета')
                     ->maxLength(500),
+                // Статус кабинета
                 Select::make('status')
                     ->label('Статус')
                     ->options([
@@ -71,14 +87,21 @@ class CabinetResource extends Resource
             ]);
     }
 
+    /**
+     * Таблица для отображения списка кабинетов
+     * Показывает филиал, название и статус с цветовой индикацией
+     */
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
+                // Название филиала
                 TextColumn::make('branch.name')
                     ->label('Филиал'),
+                // Название кабинета
                 TextColumn::make('name')
                     ->label('Название кабинета'),
+                // Статус с цветовой индикацией
                 BadgeColumn::make('status')
                     ->label('Статус')
                     ->formatStateUsing(fn (string $state): string => match ($state) {
@@ -87,27 +110,31 @@ class CabinetResource extends Resource
                         default => $state,
                     })
                     ->color(fn (string $state): string => match ($state) {
-                        '1' => 'success',
-                        '0' => 'danger',
+                        '1' => 'success',  // Зеленый для активных
+                        '0' => 'danger',   // Красный для неактивных
                         default => 'gray',
                     })
                     ->sortable(),
             ])
             ->filters([
-                //
+                // Фильтры (пока не используются)
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\ViewAction::make(),    // Просмотр
+                Tables\Actions\EditAction::make(),    // Редактирование
+                Tables\Actions\DeleteAction::make(),  // Удаление
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make(),  // Массовое удаление
                 ]),
             ]);
     }
 
+    /**
+     * Фильтрация запросов по ролям пользователей
+     * Партнеры видят только кабинеты своих клиник, врачи - только кабинеты филиалов где работают
+     */
     public static function getEloquentQuery(): Builder
     {
         $user = auth()->user();
@@ -116,35 +143,43 @@ class CabinetResource extends Resource
         
         // Фильтрация по ролям
         if ($user->isPartner()) {
+            // Партнеры видят только кабинеты филиалов своих клиник
             $query->whereHas('branch', function($q) use ($user) {
                 $q->where('clinic_id', $user->clinic_id);
             });
         } elseif ($user->isDoctor()) {
+            // Врачи видят только кабинеты филиалов где работают
             $query->whereHas('branch.doctors', function($q) use ($user) {
                 $q->where('doctor_id', $user->doctor_id);
             });
         }
-        // super_admin видит все
+        // super_admin видит все кабинеты без ограничений
         
         return $query;
     }
 
+    /**
+     * Связанные ресурсы (relation managers)
+     * Пока не используются
+     */
     public static function getRelations(): array
     {
         return [
-            //
+            // Связанные ресурсы можно добавить здесь
         ];
     }
 
-    
-
+    /**
+     * Страницы ресурса
+     * Определяет маршруты для CRUD операций
+     */
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListCabinets::route('/'),
-            'create' => Pages\CreateCabinet::route('/create'),
-            'view' => Pages\ViewCabinet::route('/{record}'),
-            'edit' => Pages\EditCabinet::route('/{record}/edit'),
+            'index' => Pages\ListCabinets::route('/'),           // Список кабинетов
+            'create' => Pages\CreateCabinet::route('/create'),   // Создание кабинета
+            'view' => Pages\ViewCabinet::route('/{record}'),     // Просмотр кабинета (с календарем)
+            'edit' => Pages\EditCabinet::route('/{record}/edit'), // Редактирование кабинета
         ];
     }
 }

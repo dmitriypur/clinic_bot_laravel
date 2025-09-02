@@ -7,11 +7,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Application extends Model
 {
-    public $incrementing = false;
+    public $incrementing = true;
     protected $keyType = 'integer';
 
     protected $fillable = [
-        'id',
         'city_id',
         'clinic_id',
         'branch_id',

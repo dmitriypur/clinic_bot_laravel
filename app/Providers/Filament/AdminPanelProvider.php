@@ -43,8 +43,8 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
-                AccountWidget::class,
-                FilamentInfoWidget::class,
+                // AccountWidget::class,
+                // FilamentInfoWidget::class,
             ])
             ->middleware([
                 EncryptCookies::class,
@@ -61,7 +61,8 @@ class AdminPanelProvider extends PanelProvider
                 FilamentShieldPlugin::make(),
                 FilamentFullCalendarPlugin::make()
                     ->selectable(true)
-                    ->editable(true),
+                    ->editable(true)
+                    ->plugins(['interaction', 'dayGrid', 'timeGrid', 'list']),
             ])
             ->authMiddleware([
                 Authenticate::class,

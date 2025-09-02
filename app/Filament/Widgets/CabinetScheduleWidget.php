@@ -154,8 +154,8 @@ class CabinetScheduleWidget extends FullCalendarWidget
                     $form->fill([
                         'doctor_id' => $this->record->doctor_id,
                         'slot_duration' => $this->record->slot_duration,
-                        'start_time' => $this->record->start_time,
-                        'end_time' => $this->record->end_time,
+                        'start_time' => $arguments['event']['start'] ?? $this->record->start_time,
+                        'end_time' => $arguments['event']['end'] ?? $this->record->end_time,
                     ]);
                 })
                 ->action(function (array $data) {
@@ -177,6 +177,34 @@ class CabinetScheduleWidget extends FullCalendarWidget
                     Notification::make()
                         ->title('Смена удалена')
                         ->body('Смена врача удалена из расписания')
+                        ->success()
+                        ->send();
+                        
+                    $this->refreshRecords();
+                }),
+                
+            \Filament\Actions\Action::make('duplicate')
+                ->label('Дублировать')
+                ->icon('heroicon-o-document-duplicate')
+                ->color('info')
+                ->action(function () {
+                    $originalShift = $this->record;
+                    
+                    // Создаем копию смены на следующий день
+                    $newStartTime = \Carbon\Carbon::parse($originalShift->start_time)->addDay();
+                    $newEndTime = \Carbon\Carbon::parse($originalShift->end_time)->addDay();
+                    
+                    DoctorShift::create([
+                        'doctor_id' => $originalShift->doctor_id,
+                        'cabinet_id' => $originalShift->cabinet_id,
+                        'start_time' => $newStartTime,
+                        'end_time' => $newEndTime,
+                        'slot_duration' => $originalShift->slot_duration,
+                    ]);
+                    
+                    Notification::make()
+                        ->title('Смена дублирована')
+                        ->body('Смена врача скопирована на следующий день')
                         ->success()
                         ->send();
                         
@@ -213,4 +241,6 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 }),
         ];
     }
+
+
 }

@@ -104,6 +104,33 @@ class CabinetScheduleWidget extends FullCalendarWidget
     }
     
     /**
+     * Получение длительности слота для кабинета
+     * Возвращает настройку из филиала в формате для FullCalendar
+     */
+    protected function getCabinetSlotDuration(): string
+    {
+        $cabinetId = $this->getCabinetIdFromContext();
+        
+        if (!$cabinetId) {
+            return '00:30:00'; // По умолчанию 30 минут
+        }
+        
+        $cabinet = \App\Models\Cabinet::with('branch')->find($cabinetId);
+        
+        if (!$cabinet || !$cabinet->branch) {
+            return '00:30:00'; // По умолчанию 30 минут
+        }
+        
+        $duration = $cabinet->branch->getEffectiveSlotDuration();
+        
+        // Преобразуем минуты в формат HH:MM:SS
+        $hours = intval($duration / 60);
+        $minutes = $duration % 60;
+        
+        return sprintf('%02d:%02d:00', $hours, $minutes);
+    }
+    
+    /**
      * Проверка возможности отображения виджета
      * Показываем виджет только на страницах кабинетов
      */
@@ -126,6 +153,9 @@ class CabinetScheduleWidget extends FullCalendarWidget
     {
         $user = auth()->user();
         $isDoctor = $user && $user->isDoctor();
+        
+        // Получаем длительность слота для кабинета
+        $slotDuration = $this->getCabinetSlotDuration();
         
         return [
             'firstDay' => 1, // Понедельник - первый день недели
@@ -152,8 +182,13 @@ class CabinetScheduleWidget extends FullCalendarWidget
             'allDaySlot' => false,            // Не показывать слот "Весь день"
             'slotMinTime' => '08:00:00',      // Минимальное время отображения
             'slotMaxTime' => '20:00:00',      // Максимальное время отображения
-            'slotDuration' => '00:30:00',     // Длительность слота (30 минут)
-            'snapDuration' => '00:15:00',     // Шаг привязки времени (15 минут)
+            'slotDuration' => $slotDuration,  // Длительность слота из настроек филиала
+            'snapDuration' => $slotDuration,  // Шаг привязки времени равен длительности слота
+            'slotLabelFormat' => [            // Формат отображения времени в слотах
+                'hour' => '2-digit',
+                'minute' => '2-digit',
+                'hour12' => false,            // 24-часовой формат
+            ],
         ];
     }
 
@@ -203,7 +238,6 @@ class CabinetScheduleWidget extends FullCalendarWidget
                     'extendedProps' => [
                         'doctor_id' => $shift->doctor_id,
                         'doctor_name' => $shift->doctor->full_name ?? 'Врач не назначен',
-                        'slot_duration' => $shift->slot_duration,
                     ]
                 ];
             })
@@ -245,14 +279,7 @@ class CabinetScheduleWidget extends FullCalendarWidget
                     })->toArray();
                 }),
             
-            // Длительность слота для записи пациентов
-            TextInput::make('slot_duration')
-                ->label('Длительность слота (минуты)')
-                ->numeric()
-                ->default(30)
-                ->required()
-                ->minValue(15)
-                ->maxValue(120),
+
             
             // Время начала смены
             DateTimePicker::make('start_time')
@@ -308,7 +335,6 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {
                     $form->fill([
                         'doctor_id' => $this->record->doctor_id,
-                        'slot_duration' => $this->record->slot_duration,
                         'start_time' => $arguments['event']['start'] ?? $this->record->start_time,
                         'end_time' => $arguments['event']['end'] ?? $this->record->end_time,
                     ]);
@@ -354,7 +380,6 @@ class CabinetScheduleWidget extends FullCalendarWidget
                         'cabinet_id' => $originalShift->cabinet_id,
                         'start_time' => $newStartTime,
                         'end_time' => $newEndTime,
-                        'slot_duration' => $originalShift->slot_duration,
                     ]);
                     
                     Notification::make()
@@ -383,7 +408,6 @@ class CabinetScheduleWidget extends FullCalendarWidget
                     $form->fill([
                         'start_time' => $arguments['start'] ?? null,
                         'end_time' => $arguments['end'] ?? null,
-                        'slot_duration' => 30,
                     ]);
                 })
                                 ->action(function (array $data) {

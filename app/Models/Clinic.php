@@ -11,10 +11,12 @@ class Clinic extends Model
     protected $fillable = [
         'name',
         'status',
+        'slot_duration',
     ];
 
     protected $casts = [
         'status' => 'integer',
+        'slot_duration' => 'integer',
     ];
 
     public function cities(): BelongsToMany
@@ -40,5 +42,14 @@ class Clinic extends Model
     public function branches(): HasMany
     {
         return $this->hasMany(Branch::class);
+    }
+
+    /**
+     * Получить эффективную длительность слота для клиники
+     * Если у клиники не задана длительность, используется значение по умолчанию (30 минут)
+     */
+    public function getEffectiveSlotDuration(): int
+    {
+        return $this->slot_duration ?? 30;
     }
 }

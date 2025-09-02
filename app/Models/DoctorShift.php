@@ -28,7 +28,6 @@ class DoctorShift extends Model
         'doctor_id',       // ID врача, который работает в смене
         'start_time',      // Время начала смены
         'end_time',        // Время окончания смены
-        'slot_duration',   // Длительность слота для записи пациентов (в минутах)
     ];
 
     /**
@@ -37,7 +36,6 @@ class DoctorShift extends Model
     protected $casts = [
         'start_time' => 'datetime',     // Время начала как объект Carbon
         'end_time'   => 'datetime',     // Время окончания как объект Carbon
-        'slot_duration' => 'integer',   // Длительность слота как целое число
     ];
 
     /**
@@ -68,5 +66,48 @@ class DoctorShift extends Model
                    $q2->where('start_time', '<=', $from)->where('end_time', '>=', $to);
                });
         });
+    }
+
+    /**
+     * Получить эффективную длительность слота для смены
+     * Получаем из филиала через кабинет
+     */
+    public function getEffectiveSlotDuration(): int
+    {
+        // Получаем из филиала через кабинет
+        $branch = $this->cabinet->branch ?? null;
+        if ($branch) {
+            return $branch->getEffectiveSlotDuration();
+        }
+
+        // Если филиал не найден, возвращаем значение по умолчанию
+        return 30;
+    }
+
+    /**
+     * Получить все доступные слоты времени для смены
+     * Разбивает время смены на слоты заданной длительности
+     */
+    public function getTimeSlots(): array
+    {
+        $slots = [];
+        $slotDuration = $this->getEffectiveSlotDuration();
+        
+        $current = $this->start_time->copy();
+        $end = $this->end_time;
+        
+        while ($current->addMinutes($slotDuration)->lte($end)) {
+            $slotStart = $current->copy()->subMinutes($slotDuration);
+            $slotEnd = $current->copy();
+            
+            $slots[] = [
+                'start' => $slotStart,
+                'end' => $slotEnd,
+                'duration' => $slotDuration,
+                'formatted' => $slotStart->format('H:i') . ' - ' . $slotEnd->format('H:i')
+            ];
+        }
+        
+        return $slots;
     }
 }

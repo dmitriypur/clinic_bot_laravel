@@ -16,12 +16,14 @@ class Branch extends Model
         'address',
         'phone',
         'status',
+        'slot_duration',
     ];
 
     protected $casts = [
         'clinic_id' => 'integer',
         'city_id' => 'integer',
         'status' => 'integer',
+        'slot_duration' => 'integer',
     ];
 
     public function clinic(): BelongsTo
@@ -47,5 +49,14 @@ class Branch extends Model
     public function cabinets(): HasMany
     {
         return $this->hasMany(Cabinet::class);
+    }
+
+    /**
+     * Получить эффективную длительность слота для филиала
+     * Если у филиала не задана длительность, берется из клиники
+     */
+    public function getEffectiveSlotDuration(): int
+    {
+        return $this->slot_duration ?? $this->clinic->slot_duration ?? 30;
     }
 }

@@ -101,6 +101,26 @@ class BranchResource extends Resource
                     ])
                     ->required()
                     ->default(1),
+                Forms\Components\Select::make('slot_duration')
+                    ->label('Длительность слота (минуты)')
+                    ->options([
+                        10 => '10 минут',
+                        15 => '15 минут',
+                        20 => '20 минут',
+                        25 => '25 минут',
+                        30 => '30 минут',
+                        35 => '35 минут',
+                        40 => '40 минут',
+                        45 => '45 минут',
+                        50 => '50 минут',
+                        55 => '55 минут',
+                        60 => '1 час',
+                        90 => '1.5 часа',
+                        120 => '2 часа',
+                    ])
+                    ->default(30)
+                    ->helperText('Если не указано, будет использоваться настройка клиники')
+                    ->nullable(),
             ]);
     }
 
@@ -127,6 +147,10 @@ class BranchResource extends Resource
                 Tables\Columns\TextColumn::make('phone')
                     ->label('Телефон')
                     ->searchable(),
+                Tables\Columns\TextColumn::make('slot_duration')
+                    ->label('Длительность слота')
+                    ->formatStateUsing(fn ($state) => $state ? $state . ' мин' : 'По умолчанию')
+                    ->sortable(),
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Статус')
                     ->formatStateUsing(fn (string $state): string => match ($state) {

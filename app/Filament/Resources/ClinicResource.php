@@ -61,6 +61,26 @@ class ClinicResource extends Resource
                     ])
                     ->default(1)
                     ->required(),
+                Select::make('slot_duration')
+                    ->label('Длительность слота по умолчанию (минуты)')
+                    ->options([
+                        10 => '10 минут',
+                        15 => '15 минут',
+                        20 => '20 минут',
+                        25 => '25 минут',
+                        30 => '30 минут',
+                        35 => '35 минут',
+                        40 => '40 минут',
+                        45 => '45 минут',
+                        50 => '50 минут',
+                        55 => '55 минут',
+                        60 => '1 час',
+                        90 => '1.5 часа',
+                        120 => '2 часа',
+                    ])
+                    ->default(30)
+                    ->helperText('Используется для всех филиалов, если у них не задана своя длительность')
+                    ->required(),
                 Select::make('city_id')
                     ->label('Города')
                     ->multiple()
@@ -84,6 +104,10 @@ class ClinicResource extends Resource
                 TextColumn::make('branches_count')
                     ->label('Филиалов')
                     ->counts('branches')
+                    ->sortable(),
+                TextColumn::make('slot_duration')
+                    ->label('Длительность слота')
+                    ->formatStateUsing(fn ($state) => $state . ' мин')
                     ->sortable(),
                 IconColumn::make('status')
                     ->label('Статус')

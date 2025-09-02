@@ -33,6 +33,8 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
         $user = auth()->user();
         $isDoctor = $user && $user->isDoctor();
         
+        // Для общего календаря используем минимальную длительность слота (15 минут)
+        // чтобы показать все возможные слоты
         return [
             'firstDay' => 1, // Понедельник - первый день недели
             'headerToolbar' => [
@@ -58,8 +60,13 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
             'allDaySlot' => false,            // Не показывать слот "Весь день"
             'slotMinTime' => '08:00:00',      // Минимальное время отображения
             'slotMaxTime' => '20:00:00',      // Максимальное время отображения
-            'slotDuration' => '00:30:00',     // Длительность слота (30 минут)
+            'slotDuration' => '00:15:00',     // Минимальная длительность слота для общего календаря
             'snapDuration' => '00:15:00',     // Шаг привязки времени (15 минут)
+            'slotLabelFormat' => [            // Формат отображения времени в слотах
+                'hour' => '2-digit',
+                'minute' => '2-digit',
+                'hour12' => false,            // 24-часовой формат
+            ],
         ];
     }
 
@@ -104,7 +111,7 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                         'cabinet_id' => $shift->cabinet_id,
                         'cabinet_name' => $shift->cabinet->name ?? 'Кабинет не указан',
                         'branch_name' => $shift->cabinet->branch->name ?? 'Филиал не указан',
-                        'slot_duration' => $shift->slot_duration,
+
                     ]
                 ];
             })
@@ -161,13 +168,7 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                     })->toArray();
                 }),
             
-            TextInput::make('slot_duration')
-                ->label('Длительность слота (минуты)')
-                ->numeric()
-                ->default(30)
-                ->required()
-                ->minValue(15)
-                ->maxValue(120),
+
             
             DateTimePicker::make('start_time')
                 ->label('Начало смены')
@@ -216,7 +217,6 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                     $form->fill([
                         'cabinet_id' => $this->record->cabinet_id,
                         'doctor_id' => $this->record->doctor_id,
-                        'slot_duration' => $this->record->slot_duration,
                         'start_time' => $arguments['event']['start'] ?? $this->record->start_time,
                         'end_time' => $arguments['event']['end'] ?? $this->record->end_time,
                     ]);
@@ -263,7 +263,6 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                     $form->fill([
                         'start_time' => $arguments['start'] ?? null,
                         'end_time' => $arguments['end'] ?? null,
-                        'slot_duration' => 30,
                     ]);
                 })
                 ->action(function (array $data) {

@@ -24,7 +24,6 @@ class DoctorResource extends JsonResource
             "status" => $this->status,
             "age_admission_from" => $this->age_admission_from,
             "age_admission_to" => $this->age_admission_to,
-            "ratings" => round($this->sum_ratings / $this->count_ratings),
             "uuid" => $this->uuid,
             "review_link" => $this->review_link,
         ];

@@ -8,6 +8,7 @@ use App\Models\City;
 use App\Models\Clinic;
 use App\Models\Doctor;
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 
 class DoctorController extends Controller
 {
@@ -22,14 +23,26 @@ class DoctorController extends Controller
         return DoctorResource::collection($doctors);
     }
 
-    public function byClinic(Clinic $clinic)
+    public function byClinic(Request $request, Clinic $clinic)
     {
-        return DoctorResource::collection($clinic->doctors);
-    }
-
-    public function byCity(City $city)
-    {
-        $doctors = $city->allDoctors()->get();
+        $age = $this->getAge($request);
+        $doctors = $clinic->doctors()->where('age_admission_from', '<=', $age)->where('age_admission_to', '>=', $age)->get();
         return DoctorResource::collection($doctors);
     }
+
+    public function byCity(Request $request, City $city)
+    {
+        $age = $this->getAge($request);
+        $doctors = $city->allDoctors()->where('age_admission_from', '<=', $age)->where('age_admission_to', '>=', $age)->get();
+        return DoctorResource::collection($doctors);
+    }
+
+    public function getAge($request): int
+    {
+        $birthDate = $request->input('birth_date');
+        $age = Carbon::parse($birthDate)->age;
+        return $age;
+    }
+
+
 }

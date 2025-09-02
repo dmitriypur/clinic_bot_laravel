@@ -52,6 +52,7 @@ const loadDoctors = async () => {
 
     if(clinic.value){
         let { data } = await axios.get(`/api/v1/clinics/${clinic.value}/doctors`, { params })
+        console.log(data)
         doctors.value = data.data
     }else{
         let { data } = await axios.get(`/api/v1/cities/${city.value}/doctors`, { params })
@@ -168,6 +169,7 @@ loadCities()
             <div v-else-if="step === 6" class="space-y-4">
                 <h3 class="text-xl font-semibold text-gray-800">Доктора</h3>
                 <div class="grid grid-cols-1 gap-3">
+                    <p class="text-sm text-gray-500">С выбранными условиями найдено докторов: <span class="font-bold" :class="doctors.length > 0 ? 'text-green-500' : 'text-red-500'">{{ doctors.length }}</span></p>
                     <button
                         v-for="d in doctors" :key="d.id"
                         @click="doctor = d.id; goTo(7)"

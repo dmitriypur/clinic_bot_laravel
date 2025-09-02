@@ -19,13 +19,15 @@ class ClinicController extends Controller
         $query = Clinic::where('status', 1);
 
         $perPage = $request->get('size', 20);
-        $cities = $query->orderBy('name')->paginate($perPage);
+        $cities = $query->orderBy('name')->with('branches')->paginate($perPage);
 
         if ($cities->isEmpty()) {
             return response()->json([
                 'error' => 'Clinic not found'
             ], 404);
         }
+
+        dd($cities);
 
         return ClinicResource::collection($cities);
     }

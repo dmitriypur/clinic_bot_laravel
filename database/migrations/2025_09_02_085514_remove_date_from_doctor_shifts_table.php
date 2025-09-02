@@ -12,13 +12,21 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('doctor_shifts', function (Blueprint $table) {
-            // Удаляем старые индексы, которые используют поле date
+            // Сначала удаляем foreign key constraints
+            $table->dropForeign(['cabinet_id']);
+            $table->dropForeign(['doctor_id']);
+            
+            // Затем удаляем индексы
             $table->dropIndex('idx_cabinet_date');
             $table->dropIndex('idx_doctor_date');
             $table->dropUnique('unique_doctor_shift');
             
             // Удаляем поле date
             $table->dropColumn('date');
+            
+            // Восстанавливаем foreign key constraints
+            $table->foreign('cabinet_id')->references('id')->on('cabinets')->onDelete('cascade');
+            $table->foreign('doctor_id')->references('id')->on('doctors')->onDelete('cascade');
             
             // Создаем новые индексы без поля date
             $table->index(['cabinet_id', 'start_time'], 'idx_cabinet_start_time');
@@ -38,8 +46,16 @@ return new class extends Migration
             $table->dropIndex('idx_doctor_start_time');
             $table->dropUnique('unique_doctor_shift');
             
-            // Восстанавливаем поле date
-            $table->date('date');
+            // Удаляем foreign key constraints
+            $table->dropForeign(['cabinet_id']);
+            $table->dropForeign(['doctor_id']);
+            
+            // Восстанавливаем поле date с значением по умолчанию
+            $table->date('date')->default('2025-01-01');
+            
+            // Восстанавливаем foreign key constraints
+            $table->foreign('cabinet_id')->references('id')->on('cabinets')->onDelete('cascade');
+            $table->foreign('doctor_id')->references('id')->on('doctors')->onDelete('cascade');
             
             // Восстанавливаем старые индексы
             $table->index(['cabinet_id', 'date'], 'idx_cabinet_date');

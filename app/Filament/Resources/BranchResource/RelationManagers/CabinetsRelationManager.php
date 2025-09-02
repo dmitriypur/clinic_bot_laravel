@@ -10,9 +10,10 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
-class DoctorsRelationManager extends RelationManager
+class CabinetsRelationManager extends RelationManager
 {
-    protected static string $relationship = 'doctors';
+    protected static string $relationship = 'cabinets';
+    protected static ?string $title = 'Кабинеты';
 
     public function form(Form $form): Form
     {
@@ -27,21 +28,8 @@ class DoctorsRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('full_name')
             ->columns([
-                Tables\Columns\TextColumn::make('full_name')
-                    ->label('ФИО')
-                    ->searchable(['last_name', 'first_name', 'second_name']),
-                    
-                Tables\Columns\TextColumn::make('experience')
-                    ->label('Опыт')
-                    ->suffix(' лет'),
-                    
-                Tables\Columns\TextColumn::make('age_admission_from')
-                    ->label('Прием от')
-                    ->suffix(' лет'),
-                    
-                Tables\Columns\TextColumn::make('age_admission_to')
-                    ->label('Прием до')
-                    ->suffix(' лет'),
+                Tables\Columns\TextColumn::make('name')
+                    ->label('Название'),
                     
                 Tables\Columns\IconColumn::make('status')
                     ->label('Статус')
@@ -59,7 +47,7 @@ class DoctorsRelationManager extends RelationManager
                 Tables\Actions\Action::make('edit')
                     ->label('Редактировать')
                     ->icon('heroicon-o-pencil')
-                    ->url(fn ($record) => route('filament.admin.resources.doctors.edit', $record))
+                    ->url(fn ($record) => route('filament.admin.resources.cabinets.edit', $record))
                     ->openUrlInNewTab(false),
             ])
             ->bulkActions([

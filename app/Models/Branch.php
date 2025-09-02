@@ -43,4 +43,9 @@ class Branch extends Model
     {
         return $this->hasMany(Application::class);
     }
+
+    public function cabinets(): HasMany
+    {
+        return $this->hasMany(Cabinet::class);
+    }
 }

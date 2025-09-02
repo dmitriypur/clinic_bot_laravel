@@ -3,6 +3,7 @@
 use App\Http\Controllers\Bot\BotController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use App\Http\Controllers\Admin\CabinetShiftController;
 
 Route::get('/', function () {
     return Inertia::render('Booking');
@@ -10,3 +11,17 @@ Route::get('/', function () {
 
 // Telegram Bot webhook
 Route::match(['get', 'post'], '/botman', [BotController::class, 'handle']);
+
+Route::middleware(['web','auth','verified'])->prefix('admin')->group(function(){
+    Route::get('cabinets/{cabinet}/shifts/events', [CabinetShiftController::class,'events'])
+        ->name('admin.cabinet.shifts.events');
+
+    Route::post('cabinets/{cabinet}/shifts', [CabinetShiftController::class,'store'])
+        ->name('admin.cabinet.shifts.store');
+
+    Route::patch('cabinets/{cabinet}/shifts/{shift}', [CabinetShiftController::class,'update'])
+        ->name('admin.cabinet.shifts.update');
+
+    Route::delete('cabinets/{cabinet}/shifts/{shift}', [CabinetShiftController::class,'destroy'])
+        ->name('admin.cabinet.shifts.delete');
+});

@@ -140,16 +140,6 @@ class BranchResource extends Resource
                         default => 'gray',
                     })
                     ->sortable(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label('Создан')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->label('Обновлен')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('clinic_id')
@@ -182,7 +172,7 @@ class BranchResource extends Resource
     public static function getRelations(): array
     {
         return [
-            RelationManagers\DoctorsRelationManager::class,
+            RelationManagers\CabinetsRelationManager::class,
         ];
     }
 

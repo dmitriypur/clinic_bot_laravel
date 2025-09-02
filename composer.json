@@ -15,7 +15,8 @@
         "laravel/framework": "^11.45.2",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
-        "predis/predis": "^3.2"
+        "predis/predis": "^3.2",
+        "saade/filament-fullcalendar": "^3.0"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

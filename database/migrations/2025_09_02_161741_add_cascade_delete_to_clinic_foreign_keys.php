@@ -11,39 +11,31 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Проверяем, есть ли уже каскадное удаление для applications.clinic_id
+        // Добавляем каскадное удаление для applications.clinic_id
         if (Schema::hasTable('applications')) {
-            $foreignKeys = Schema::getConnection()->getDoctrineSchemaManager()->listTableForeignKeys('applications');
-            $hasCascade = false;
-            foreach ($foreignKeys as $foreignKey) {
-                if (in_array('clinic_id', $foreignKey->getLocalColumns())) {
-                    $hasCascade = true;
-                    break;
-                }
-            }
-            
-            if (!$hasCascade) {
+            try {
                 Schema::table('applications', function (Blueprint $table) {
                     $table->dropForeign(['clinic_id']);
+                    $table->foreign('clinic_id')->references('id')->on('clinics')->onDelete('cascade');
+                });
+            } catch (\Exception $e) {
+                // Если внешний ключ не существует, создаем его
+                Schema::table('applications', function (Blueprint $table) {
                     $table->foreign('clinic_id')->references('id')->on('clinics')->onDelete('cascade');
                 });
             }
         }
 
-        // Проверяем, есть ли уже каскадное удаление для users.clinic_id
+        // Добавляем каскадное удаление для users.clinic_id
         if (Schema::hasTable('users')) {
-            $foreignKeys = Schema::getConnection()->getDoctrineSchemaManager()->listTableForeignKeys('users');
-            $hasCascade = false;
-            foreach ($foreignKeys as $foreignKey) {
-                if (in_array('clinic_id', $foreignKey->getLocalColumns())) {
-                    $hasCascade = true;
-                    break;
-                }
-            }
-            
-            if (!$hasCascade) {
+            try {
                 Schema::table('users', function (Blueprint $table) {
                     $table->dropForeign(['clinic_id']);
+                    $table->foreign('clinic_id')->references('id')->on('clinics')->onDelete('cascade');
+                });
+            } catch (\Exception $e) {
+                // Если внешний ключ не существует, создаем его
+                Schema::table('users', function (Blueprint $table) {
                     $table->foreign('clinic_id')->references('id')->on('clinics')->onDelete('cascade');
                 });
             }

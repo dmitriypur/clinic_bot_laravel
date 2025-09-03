@@ -8,6 +8,8 @@ use App\Models\Cabinet;
 use App\Models\Doctor;
 use App\Models\Branch;
 use App\Models\Clinic;
+use App\Services\CalendarFilterService;
+use App\Services\CalendarEventService;
 use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DateTimePicker;
@@ -61,7 +63,29 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     /**
      * Слушатели событий для обновления календаря
      */
-    protected $listeners = ['refetchEvents'];
+    protected $listeners = ['refetchEvents', 'filtersUpdated'];
+    
+    /**
+     * Сервисы для работы с фильтрами и событиями
+     */
+    protected ?CalendarFilterService $filterService = null;
+    protected ?CalendarEventService $eventService = null;
+    
+    public function getFilterService(): CalendarFilterService
+    {
+        if ($this->filterService === null) {
+            $this->filterService = app(CalendarFilterService::class);
+        }
+        return $this->filterService;
+    }
+    
+    protected function getEventService(): CalendarEventService
+    {
+        if ($this->eventService === null) {
+            $this->eventService = app(CalendarEventService::class);
+        }
+        return $this->eventService;
+    }
 
     /**
      * Конфигурация календаря FullCalendar
@@ -129,132 +153,23 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     public function fetchEvents(array $fetchInfo): array
     {
         $user = auth()->user();
-        $events = [];
-
-        // Базовый запрос смен в указанном диапазоне
-        // Загружаем связанные данные для оптимизации запросов
-        $shiftsQuery = DoctorShift::query()
-            ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
-            ->with(['doctor', 'cabinet.branch.clinic', 'cabinet.branch.city']);
-
-        // Применяем фильтры к запросу смен
-        if (!empty($this->filters['clinic_ids'])) {
-            $shiftsQuery->whereHas('cabinet.branch', function($q) {
-                $q->whereIn('clinic_id', $this->filters['clinic_ids']);
-            });
+        
+        // Если пользователь не аутентифицирован, возвращаем пустой массив
+        if (!$user) {
+            return [];
         }
         
-        if (!empty($this->filters['branch_ids'])) {
-            $shiftsQuery->whereHas('cabinet', function($q) {
-                $q->whereIn('branch_id', $this->filters['branch_ids']);
-            });
-        }
-        
-        if (!empty($this->filters['doctor_ids'])) {
-            $shiftsQuery->whereIn('doctor_id', $this->filters['doctor_ids']);
-        }
-        
-        // Фильтр по датам (если указан диапазон)
-        if (!empty($this->filters['date_from'])) {
-            $shiftsQuery->where('start_time', '>=', $this->filters['date_from']);
-        }
-        
-        if (!empty($this->filters['date_to'])) {
-            $shiftsQuery->where('start_time', '<=', $this->filters['date_to']);
-        }
-
-        // Фильтрация по ролям пользователя
-        if ($user->isPartner()) {
-            // Партнер видит только смены в кабинетах своих клиник
-            $shiftsQuery->whereHas('cabinet.branch', function($q) use ($user) {
-                $q->where('clinic_id', $user->clinic_id);
-            });
-        } elseif ($user->isDoctor()) {
-            // Врач видит только смены где он назначен врачом
-            $shiftsQuery->where('doctor_id', $user->doctor_id);
-        }
-        // super_admin видит все смены без ограничений
-
-        $shifts = $shiftsQuery->get();
-
-        // Обрабатываем каждую смену и создаем события для календаря
-        foreach ($shifts as $shift) {
-            // Получаем длительность слота для этой смены (может быть разной для разных смен)
-            $slotDuration = $shift->getEffectiveSlotDuration();
-            
-            // Генерируем временные слоты для смены (например, каждые 15 минут)
-            $slots = $shift->getTimeSlots();
-            
-            // Создаем событие для каждого временного слота
-            foreach ($slots as $slot) {
-                // Проверяем, есть ли уже заявка в этом слоте
-                $isOccupied = $this->isSlotOccupied($shift->cabinet_id, $slot['start']);
-                
-                // Если слот занят, получаем информацию о заявке
-                $application = null;
-                if ($isOccupied) {
-                    $applicationQuery = Application::query()
-                        ->where('cabinet_id', $shift->cabinet_id)
-                        ->where('appointment_datetime', $slot['start']);
-                    
-                    // Дополнительная фильтрация заявок по ролям пользователя
-                    if ($user->isPartner()) {
-                        // Партнер видит только заявки в своих клиниках
-                        $applicationQuery->where('clinic_id', $user->clinic_id);
-                    } elseif ($user->isDoctor()) {
-                        // Врач видит только заявки где он назначен врачом
-                        $applicationQuery->where('doctor_id', $user->doctor_id);
-                    }
-                    
-                    $application = $applicationQuery->first();
-                }
-                
-                // Формируем событие для календаря с полной информацией
-                $events[] = [
-                    'id' => 'slot_' . $shift->id . '_' . $slot['start']->format('Y-m-d_H-i'), // Уникальный ID слота
-                    'title' => $isOccupied ? ($application ? $application->full_name : 'Занят') : 'Свободен', // Название события
-                    'start' => $slot['start'], // Время начала слота
-                    'end' => $slot['end'], // Время окончания слота
-                    'backgroundColor' => $isOccupied ? '#dc2626' : '#10b981', // Красный для занятых, зеленый для свободных
-                    'borderColor' => $isOccupied ? '#dc2626' : '#10b981', // Цвет границы
-                    'extendedProps' => [
-                        'shift_id' => $shift->id, // ID смены врача
-                        'cabinet_id' => $shift->cabinet_id, // ID кабинета
-                        'doctor_id' => $shift->doctor_id, // ID врача
-                        'doctor_name' => $shift->doctor->full_name ?? 'Врач не назначен', // ФИО врача
-                        'cabinet_name' => $shift->cabinet->name ?? 'Кабинет не указан', // Название кабинета
-                        'branch_name' => $shift->cabinet->branch->name ?? 'Филиал не указан', // Название филиала
-                        'clinic_name' => $shift->cabinet->branch->clinic->name ?? 'Клиника не указана', // Название клиники
-                        'is_occupied' => $isOccupied, // Флаг занятости слота
-                        'slot_start' => $slot['start'], // Время начала слота
-                        'slot_end' => $slot['end'], // Время окончания слота
-                        'application_id' => $application ? $application->id : null, // ID заявки (если есть)
-                    ]
-                ];
-            }
-        }
-
-        return $events;
+        // Используем сервис для генерации событий
+        return $this->getEventService()->generateEvents($fetchInfo, $this->filters, $user);
     }
 
     /**
-     * Проверить, занят ли временной слот
-     * 
-     * Проверяет наличие заявки в указанном кабинете в указанное время.
-     * Используется для определения цвета отображения слота в календаре.
-     * 
-     * @param int $cabinetId ID кабинета
-     * @param Carbon $slotStart Время начала слота
-     * @return bool true если слот занят, false если свободен
+     * Обработчик обновления фильтров
      */
-    private function isSlotOccupied(int $cabinetId, Carbon $slotStart): bool
+    public function filtersUpdated($filters): void
     {
-        // Проверяем, есть ли заявка в этом слоте (без фильтрации по ролям)
-        // Эта проверка используется только для определения цвета отображения
-        return Application::query()
-            ->where('cabinet_id', $cabinetId)
-            ->where('appointment_datetime', $slotStart)
-            ->exists();
+        $this->filters = $filters;
+        $this->refreshRecords();
     }
 
     /**
@@ -621,6 +536,8 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         $this->mountAction('view');
     }
 
+
+
     /**
      * Действия в заголовке виджета
      * 
@@ -765,6 +682,92 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         }
         
         return [
+            \Filament\Actions\Action::make('filters')
+                ->label('Фильтры')
+                ->icon('heroicon-o-funnel')
+                ->color('gray')
+                ->form([
+                    \Filament\Forms\Components\Grid::make(3)
+                        ->schema([
+                            \Filament\Forms\Components\DatePicker::make('date_from')
+                                ->label('Дата с')
+                                ->displayFormat('d.m.Y')
+                                ->native(false),
+                                
+                            \Filament\Forms\Components\DatePicker::make('date_to')
+                                ->label('Дата по')
+                                ->displayFormat('d.m.Y')
+                                ->native(false),
+                                
+                            \Filament\Forms\Components\Select::make('clinic_ids')
+                                ->label('Клиники')
+                                ->multiple()
+                                ->searchable()
+                                ->reactive()
+                                ->options(fn() => $this->getFilterService()->getAvailableClinics(auth()->user()))
+                                ->afterStateUpdated(function (\Filament\Forms\Set $set) {
+                                    $set('branch_ids', []);
+                                    $set('doctor_ids', []);
+                                }),
+                        ]),
+                        
+                    \Filament\Forms\Components\Grid::make(2)
+                        ->schema([
+                            \Filament\Forms\Components\Select::make('branch_ids')
+                                ->label('Филиалы')
+                                ->multiple()
+                                ->searchable()
+                                ->reactive()
+                                ->options(function (\Filament\Forms\Get $get) {
+                                    $clinicIds = $get('clinic_ids');
+                                    return $this->getFilterService()->getAvailableBranches(auth()->user(), $clinicIds);
+                                })
+                                ->afterStateUpdated(fn (\Filament\Forms\Set $set) => $set('doctor_ids', [])),
+                                
+                            \Filament\Forms\Components\Select::make('doctor_ids')
+                                ->label('Врачи')
+                                ->multiple()
+                                ->searchable()
+                                ->reactive()
+                                ->options(function (\Filament\Forms\Get $get) {
+                                    $branchIds = $get('branch_ids');
+                                    return $this->getFilterService()->getAvailableDoctors(auth()->user(), $branchIds);
+                                }),
+                        ]),
+                ])
+                ->mountUsing(function (\Filament\Forms\Form $form) {
+                    $form->fill($this->filters);
+                })
+                ->action(function (array $data) {
+                    $this->filters = $data;
+                    $this->refreshRecords();
+                    
+                    \Filament\Notifications\Notification::make()
+                        ->title('Фильтры применены')
+                        ->success()
+                        ->send();
+                })
+                ->extraModalFooterActions([
+                    \Filament\Actions\Action::make('clearFilters')
+                        ->label('Очистить фильтры')
+                        ->color('gray')
+                        ->action(function () {
+                            $this->filters = [
+                                'clinic_ids' => [],
+                                'branch_ids' => [],
+                                'doctor_ids' => [],
+                                'date_from' => null,
+                                'date_to' => null,
+                            ];
+                            $this->refreshRecords();
+                            
+                            \Filament\Notifications\Notification::make()
+                                ->title('Фильтры очищены')
+                                ->success()
+                                ->send();
+                        }),
+                ]),
+                
             \Filament\Actions\Action::make('createAppointment')
                 ->label('Создать заявку')
                 ->icon('heroicon-o-plus')

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\Branch;
 use App\Models\Application;
 use App\Models\DoctorShift;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Модель кабинета
@@ -33,6 +34,45 @@ class Cabinet extends Model
     protected $casts = [
         'status' => 'integer',  // Статус приводится к целому числу
     ];
+
+    /**
+     * Boot the model and register event listeners
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Очищаем кэш календаря при создании кабинета
+        static::created(function ($cabinet) {
+            static::clearCalendarCache();
+        });
+
+        // Очищаем кэш календаря при обновлении кабинета
+        static::updated(function ($cabinet) {
+            static::clearCalendarCache();
+        });
+
+        // Очищаем кэш календаря при удалении кабинета
+        static::deleted(function ($cabinet) {
+            static::clearCalendarCache();
+        });
+    }
+
+    /**
+     * Очищает кэш календаря
+     */
+    protected static function clearCalendarCache(): void
+    {
+        // Очищаем все ключи кэша календаря
+        $keys = Cache::get('calendar_cache_keys', []);
+        
+        foreach ($keys as $key) {
+            Cache::forget($key);
+        }
+        
+        // Очищаем ключ со списком ключей
+        Cache::forget('calendar_cache_keys');
+    }
 
     /**
      * Связь с филиалом

@@ -38,7 +38,7 @@ class Branch extends Model
 
     public function doctors(): BelongsToMany
     {
-        return $this->belongsToMany(Doctor::class, 'branch_doctor');
+        return $this->belongsToMany(Doctor::class, 'branch_doctor', 'branch_id', 'doctor_id');
     }
 
     public function applications(): HasMany

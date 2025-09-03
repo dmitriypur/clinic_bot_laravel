@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\Cabinet;
 use App\Models\Doctor;
+use App\Traits\HasCalendarOptimizations;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Модель смены врача
@@ -18,7 +20,7 @@ use App\Models\Doctor;
  */
 class DoctorShift extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, HasCalendarOptimizations;
 
     /**
      * Поля, которые можно массово заполнять
@@ -37,6 +39,50 @@ class DoctorShift extends Model
         'start_time' => 'datetime',     // Время начала как объект Carbon
         'end_time'   => 'datetime',     // Время окончания как объект Carbon
     ];
+
+    /**
+     * Boot the model and register event listeners
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Очищаем кэш календаря при создании смены
+        static::created(function ($shift) {
+            static::clearCalendarCache();
+        });
+
+        // Очищаем кэш календаря при обновлении смены
+        static::updated(function ($shift) {
+            static::clearCalendarCache();
+        });
+
+        // Очищаем кэш календаря при удалении смены
+        static::deleted(function ($shift) {
+            static::clearCalendarCache();
+        });
+
+        // Очищаем кэш календаря при восстановлении смены
+        static::restored(function ($shift) {
+            static::clearCalendarCache();
+        });
+    }
+
+    /**
+     * Очищает кэш календаря
+     */
+    protected static function clearCalendarCache(): void
+    {
+        // Очищаем все ключи кэша календаря
+        $keys = Cache::get('calendar_cache_keys', []);
+        
+        foreach ($keys as $key) {
+            Cache::forget($key);
+        }
+        
+        // Очищаем ключ со списком ключей
+        Cache::forget('calendar_cache_keys');
+    }
 
     /**
      * Связь с кабинетом
@@ -96,9 +142,14 @@ class DoctorShift extends Model
         $current = $this->start_time->copy();
         $end = $this->end_time;
         
-        while ($current->addMinutes($slotDuration)->lte($end)) {
-            $slotStart = $current->copy()->subMinutes($slotDuration);
-            $slotEnd = $current->copy();
+        while ($current->lt($end)) {
+            $slotStart = $current->copy();
+            $slotEnd = $current->copy()->addMinutes($slotDuration);
+            
+            // Проверяем, что слот не выходит за пределы смены
+            if ($slotEnd->gt($end)) {
+                $slotEnd = $end->copy();
+            }
             
             $slots[] = [
                 'start' => $slotStart,
@@ -106,6 +157,8 @@ class DoctorShift extends Model
                 'duration' => $slotDuration,
                 'formatted' => $slotStart->format('H:i') . ' - ' . $slotEnd->format('H:i')
             ];
+            
+            $current->addMinutes($slotDuration);
         }
         
         return $slots;

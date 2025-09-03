@@ -4,9 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Traits\HasCalendarOptimizations;
+use Illuminate\Support\Facades\Cache;
 
 class Application extends Model
 {
+    use HasCalendarOptimizations;
+    
     public $incrementing = true;
     protected $keyType = 'integer';
 
@@ -39,6 +43,45 @@ class Application extends Model
         'tg_chat_id' => 'integer',
         'send_to_1c' => 'boolean',
     ];
+
+    /**
+     * Boot the model and register event listeners
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Очищаем кэш календаря при создании заявки
+        static::created(function ($application) {
+            static::clearCalendarCache();
+        });
+
+        // Очищаем кэш календаря при обновлении заявки
+        static::updated(function ($application) {
+            static::clearCalendarCache();
+        });
+
+        // Очищаем кэш календаря при удалении заявки
+        static::deleted(function ($application) {
+            static::clearCalendarCache();
+        });
+    }
+
+    /**
+     * Очищает кэш календаря
+     */
+    protected static function clearCalendarCache(): void
+    {
+        // Очищаем все ключи кэша календаря
+        $keys = Cache::get('calendar_cache_keys', []);
+        
+        foreach ($keys as $key) {
+            Cache::forget($key);
+        }
+        
+        // Очищаем ключ со списком ключей
+        Cache::forget('calendar_cache_keys');
+    }
 
     public function city(): BelongsTo
     {

@@ -20,48 +20,70 @@ class FixApplicationsIdAutoIncrement extends Command
      *
      * @var string
      */
-    protected $description = 'Fix applications table id field AUTO_INCREMENT for MySQL';
+    protected $description = 'Исправляет AUTO_INCREMENT для поля id в таблице applications для MySQL';
 
     /**
      * Execute the console command.
      */
     public function handle()
     {
-        if (Schema::getConnection()->getDriverName() !== 'mysql') {
-            $this->info('This command is only for MySQL databases.');
-            return;
+        $this->info('Проверка и исправление AUTO_INCREMENT для таблицы applications...');
+
+        // Проверяем что таблица существует
+        if (!Schema::hasTable('applications')) {
+            $this->error('Таблица applications не существует!');
+            return 1;
+        }
+
+        // Проверяем драйвер базы данных
+        $driver = DB::connection()->getDriverName();
+        
+        if ($driver !== 'mysql') {
+            $this->warn("Текущий драйвер: {$driver}. Эта команда предназначена для MySQL.");
+            $this->info('Для SQLite AUTO_INCREMENT добавляется автоматически.');
+            return 0;
         }
 
         try {
             // Проверяем текущее состояние поля id
-            $result = DB::select("SHOW COLUMNS FROM applications LIKE 'id'");
+            $columnInfo = DB::select("SHOW COLUMNS FROM applications LIKE 'id'");
             
-            if (empty($result)) {
-                $this->error('Field id not found in applications table');
-                return;
+            if (empty($columnInfo)) {
+                $this->error('Поле id не найдено в таблице applications!');
+                return 1;
             }
 
-            $column = $result[0];
-            $this->info("Current id field: {$column->Field} {$column->Type} {$column->Extra}");
+            $column = $columnInfo[0];
+            $this->info("Текущее состояние поля id: {$column->Field} {$column->Type} {$column->Null} {$column->Key} {$column->Default} {$column->Extra}");
 
-            // Если поле уже имеет AUTO_INCREMENT, ничего не делаем
+            // Проверяем есть ли уже AUTO_INCREMENT
             if (str_contains($column->Extra, 'auto_increment')) {
-                $this->info('Field id already has AUTO_INCREMENT');
-                return;
+                $this->info('AUTO_INCREMENT уже установлен для поля id.');
+                return 0;
             }
 
-            // Добавляем AUTO_INCREMENT
+            // Исправляем поле id - добавляем AUTO_INCREMENT
+            $this->info('Добавление AUTO_INCREMENT к полю id...');
             DB::statement('ALTER TABLE applications MODIFY id BIGINT AUTO_INCREMENT');
-            
-            $this->info('Successfully added AUTO_INCREMENT to applications.id field');
-            
+
             // Проверяем результат
-            $result = DB::select("SHOW COLUMNS FROM applications LIKE 'id'");
-            $column = $result[0];
-            $this->info("Updated id field: {$column->Field} {$column->Type} {$column->Extra}");
+            $columnInfoAfter = DB::select("SHOW COLUMNS FROM applications LIKE 'id'");
+            $columnAfter = $columnInfoAfter[0];
             
+            $this->info("Новое состояние поля id: {$columnAfter->Field} {$columnAfter->Type} {$columnAfter->Null} {$columnAfter->Key} {$columnAfter->Default} {$columnAfter->Extra}");
+
+            if (str_contains($columnAfter->Extra, 'auto_increment')) {
+                $this->info('✅ AUTO_INCREMENT успешно добавлен к полю id!');
+                $this->info('Теперь можно создавать заявки без указания id.');
+                return 0;
+            } else {
+                $this->error('❌ Не удалось добавить AUTO_INCREMENT к полю id.');
+                return 1;
+            }
+
         } catch (\Exception $e) {
-            $this->error('Error: ' . $e->getMessage());
+            $this->error("Ошибка при исправлении AUTO_INCREMENT: {$e->getMessage()}");
+            return 1;
         }
     }
 }

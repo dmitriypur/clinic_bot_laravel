@@ -47,6 +47,18 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     public array $slotData = [];
     
     /**
+     * Фильтры для календаря заявок
+     * Сохраняют состояние фильтрации по клиникам, филиалам, врачам и датам
+     */
+    public array $filters = [
+        'clinic_ids' => [],
+        'branch_ids' => [],
+        'doctor_ids' => [],
+        'date_from' => null,
+        'date_to' => null,
+    ];
+    
+    /**
      * Слушатели событий для обновления календаря
      */
     protected $listeners = ['refetchEvents'];
@@ -124,6 +136,32 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         $shiftsQuery = DoctorShift::query()
             ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
             ->with(['doctor', 'cabinet.branch.clinic', 'cabinet.branch.city']);
+
+        // Применяем фильтры к запросу смен
+        if (!empty($this->filters['clinic_ids'])) {
+            $shiftsQuery->whereHas('cabinet.branch', function($q) {
+                $q->whereIn('clinic_id', $this->filters['clinic_ids']);
+            });
+        }
+        
+        if (!empty($this->filters['branch_ids'])) {
+            $shiftsQuery->whereHas('cabinet', function($q) {
+                $q->whereIn('branch_id', $this->filters['branch_ids']);
+            });
+        }
+        
+        if (!empty($this->filters['doctor_ids'])) {
+            $shiftsQuery->whereIn('doctor_id', $this->filters['doctor_ids']);
+        }
+        
+        // Фильтр по датам (если указан диапазон)
+        if (!empty($this->filters['date_from'])) {
+            $shiftsQuery->where('start_time', '>=', $this->filters['date_from']);
+        }
+        
+        if (!empty($this->filters['date_to'])) {
+            $shiftsQuery->where('start_time', '<=', $this->filters['date_to']);
+        }
 
         // Фильтрация по ролям пользователя
         if ($user->isPartner()) {

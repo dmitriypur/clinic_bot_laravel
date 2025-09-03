@@ -21,19 +21,45 @@ use Carbon\Carbon;
 /**
  * Виджет календаря записи пациентов
  * 
- * Отображает календарь с заявками на прием.
- * Позволяет создавать, редактировать и удалять записи с разграничением по ролям.
+ * Основной функционал:
+ * - Отображает календарь смен врачей с временными слотами
+ * - Показывает занятые и свободные слоты разными цветами
+ * - Позволяет создавать новые заявки в свободных слотах
+ * - Позволяет просматривать и редактировать существующие заявки
+ * - Разграничивает права доступа по ролям пользователей
+ * 
+ * Роли и их возможности:
+ * - super_admin: полный доступ ко всем заявкам и сменам
+ * - partner: доступ только к заявкам своей клиники
+ * - doctor: только просмотр своих заявок, без возможности создания/редактирования
  */
 class AppointmentCalendarWidget extends FullCalendarWidget
 {
+    /**
+     * Модель данных для работы с заявками
+     */
     public \Illuminate\Database\Eloquent\Model | string | null $model = Application::class;
     
+    /**
+     * Временное хранилище данных выбранного слота
+     * Используется для передачи информации между событиями календаря и формами
+     */
     public array $slotData = [];
     
+    /**
+     * Слушатели событий для обновления календаря
+     */
     protected $listeners = ['refetchEvents'];
 
     /**
-     * Конфигурация календаря
+     * Конфигурация календаря FullCalendar
+     * 
+     * Настройки отображения и поведения календаря:
+     * - Интерфейс на русском языке
+     * - Рабочие часы с 8:00 до 20:00
+     * - Слоты по 15 минут для точного планирования
+     * - Отключено стандартное редактирование (используем свои формы)
+     * - Несколько видов отображения (неделя, день, месяц, список)
      */
     public function config(): array
     {
@@ -43,18 +69,18 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         return [
             'firstDay' => 1, // Понедельник - первый день недели
             'headerToolbar' => [
-                'left' => 'prev,next today',
-                'center' => 'title',
-                'right' => 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+                'left' => 'prev,next today', // Кнопки навигации и "Сегодня"
+                'center' => 'title', // Заголовок с текущим периодом
+                'right' => 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' // Переключатели видов
             ],
-            'initialView' => 'timeGridWeek',
-            'navLinks' => true,
-            'editable' => false, // Отключаем редактирование для всех
-            'selectable' => false, // Отключаем выбор для всех
+            'initialView' => 'timeGridWeek', // По умолчанию показываем неделю
+            'navLinks' => true, // Клик по дате переключает на день
+            'editable' => false, // Отключаем стандартное редактирование событий
+            'selectable' => false, // Отключаем выбор временных промежутков
             'selectMirror' => false, // Отключаем отображение выбранного времени
-            'dayMaxEvents' => true,
-            'weekends' => true,
-            'locale' => 'ru',
+            'dayMaxEvents' => true, // Показывать "еще" если событий много
+            'weekends' => true, // Показывать выходные дни
+            'locale' => 'ru', // Русская локализация
             'buttonText' => [
                 'today' => 'Сегодня',
                 'month' => 'Месяц',
@@ -62,21 +88,31 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 'day' => 'День',
                 'list' => 'Список'
             ],
-            'allDaySlot' => false,
-            'slotMinTime' => '08:00:00',
-            'slotMaxTime' => '20:00:00',
-            'slotDuration' => '00:15:00', // 15 минут для отображения всех возможных слотов
-            'snapDuration' => '00:15:00',
-            'slotLabelFormat' => [            // Формат отображения времени в слотах
+            'allDaySlot' => false, // Не показывать слот "Весь день"
+            'slotMinTime' => '08:00:00', // Начало рабочего дня
+            'slotMaxTime' => '20:00:00', // Конец рабочего дня
+            'slotDuration' => '00:15:00', // Длительность слота 5 минут
+            'snapDuration' => '00:05:00', // Привязка к 5-минутным интервалам
+            'slotLabelFormat' => [ // Формат отображения времени в слотах
                 'hour' => '2-digit',
                 'minute' => '2-digit',
-                'hour12' => false,            // 24-часовой формат
+                'hour12' => false, // 24-часовой формат
             ],
         ];
     }
 
     /**
      * Получить события для календаря
+     * 
+     * Основная логика:
+     * 1. Получаем смены врачей в запрошенном диапазоне дат
+     * 2. Фильтруем по правам доступа пользователя
+     * 3. Для каждой смены генерируем временные слоты
+     * 4. Проверяем занятость каждого слота
+     * 5. Формируем события для календаря с цветовой индикацией
+     * 
+     * @param array $fetchInfo Массив с датами начала и конца периода
+     * @return array Массив событий для календаря
      */
     public function fetchEvents(array $fetchInfo): array
     {
@@ -84,11 +120,12 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         $events = [];
 
         // Базовый запрос смен в указанном диапазоне
+        // Загружаем связанные данные для оптимизации запросов
         $shiftsQuery = DoctorShift::query()
             ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
             ->with(['doctor', 'cabinet.branch.clinic', 'cabinet.branch.city']);
 
-        // Фильтрация по ролям
+        // Фильтрация по ролям пользователя
         if ($user->isPartner()) {
             // Партнер видит только смены в кабинетах своих клиник
             $shiftsQuery->whereHas('cabinet.branch', function($q) use ($user) {
@@ -98,29 +135,31 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             // Врач видит только смены где он назначен врачом
             $shiftsQuery->where('doctor_id', $user->doctor_id);
         }
-        // super_admin видит все смены
+        // super_admin видит все смены без ограничений
 
         $shifts = $shiftsQuery->get();
 
+        // Обрабатываем каждую смену и создаем события для календаря
         foreach ($shifts as $shift) {
-            // Получаем длительность слота для этой смены
+            // Получаем длительность слота для этой смены (может быть разной для разных смен)
             $slotDuration = $shift->getEffectiveSlotDuration();
             
-            // Генерируем слоты для смены
+            // Генерируем временные слоты для смены (например, каждые 15 минут)
             $slots = $shift->getTimeSlots();
             
+            // Создаем событие для каждого временного слота
             foreach ($slots as $slot) {
-                // Проверяем, занят ли слот
+                // Проверяем, есть ли уже заявка в этом слоте
                 $isOccupied = $this->isSlotOccupied($shift->cabinet_id, $slot['start']);
                 
-                // Получаем информацию о заявке, если слот занят
+                // Если слот занят, получаем информацию о заявке
                 $application = null;
                 if ($isOccupied) {
                     $applicationQuery = Application::query()
                         ->where('cabinet_id', $shift->cabinet_id)
                         ->where('appointment_datetime', $slot['start']);
                     
-                    // Дополнительная фильтрация заявок по ролям
+                    // Дополнительная фильтрация заявок по ролям пользователя
                     if ($user->isPartner()) {
                         // Партнер видит только заявки в своих клиниках
                         $applicationQuery->where('clinic_id', $user->clinic_id);
@@ -132,25 +171,26 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     $application = $applicationQuery->first();
                 }
                 
+                // Формируем событие для календаря с полной информацией
                 $events[] = [
-                    'id' => 'slot_' . $shift->id . '_' . $slot['start']->format('Y-m-d_H-i'),
-                    'title' => $isOccupied ? ($application ? $application->full_name : 'Занят') : 'Свободен',
-                    'start' => $slot['start'],
-                    'end' => $slot['end'],
+                    'id' => 'slot_' . $shift->id . '_' . $slot['start']->format('Y-m-d_H-i'), // Уникальный ID слота
+                    'title' => $isOccupied ? ($application ? $application->full_name : 'Занят') : 'Свободен', // Название события
+                    'start' => $slot['start'], // Время начала слота
+                    'end' => $slot['end'], // Время окончания слота
                     'backgroundColor' => $isOccupied ? '#dc2626' : '#10b981', // Красный для занятых, зеленый для свободных
-                    'borderColor' => $isOccupied ? '#dc2626' : '#10b981',
+                    'borderColor' => $isOccupied ? '#dc2626' : '#10b981', // Цвет границы
                     'extendedProps' => [
-                        'shift_id' => $shift->id,
-                        'cabinet_id' => $shift->cabinet_id,
-                        'doctor_id' => $shift->doctor_id,
-                        'doctor_name' => $shift->doctor->full_name ?? 'Врач не назначен',
-                        'cabinet_name' => $shift->cabinet->name ?? 'Кабинет не указан',
-                        'branch_name' => $shift->cabinet->branch->name ?? 'Филиал не указан',
-                        'clinic_name' => $shift->cabinet->branch->clinic->name ?? 'Клиника не указана',
-                        'is_occupied' => $isOccupied,
-                        'slot_start' => $slot['start'],
-                        'slot_end' => $slot['end'],
-                        'application_id' => $application ? $application->id : null,
+                        'shift_id' => $shift->id, // ID смены врача
+                        'cabinet_id' => $shift->cabinet_id, // ID кабинета
+                        'doctor_id' => $shift->doctor_id, // ID врача
+                        'doctor_name' => $shift->doctor->full_name ?? 'Врач не назначен', // ФИО врача
+                        'cabinet_name' => $shift->cabinet->name ?? 'Кабинет не указан', // Название кабинета
+                        'branch_name' => $shift->cabinet->branch->name ?? 'Филиал не указан', // Название филиала
+                        'clinic_name' => $shift->cabinet->branch->clinic->name ?? 'Клиника не указана', // Название клиники
+                        'is_occupied' => $isOccupied, // Флаг занятости слота
+                        'slot_start' => $slot['start'], // Время начала слота
+                        'slot_end' => $slot['end'], // Время окончания слота
+                        'application_id' => $application ? $application->id : null, // ID заявки (если есть)
                     ]
                 ];
             }
@@ -160,11 +200,19 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     }
 
     /**
-     * Проверить, занят ли слот
+     * Проверить, занят ли временной слот
+     * 
+     * Проверяет наличие заявки в указанном кабинете в указанное время.
+     * Используется для определения цвета отображения слота в календаре.
+     * 
+     * @param int $cabinetId ID кабинета
+     * @param Carbon $slotStart Время начала слота
+     * @return bool true если слот занят, false если свободен
      */
     private function isSlotOccupied(int $cabinetId, Carbon $slotStart): bool
     {
-        // Проверяем, есть ли вообще заявка в этом слоте (без фильтрации по ролям)
+        // Проверяем, есть ли заявка в этом слоте (без фильтрации по ролям)
+        // Эта проверка используется только для определения цвета отображения
         return Application::query()
             ->where('cabinet_id', $cabinetId)
             ->where('appointment_datetime', $slotStart)
@@ -173,6 +221,15 @@ class AppointmentCalendarWidget extends FullCalendarWidget
 
     /**
      * Схема формы для создания и редактирования заявок
+     * 
+     * Определяет структуру формы с полями:
+     * - Выбор города, клиники, филиала, кабинета (каскадная зависимость)
+     * - Выбор врача (зависит от кабинета)
+     * - Дата и время приема
+     * - Данные пациента (ФИО, телефон, дата рождения)
+     * - Промокод
+     * 
+     * @return array Массив компонентов формы
      */
     public function getFormSchema(): array
     {
@@ -181,67 +238,66 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 ->schema([
                     Select::make('city_id')
                         ->label('Город')
-                        ->required()
-                        ->searchable()
+                        ->searchable() // Поиск по названию города
                         ->options(function () {
                             return \App\Models\City::pluck('name', 'id')->toArray();
                         })
-                        ->reactive()
-                        ->disabled()
-                        ->dehydrated(false)
-                        ->afterStateUpdated(fn (Set $set) => $set('clinic_id', null)),
+                        ->reactive() // Поле реагирует на изменения
+                        ->disabled() // Отключено для редактирования (заполняется автоматически)
+                        ->dehydrated(false) // Не сохраняется в форме (только для отображения)
+                        ->afterStateUpdated(fn (Set $set) => $set('clinic_id', null)), // Сброс зависимых полей
                     
                     Select::make('clinic_id')
                         ->label('Клиника')
-                        ->required()
-                        ->searchable()
+                        ->searchable() // Поиск по названию клиники
                         ->options(function (Get $get) {
+                            // Получаем клиники только для выбранного города
                             $cityId = $get('city_id');
                             if (!$cityId) return [];
                             return \App\Models\Clinic::whereIn('id', function($q) use ($cityId) {
                                 $q->select('clinic_id')->from('branches')->where('city_id', $cityId);
                             })->pluck('name', 'id')->toArray();
                         })
-                        ->reactive()
-                        ->disabled()
-                        ->dehydrated(false)
-                        ->afterStateUpdated(fn (Set $set) => $set('branch_id', null)),
+                        ->reactive() // Поле реагирует на изменения
+                        ->disabled() // Отключено для редактирования
+                        ->dehydrated(false) // Не сохраняется в форме
+                        ->afterStateUpdated(fn (Set $set) => $set('branch_id', null)), // Сброс филиала при изменении клиники
                     
                     Select::make('branch_id')
                         ->label('Филиал')
-                        ->required()
-                        ->searchable()
+                        ->searchable() // Поиск по названию филиала
                         ->options(function (Get $get) {
+                            // Получаем филиалы только для выбранной клиники
                             $clinicId = $get('clinic_id');
                             if (!$clinicId) return [];
                             return \App\Models\Branch::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
                         })
-                        ->reactive()
-                        ->disabled()
-                        ->dehydrated(false)
-                        ->afterStateUpdated(fn (Set $set) => $set('cabinet_id', null)),
+                        ->reactive() // Поле реагирует на изменения
+                        ->disabled() // Отключено для редактирования
+                        ->dehydrated(false) // Не сохраняется в форме
+                        ->afterStateUpdated(fn (Set $set) => $set('cabinet_id', null)), // Сброс кабинета при изменении филиала
                     
                     Select::make('cabinet_id')
                         ->label('Кабинет')
-                        ->required()
-                        ->searchable()
+                        ->searchable() // Поиск по названию кабинета
                         ->options(function (Get $get) {
+                            // Получаем кабинеты только для выбранного филиала
                             $branchId = $get('branch_id');
                             if (!$branchId) return [];
                             return \App\Models\Cabinet::where('branch_id', $branchId)->pluck('name', 'id')->toArray();
                         })
-                        ->reactive()
-                        ->disabled()
-                        ->dehydrated(false)
-                        ->afterStateUpdated(fn (Set $set) => $set('doctor_id', null)),
+                        ->reactive() // Поле реагирует на изменения
+                        ->disabled() // Отключено для редактирования
+                        ->dehydrated(false) // Не сохраняется в форме
+                        ->afterStateUpdated(fn (Set $set) => $set('doctor_id', null)), // Сброс врача при изменении кабинета
                     
                     Select::make('doctor_id')
                         ->label('Врач')
-                        ->required()
-                        ->disabled()
-                        ->dehydrated(false)
-                        ->searchable()
+                        ->disabled() // Отключено для редактирования
+                        ->dehydrated(false) // Не сохраняется в форме
+                        ->searchable() // Поиск по ФИО врача
                         ->options(function (Get $get) {
+                            // Получаем врачей только для выбранного кабинета
                             $cabinetId = $get('cabinet_id');
                             if (!$cabinetId) return [];
                             $cabinet = \App\Models\Cabinet::with('branch.doctors')->find($cabinetId);
@@ -251,41 +307,47 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     
                     DateTimePicker::make('appointment_datetime')
                         ->label('Дата и время приема')
-                        ->required()
-                        ->seconds(false)
-                        ->minutesStep(15)
-                        ->displayFormat('d.m.Y H:i')
-                        ->native(false)
-                        ->disabled()
-                        ->dehydrated(false),
+                        ->seconds(false) // Не показывать секунды
+                        ->minutesStep(5) // Шаг 5 минут
+                        ->displayFormat('d.m.Y H:i') // Формат отображения
+                        ->native(false) // Использовать кастомный виджет
+                        ->disabled() // Отключено для редактирования
+                        ->dehydrated(false), // Не сохраняется в форме
+
                 ]),
             
+            // Вторая сетка с данными пациента
             Grid::make(2)
                 ->schema([
                     TextInput::make('full_name_parent')
-                        ->label('ФИО родителя'),
+                        ->label('ФИО родителя'), // ФИО родителя/опекуна
                     
                     TextInput::make('full_name')
                         ->label('ФИО ребенка')
-                        ->required(),
+                        ->required(), // Обязательное поле
                     
                     TextInput::make('birth_date')
                         ->label('Дата рождения')
-                        ->type('date'),
+                        ->type('date'), // Поле выбора даты
                     
                     TextInput::make('phone')
                         ->label('Телефон')
-                        ->tel()
-                        ->required(),
+                        ->tel() // Тип поля для телефона
+                        ->required(), // Обязательное поле
                     
                     TextInput::make('promo_code')
-                        ->label('Промокод'),
+                        ->label('Промокод'), // Необязательное поле для скидок
                 ]),
         ];
     }
 
     /**
-     * Модальные действия для событий
+     * Модальные действия для событий календаря
+     * 
+     * Определяет стандартные действия (редактирование, удаление) для событий.
+     * Врачи не имеют доступа к этим действиям - для них возвращается пустой массив.
+     * 
+     * @return array Массив действий или пустой массив для врачей
      */
     protected function modalActions(): array
     {
@@ -365,7 +427,15 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     }
 
     /**
-     * Обработка клика по событию
+     * Обработка клика по событию в календаре
+     * 
+     * Основная логика:
+     * 1. Определяет тип слота (занятый или свободный)
+     * 2. Для занятых слотов - открывает форму просмотра/редактирования
+     * 3. Для свободных слотов - открывает форму создания новой заявки
+     * 4. Проверяет права доступа пользователя
+     * 
+     * @param array $data Данные события календаря
      */
     public function onEventClick(array $data): void
     {
@@ -379,8 +449,8 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             return;
         }
 
-        // Если слот свободен - открываем форму создания
-        // Врач не может создавать заявки
+        // Если слот свободен - открываем форму создания новой заявки
+        // Проверяем права доступа: врачи не могут создавать заявки
         if ($user->isDoctor()) {
             Notification::make()
                 ->title('Ограничение')
@@ -390,6 +460,8 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             return;
         }
 
+        // Находим смену врача по ID из данных события
+        // Загружаем связанные данные для заполнения формы
         $shift = DoctorShift::with(['cabinet.branch.clinic', 'cabinet.branch.city', 'doctor'])
             ->find($extendedProps['shift_id']);
 
@@ -402,12 +474,13 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             return;
         }
 
-        // Сохраняем данные слота в свойстве виджета
+        // Сохраняем данные слота в свойстве виджета для передачи в форму
         $slotStart = $extendedProps['slot_start'];
         if (is_string($slotStart)) {
-            $slotStart = \Carbon\Carbon::parse($slotStart);
+            $slotStart = \Carbon\Carbon::parse($slotStart); // Преобразуем строку в объект Carbon
         }
         
+        // Заполняем массив данными для формы создания заявки
         $this->slotData = [
             'city_id' => $shift->cabinet->branch->city_id,
             'city_name' => $shift->cabinet->branch->city->name,
@@ -428,18 +501,26 @@ class AppointmentCalendarWidget extends FullCalendarWidget
 
     /**
      * Обработка клика по занятому слоту
+     * 
+     * Находит заявку по кабинету и времени, заполняет данные формы
+     * и открывает модальное окно для просмотра/редактирования.
+     * Учитывает права доступа пользователя при поиске заявки.
+     * 
+     * @param array $data Данные слота с информацией о кабинете и времени
      */
     public function onOccupiedSlotClick(array $data): void
     {
         $user = auth()->user();
         $extendedProps = $data;
         
-        // Находим заявку по кабинету и времени
+        // Находим заявку по кабинету и времени приема
         $slotStart = $extendedProps['slot_start'];
         if (is_string($slotStart)) {
-            $slotStart = \Carbon\Carbon::parse($slotStart);
+            $slotStart = \Carbon\Carbon::parse($slotStart); // Преобразуем строку в объект Carbon
         }
         
+        // Строим запрос для поиска заявки
+        // Загружаем связанные данные для отображения в форме
         $applicationQuery = Application::query()
             ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
             ->where('cabinet_id', $extendedProps['cabinet_id'])
@@ -465,9 +546,10 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         return;
     }
 
-        // Заполняем данные для формы
+        // Заполняем данные для формы просмотра/редактирования
+        // Включаем как служебную информацию, так и данные пациента
         $this->slotData = [
-            'application_id' => $application->id,
+            'application_id' => $application->id, // ID заявки для обновления
             'city_id' => $application->city_id,
             'city_name' => $application->city->name,
             'clinic_id' => $application->clinic_id,
@@ -479,28 +561,38 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             'doctor_id' => $application->doctor_id,
             'doctor_name' => $application->doctor->full_name,
             'appointment_datetime' => $application->appointment_datetime,
-            'full_name' => $application->full_name,
-            'phone' => $application->phone,
-            'full_name_parent' => $application->full_name_parent,
-            'birth_date' => $application->birth_date,
-            'promo_code' => $application->promo_code,
+            'full_name' => $application->full_name, // ФИО ребенка
+            'phone' => $application->phone, // Телефон
+            'full_name_parent' => $application->full_name_parent, // ФИО родителя
+            'birth_date' => $application->birth_date, // Дата рождения
+            'promo_code' => $application->promo_code, // Промокод
         ];
 
         // Устанавливаем запись для действий
         $this->record = $application;
         
         // Открываем форму для всех ролей, но с разными правами
-        if ($user->isDoctor()) {
-            // Для врача показываем форму только для просмотра
-            $this->mountAction('view');
-        } else {
-            // Открываем форму редактирования для партнеров и админов
-            $this->mountAction('editAppointment');
-        }
+        // if ($user->isDoctor()) {
+        //     // Для врача показываем форму только для просмотра
+        //     $this->mountAction('view');
+        // } else {
+        //     // Открываем форму редактирования для партнеров и админов
+        //     $this->mountAction('view');
+        // }
+
+        $this->mountAction('view');
     }
 
     /**
      * Действия в заголовке виджета
+     * 
+     * Определяет кнопки действий в заголовке календаря:
+     * - Для врачей: только кнопка просмотра информации о записи
+     * - Для партнеров и админов: кнопки создания, просмотра и редактирования заявок
+     * 
+     * Каждое действие имеет свою форму и логику обработки данных.
+     * 
+     * @return array Массив действий для заголовка
      */
     protected function headerActions(): array
     {
@@ -573,7 +665,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     ->disabled()
                                     ->dehydrated(false)
                                     ->seconds(false)
-                                    ->minutesStep(15),
+                                    ->minutesStep(5),
                             ]),
                         
                         Grid::make(2)
@@ -698,7 +790,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                 ->disabled()
                                 ->dehydrated(false)
                                 ->seconds(false)
-                                ->minutesStep(15)
+                                ->minutesStep(5)
                                 ->displayFormat('d.m.Y H:i'),
                         ]),
                     
@@ -740,6 +832,16 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 })
                 ->action(function (array $data) {
                     $user = auth()->user();
+                    
+                    // Проверяем обязательные поля
+                    if (empty($data['full_name']) || empty($data['phone'])) {
+                        Notification::make()
+                            ->title('Ошибка валидации')
+                            ->body('Пожалуйста, заполните ФИО ребенка и телефон')
+                            ->danger()
+                            ->send();
+                        return;
+                    }
                     
                     // Объединяем данные формы с данными из слота
                     $applicationData = array_merge($this->slotData ?? [], $data);
@@ -985,7 +1087,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                 ->disabled()
                                 ->dehydrated(false)
                                 ->seconds(false)
-                                ->minutesStep(15)
+                                ->minutesStep(5)
                                 ->displayFormat('d.m.Y H:i'),
                         ]),
                     
@@ -1033,6 +1135,16 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 ->action(function (array $data) {
                     $user = auth()->user();
                     
+                    // Проверяем обязательные поля
+                    if (empty($data['full_name']) || empty($data['phone'])) {
+                        Notification::make()
+                            ->title('Ошибка валидации')
+                            ->body('Пожалуйста, заполните ФИО ребенка и телефон')
+                            ->danger()
+                            ->send();
+                        return;
+                    }
+                    
                     // Объединяем данные формы с данными из слота
                     $applicationData = array_merge($this->slotData ?? [], $data);
                     
@@ -1071,6 +1183,10 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     
     /**
      * Обработчик события обновления календаря
+     * 
+     * Вызывается при необходимости принудительного обновления событий календаря.
+     * Например, после создания, редактирования или удаления заявки.
+     * Использует Livewire dispatch для обновления компонента.
      */
     public function refetchEvents()
     {

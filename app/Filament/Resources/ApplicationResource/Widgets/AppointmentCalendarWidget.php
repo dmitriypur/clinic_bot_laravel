@@ -152,16 +152,6 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     }
                 }
             }',
-            'eventSourceSuccess' => 'function(event, xhr) {
-                console.log("Calendar events refreshed at:", new Date().toISOString());
-            }',
-            'eventSourceFailure' => 'function(event, xhr) {
-                console.error("Calendar events refresh failed:", xhr.status, xhr.statusText);
-            }',
-            'viewDidMount' => 'function(info) {
-                // Принудительно обновляем события при смене вида
-                info.view.calendar.refetchEvents();
-            }',
         ];
     }
 
@@ -195,8 +185,6 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         header('Cache-Control: no-cache, no-store, must-revalidate');
         header('Pragma: no-cache');
         header('Expires: 0');
-        header('Last-Modified: ' . gmdate('D, d M Y H:i:s') . ' GMT');
-        header('ETag: "' . md5(time()) . '"');
         
         // Используем сервис для генерации событий
         return $this->getEventService()->generateEvents($fetchInfo, $this->filters, $user);

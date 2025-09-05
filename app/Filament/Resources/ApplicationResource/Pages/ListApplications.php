@@ -10,6 +10,16 @@ use Filament\Resources\Pages\ListRecords;
 class ListApplications extends ListRecords
 {
     protected static string $resource = ApplicationResource::class;
+    
+    /**
+     * Кастомный view для отображения табов
+     */
+    protected static string $view = 'filament.resources.application-resource.pages.list-applications';
+    
+    /**
+     * Активный таб по умолчанию
+     */
+    public ?string $activeTab = 'calendar';
 
     protected function getHeaderActions(): array
     {
@@ -18,10 +28,26 @@ class ListApplications extends ListRecords
         ];
     }
 
-    protected function getHeaderWidgets(): array
+    /**
+     * Получение виджетов для страницы
+     */
+    public function getWidgets(): array
     {
         return [
             AppointmentCalendarWidget::class,
         ];
+    }
+
+    /**
+     * Инициализация активного таба
+     */
+    public function mount(): void
+    {
+        parent::mount();
+        
+        // Устанавливаем активный таб по умолчанию
+        if (!$this->activeTab) {
+            $this->activeTab = 'calendar';
+        }
     }
 }

@@ -271,49 +271,48 @@ class ApplicationResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return parent::table($table);
-        // return $table
-        //     ->columns([
-        //         TextColumn::make('city.name')
-        //             ->label('Город')
-        //             ->searchable(),
-        //         TextColumn::make('clinic.name')
-        //             ->label('Клиника')
-        //             ->searchable(),
-        //         TextColumn::make('branch.name')
-        //             ->label('Филиал')
-        //             ->searchable()
-        //             ->formatStateUsing(function ($record) {
-        //                 return $record->branch ? $record->branch->name : '-';
-        //             }),
-        //         TextColumn::make('doctor.last_name')
-        //             ->label('Врач')
-        //             ->searchable(),
-        //         TextColumn::make('full_name')
-        //             ->label('Имя ребенка')
-        //             ->searchable(),
-        //         TextColumn::make('phone')
-        //             ->label('Телефон')
-        //             ->searchable(),
-        //         TextColumn::make('appointment_datetime')
-        //             ->label('Дата и время приема')
-        //             ->dateTime('d.m.Y H:i')
-        //             ->sortable(),
-        //         TextColumn::make('cabinet.name')
-        //             ->label('Кабинет')
-        //             ->searchable(),
-        //     ])
-        //     ->filters([
-        //         //
-        //     ])
-        //     ->actions([
-        //         Tables\Actions\EditAction::make(),
-        //     ])
-        //     ->bulkActions([
-        //         Tables\Actions\BulkActionGroup::make([
-        //             Tables\Actions\DeleteBulkAction::make(),
-        //         ]),
-        //     ]);
+        return $table
+            ->columns([
+                TextColumn::make('city.name')
+                    ->label('Город')
+                    ->searchable(),
+                TextColumn::make('clinic.name')
+                    ->label('Клиника')
+                    ->searchable(),
+                TextColumn::make('branch.name')
+                    ->label('Филиал')
+                    ->searchable()
+                    ->formatStateUsing(function ($record) {
+                        return $record->branch ? $record->branch->name : '-';
+                    }),
+                TextColumn::make('doctor.last_name')
+                    ->label('Врач')
+                    ->searchable(),
+                TextColumn::make('full_name')
+                    ->label('Имя ребенка')
+                    ->searchable(),
+                TextColumn::make('phone')
+                    ->label('Телефон')
+                    ->searchable(),
+                TextColumn::make('appointment_datetime')
+                    ->label('Дата и время приема')
+                    ->dateTime('d.m.Y H:i')
+                    ->sortable(),
+                TextColumn::make('cabinet.name')
+                    ->label('Кабинет')
+                    ->searchable(),
+            ])
+            ->filters([
+                //
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
+                ]),
+            ]);
     }
 
     public static function getRelations(): array

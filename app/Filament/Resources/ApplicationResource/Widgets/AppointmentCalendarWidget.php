@@ -1214,16 +1214,6 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         $this->dispatch('calendar-clear-cache');
     }
     
-    /**
-     * Принудительное обновление календаря при каждом рендере
-     */
-    public function mount()
-    {
-        parent::mount();
-        
-        // Принудительно обновляем календарь при монтировании
-        $this->dispatch('$refresh');
-    }
     
     /**
      * Очистка кэша календаря

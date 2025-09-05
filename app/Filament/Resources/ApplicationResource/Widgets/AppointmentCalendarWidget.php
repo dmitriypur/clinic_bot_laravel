@@ -139,6 +139,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     console.log("=== ТЕСТ JAVASCRIPT ===");
                     console.log("СОБЫТИЕ МОНТИРУЕТСЯ:", info.event.id);
                     console.log("Application ID:", info.event.extendedProps.application_id);
+                    console.log("Full extendedProps:", info.event.extendedProps);
                     console.log("========================");
                 } catch (e) {
                     console.error("Ошибка в eventDidMount:", e);

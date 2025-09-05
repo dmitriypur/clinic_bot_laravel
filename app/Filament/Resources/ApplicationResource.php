@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Filters\ApplicationFilters;
 use App\Filament\Resources\ApplicationResource\Pages;
 use App\Filament\Resources\ApplicationResource\RelationManagers;
 use App\Filament\Resources\ApplicationResource\Widgets\AppointmentCalendarWidget;
@@ -303,7 +304,7 @@ class ApplicationResource extends Resource
                     ->searchable(),
             ])
             ->filters([
-                //
+                ApplicationFilters::make(),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

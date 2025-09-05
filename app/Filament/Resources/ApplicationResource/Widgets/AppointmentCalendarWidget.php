@@ -180,6 +180,11 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         // Добавляем уникальный идентификатор для принудительного обновления
         $fetchInfo['_timestamp'] = time();
         
+        // Добавляем заголовки для предотвращения кэширования
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        
         // Используем сервис для генерации событий
         return $this->getEventService()->generateEvents($fetchInfo, $this->filters, $user);
     }
@@ -1173,5 +1178,33 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     {
         // Принудительно обновляем события календаря
         $this->dispatch('$refresh');
+    }
+    
+    /**
+     * Принудительное обновление календаря
+     */
+    public function forceRefresh()
+    {
+        // Очищаем кэш календаря
+        $this->clearCalendarCache();
+        
+        // Принудительно обновляем события календаря
+        $this->dispatch('$refresh');
+    }
+    
+    /**
+     * Очистка кэша календаря
+     */
+    private function clearCalendarCache()
+    {
+        // Очищаем все ключи кэша календаря
+        $keys = \Illuminate\Support\Facades\Cache::get('calendar_cache_keys', []);
+        
+        foreach ($keys as $key) {
+            \Illuminate\Support\Facades\Cache::forget($key);
+        }
+        
+        // Очищаем ключ со списком ключей
+        \Illuminate\Support\Facades\Cache::forget('calendar_cache_keys');
     }
 }

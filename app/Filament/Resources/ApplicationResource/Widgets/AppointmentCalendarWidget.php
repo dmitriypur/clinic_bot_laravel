@@ -534,6 +534,12 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             $application = Application::with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
                 ->find($extendedProps['application_id']);
                 
+            \Log::info('Результат поиска заявки', [
+                'application_id' => $extendedProps['application_id'],
+                'found' => $application ? 'да' : 'нет',
+                'application_data' => $application ? $application->toArray() : null
+            ]);
+                
             if (!$application) {
                 \Log::error('Заявка не найдена по application_id', ['application_id' => $extendedProps['application_id']]);
                 Notification::make()

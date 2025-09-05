@@ -152,16 +152,15 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     }
                 }
                 
-                // Принудительно обновляем extendedProps для занятых слотов
-                if (info.event.extendedProps.is_occupied && info.event.extendedProps.application_id) {
-                    console.log("=== ОТЛАДКА СОБЫТИЯ ===");
-                    console.log("Event ID:", info.event.id);
-                    console.log("Application ID:", info.event.extendedProps.application_id);
-                    console.log("Cabinet ID:", info.event.extendedProps.cabinet_id);
-                    console.log("Slot Start:", info.event.extendedProps.slot_start);
-                    console.log("Full extendedProps:", JSON.stringify(info.event.extendedProps, null, 2));
-                    console.log("========================");
-                }
+                // Логируем ВСЕ события для отладки
+                console.log("=== СОБЫТИЕ МОНТИРУЕТСЯ ===");
+                console.log("Event ID:", info.event.id);
+                console.log("Title:", info.event.title);
+                console.log("Is Occupied:", info.event.extendedProps.is_occupied);
+                console.log("Application ID:", info.event.extendedProps.application_id);
+                console.log("Cabinet ID:", info.event.extendedProps.cabinet_id);
+                console.log("Slot Start:", info.event.extendedProps.slot_start);
+                console.log("==========================");
             }',
         ];
     }

@@ -524,6 +524,9 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             'received_slot_start' => $extendedProps['slot_start'] ?? 'не указан'
         ]);
         
+        // Дополнительное логирование для отладки
+        $this->js("console.log('=== ОТЛАДКА EXTENDEDPROPS ==='); console.log('Full extendedProps:', " . json_encode($extendedProps) . "); console.log('=======================');");
+        
         // Добавляем JavaScript логирование
         $this->js('console.log("=== PHP ВЫЗВАЛ onOccupiedSlotClick ===");');
         $this->js('console.log("Application ID:", ' . ($extendedProps['application_id'] ?? 'null') . ');');

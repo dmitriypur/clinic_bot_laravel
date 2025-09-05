@@ -135,8 +135,14 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 'hour12' => false, // 24-часовой формат
             ],
             'eventDidMount' => 'function(info) {
-                console.log("СОБЫТИЕ МОНТИРУЕТСЯ:", info.event.id);
-                console.log("Application ID:", info.event.extendedProps.application_id);
+                try {
+                    console.log("=== ТЕСТ JAVASCRIPT ===");
+                    console.log("СОБЫТИЕ МОНТИРУЕТСЯ:", info.event.id);
+                    console.log("Application ID:", info.event.extendedProps.application_id);
+                    console.log("========================");
+                } catch (e) {
+                    console.error("Ошибка в eventDidMount:", e);
+                }
             }',
         ];
     }

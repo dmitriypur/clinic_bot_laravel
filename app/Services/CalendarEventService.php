@@ -192,7 +192,7 @@ class CalendarEventService
             ]);
         }
         
-        return [
+        $eventData = [
             'id' => 'slot_' . $shift->id . '_' . $slot['start']->format('Y-m-d_H-i'),
             'title' => $title,
             'start' => $slot['start'],
@@ -225,6 +225,18 @@ class CalendarEventService
                 ] : null,
             ]
         ];
+        
+        // Отладочная информация для занятых слотов
+        if ($isOccupied && $application) {
+            \Log::info('Создано событие с extendedProps', [
+                'event_id' => $eventData['id'],
+                'application_id' => $eventData['extendedProps']['application_id'],
+                'cabinet_id' => $eventData['extendedProps']['cabinet_id'],
+                'slot_start' => $eventData['extendedProps']['slot_start']
+            ]);
+        }
+        
+        return $eventData;
     }
 
     /**

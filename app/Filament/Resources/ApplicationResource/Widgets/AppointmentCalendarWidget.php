@@ -155,11 +155,6 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 // Принудительно обновляем extendedProps для занятых слотов
                 if (info.event.extendedProps.is_occupied && info.event.extendedProps.application_id) {
                     console.log("Обновляем extendedProps для события:", info.event.id, "application_id:", info.event.extendedProps.application_id);
-                    
-                    // Принудительно обновляем календарь каждые 5 секунд
-                    setTimeout(function() {
-                        info.view.calendar.refetchEvents();
-                    }, 5000);
                 }
             }',
         ];

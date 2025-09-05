@@ -235,12 +235,17 @@ class CalendarEventService
         
         // Отладочная информация для занятых слотов
         if ($isOccupied && $application) {
-            \Log::info('Создано событие с extendedProps', [
-                'event_id' => $eventData['id'],
-                'application_id' => $eventData['extendedProps']['application_id'],
-                'cabinet_id' => $eventData['extendedProps']['cabinet_id'],
-                'slot_start' => $eventData['extendedProps']['slot_start']
-            ]);
+                    \Log::info('Создано событие с extendedProps', [
+            'event_id' => $eventData['id'],
+            'application_id' => $eventData['extendedProps']['application_id'],
+            'cabinet_id' => $eventData['extendedProps']['cabinet_id'],
+            'slot_start' => $eventData['extendedProps']['slot_start']
+        ]);
+        
+        // Дополнительное логирование для отладки
+        \Log::info('Полные данные события', [
+            'event_data' => $eventData
+        ]);
         }
         
         return $eventData;

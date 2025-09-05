@@ -548,10 +548,13 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 $slotStart = \Carbon\Carbon::parse($slotStart);
             }
             
+            // Конвертируем UTC время слота в локальное время для поиска в базе данных
+            $slotStartLocal = $slotStart->setTimezone(config('app.timezone', 'UTC'));
+            
             $applicationQuery = Application::query()
                 ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
                 ->where('cabinet_id', $extendedProps['cabinet_id'])
-                ->where('appointment_datetime', $slotStart);
+                ->where('appointment_datetime', $slotStartLocal);
             
             // Сначала ищем заявку без фильтрации по ролям
             $application = $applicationQuery->first();

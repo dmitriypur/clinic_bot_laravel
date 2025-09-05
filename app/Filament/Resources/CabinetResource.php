@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Filters\CabinetFilters;
 use App\Filament\Resources\CabinetResource\Pages;
 use App\Filament\Resources\CabinetResource\RelationManagers;
 use App\Models\Cabinet;
@@ -117,7 +118,7 @@ class CabinetResource extends Resource
                     ->sortable(),
             ])
             ->filters([
-                // Фильтры (пока не используются)
+                CabinetFilters::make(),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),    // Просмотр

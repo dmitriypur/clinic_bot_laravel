@@ -246,6 +246,16 @@ class CalendarEventService
         \Log::info('Полные данные события', [
             'event_data' => $eventData
         ]);
+        
+        // Дополнительное логирование для отладки application_id
+        if ($application) {
+            \Log::info('Отладка application_id в событии', [
+                'application_id_from_db' => $application->id,
+                'application_id_in_event' => $eventData['extendedProps']['application_id'],
+                'event_id' => $eventData['id'],
+                'slot_start' => $slot['start']->format('Y-m-d H:i:s')
+            ]);
+        }
         }
         
         return $eventData;

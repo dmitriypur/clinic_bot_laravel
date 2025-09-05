@@ -105,11 +105,29 @@ class CalendarEventService
         // Сначала ищем заявку без фильтрации по ролям
         $application = $query->first();
         
+        \Log::info('Поиск заявки в слоте', [
+            'cabinet_id' => $cabinetId,
+            'slot_start' => $slotStart,
+            'user_id' => $user->id,
+            'user_role' => $user->getRoleNames()->first(),
+            'found_application_id' => $application ? $application->id : null,
+            'sql_query' => $query->toSql(),
+            'sql_bindings' => $query->getBindings()
+        ]);
+        
         if ($application) {
             // Проверяем права доступа после нахождения заявки
             if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
+                \Log::info('Партнер не имеет доступа к заявке', [
+                    'user_clinic_id' => $user->clinic_id,
+                    'application_clinic_id' => $application->clinic_id
+                ]);
                 return null; // Партнер не имеет доступа к заявке из другой клиники
             } elseif ($user->isDoctor() && $application->doctor_id !== $user->doctor_id) {
+                \Log::info('Врач не имеет доступа к заявке', [
+                    'user_doctor_id' => $user->doctor_id,
+                    'application_doctor_id' => $application->doctor_id
+                ]);
                 return null; // Врач не имеет доступа к заявке другого врача
             }
         }
@@ -156,7 +174,14 @@ class CalendarEventService
                 'cabinet_id' => $shift->cabinet_id,
                 'slot_start' => $slot['start'],
                 'application_clinic_id' => $application->clinic_id,
-                'application_doctor_id' => $application->doctor_id
+                'application_doctor_id' => $application->doctor_id,
+                'application_appointment_datetime' => $application->appointment_datetime
+            ]);
+        } elseif ($isOccupied && !$application) {
+            \Log::warning('Слот помечен как занятый, но заявка не найдена', [
+                'cabinet_id' => $shift->cabinet_id,
+                'slot_start' => $slot['start'],
+                'shift_id' => $shift->id
             ]);
         }
         

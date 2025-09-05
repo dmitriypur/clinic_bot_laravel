@@ -144,13 +144,6 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     console.error("Ошибка в eventDidMount:", e);
                 }
             }',
-            'viewDidMount' => 'function(info) {
-                console.log("=== КАЛЕНДАРЬ ЗАГРУЖЕН ===");
-                console.log("View:", info.view.type);
-                console.log("Start:", info.view.activeStart);
-                console.log("End:", info.view.activeEnd);
-                console.log("========================");
-            }',
         ];
     }
 

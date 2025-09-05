@@ -145,6 +145,18 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     console.error("Ошибка в eventDidMount:", e);
                 }
             }',
+            'eventSourceSuccess' => 'function(content, xhr) {
+                console.log("=== СОБЫТИЯ ЗАГРУЖЕНЫ ===");
+                console.log("Content:", content);
+                console.log("========================");
+            }',
+            'eventClick' => 'function(info) {
+                console.log("=== КЛИК ПО СОБЫТИЮ ===");
+                console.log("Event ID:", info.event.id);
+                console.log("Application ID:", info.event.extendedProps.application_id);
+                console.log("Full extendedProps:", info.event.extendedProps);
+                console.log("========================");
+            }',
         ];
     }
 

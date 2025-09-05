@@ -13,7 +13,7 @@ return new class extends Migration
     {
         if (!Schema::hasTable('applications')) {
             Schema::create('applications', function (Blueprint $table) {
-                $table->bigInteger('id')->primary();
+                $table->id(); // Это автоматически создает bigInteger('id')->primary()->autoIncrement()
                 $table->foreignId('city_id')->constrained('cities');
                 $table->foreignId('clinic_id')->nullable()->constrained('clinics')->onDelete('cascade');
                 $table->foreignId('doctor_id')->nullable()->constrained('doctors');

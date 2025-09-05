@@ -14,15 +14,21 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
+            ShieldSeeder::class,
             CitySeeder::class,
             ClinicSeeder::class,
             DoctorSeeder::class,
             BranchSeeder::class,
         ]);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        // Создаем админ-пользователя
+        $admin = User::create([
+            'name' => 'Admin',
+            'email' => 'admin@admin.ru',
+            'password' => bcrypt('password'),
         ]);
+        
+        // Назначаем роль super_admin
+        $admin->assignRole('super_admin');
     }
 }

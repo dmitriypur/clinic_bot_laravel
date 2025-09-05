@@ -125,8 +125,8 @@ setup_permissions() {
     
     cd "$APP_DIR"
     
-    # Владелец и группа
-    chown -R www-data:www-data "$APP_DIR"
+    # Владелец и группа (используем laravel пользователя)
+    chown -R laravel:www-data "$APP_DIR"
     
     # Права на файлы и директории
     find "$APP_DIR" -type f -exec chmod 644 {} \;
@@ -167,8 +167,16 @@ restart_services() {
     
     # Перезапуск PHP-FPM
     if command -v systemctl >/dev/null 2>&1; then
-        systemctl reload php8.3-fpm
-        log "PHP-FPM перезапущен"
+        # Проверяем какая версия PHP установлена
+        if systemctl is-active --quiet php8.3-fpm; then
+            systemctl reload php8.3-fpm
+            log "PHP 8.3-FPM перезапущен"
+        elif systemctl is-active --quiet php8.2-fpm; then
+            systemctl reload php8.2-fpm
+            log "PHP 8.2-FPM перезапущен"
+        else
+            warning "PHP-FPM не найден или не запущен"
+        fi
     fi
     
     # Перезапуск Supervisor воркеров (если установлен)

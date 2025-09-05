@@ -151,6 +151,11 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                         info.el.title = "Свободный слот для записи";
                     }
                 }
+                
+                // Принудительно обновляем extendedProps для занятых слотов
+                if (info.event.extendedProps.is_occupied && info.event.extendedProps.application_id) {
+                    console.log("Обновляем extendedProps для события:", info.event.id, "application_id:", info.event.extendedProps.application_id);
+                }
             }',
         ];
     }
@@ -180,6 +185,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         // Добавляем уникальный идентификатор для принудительного обновления
         $fetchInfo['_timestamp'] = time();
         $fetchInfo['_random'] = uniqid();
+        $fetchInfo['_cache_buster'] = md5(time() . rand());
         
         // Добавляем заголовки для предотвращения кэширования
         header('Cache-Control: no-cache, no-store, must-revalidate');
@@ -1206,6 +1212,17 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         
         // Отправляем JavaScript для очистки кэша браузера
         $this->dispatch('calendar-clear-cache');
+    }
+    
+    /**
+     * Принудительное обновление календаря при каждом рендере
+     */
+    public function mount()
+    {
+        parent::mount();
+        
+        // Принудительно обновляем календарь при монтировании
+        $this->dispatch('$refresh');
     }
     
     /**

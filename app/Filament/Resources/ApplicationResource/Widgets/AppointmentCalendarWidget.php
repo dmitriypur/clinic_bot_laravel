@@ -519,6 +519,13 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             'received_slot_start' => $extendedProps['slot_start'] ?? 'не указан'
         ]);
         
+        // Добавляем JavaScript логирование
+        $this->js('console.log("=== PHP ВЫЗВАЛ onOccupiedSlotClick ===");');
+        $this->js('console.log("Application ID:", ' . ($extendedProps['application_id'] ?? 'null') . ');');
+        $this->js('console.log("Cabinet ID:", ' . ($extendedProps['cabinet_id'] ?? 'null') . ');');
+        $this->js('console.log("Slot Start:", "' . ($extendedProps['slot_start'] ?? 'null') . '");');
+        $this->js('console.log("========================");');
+        
         // Проверяем, есть ли данные заявки в событии
         if (isset($extendedProps['application_id']) && $extendedProps['application_id']) {
             \Log::info('Ищем заявку по application_id', ['application_id' => $extendedProps['application_id']]);

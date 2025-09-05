@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Models\DoctorShift;
 use App\Models\Doctor;
 use App\Models\Cabinet;
+use App\Services\CalendarFilterService;
 use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DateTimePicker;
@@ -23,6 +24,44 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
 {
     // Модель для работы с данными
     public \Illuminate\Database\Eloquent\Model | string | null $model = DoctorShift::class;
+    
+    /**
+     * Фильтры для календаря смен врачей
+     * Сохраняют состояние фильтрации по врачам и датам
+     */
+    public array $filters = [
+        'doctor_ids' => [],
+        'date_from' => null,
+        'date_to' => null,
+    ];
+    
+    /**
+     * Слушатели событий для обновления календаря
+     */
+    protected $listeners = ['refetchEvents', 'shiftFiltersUpdated', '$refresh'];
+    
+    /**
+     * Сервис для работы с фильтрами
+     */
+    protected ?CalendarFilterService $filterService = null;
+    
+    public function getFilterService(): CalendarFilterService
+    {
+        if ($this->filterService === null) {
+            $this->filterService = app(CalendarFilterService::class);
+        }
+        return $this->filterService;
+    }
+
+    /**
+     * Обработчик обновления фильтров
+     */
+    public function shiftFiltersUpdated(array $filters): void
+    {
+        $this->filters = $filters;
+        $this->refreshRecords();
+    }
+
 
     /**
      * Конфигурация календаря
@@ -72,7 +111,7 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
 
     /**
      * Получение событий для отображения в календаре
-     * Загружает смены врачей по всем кабинетам с фильтрацией по ролям
+     * Загружает смены врачей по всем кабинетам с фильтрацией по ролям и пользовательским фильтрам
      */
     public function fetchEvents(array $fetchInfo): array
     {
@@ -83,17 +122,8 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
             ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
             ->with(['doctor', 'cabinet.branch']);
         
-        // Фильтрация по ролям
-        if ($user->isPartner()) {
-            // Партнер видит только смены в кабинетах своих клиник
-            $query->whereHas('cabinet.branch', function($q) use ($user) {
-                $q->where('clinic_id', $user->clinic_id);
-            });
-        } elseif ($user->isDoctor()) {
-            // Врач видит только свои смены
-            $query->where('doctor_id', $user->doctor_id);
-        }
-        // super_admin видит все смены
+        // Применяем пользовательские фильтры
+        $this->getFilterService()->applyShiftFilters($query, $this->filters, $user);
         
         // Преобразуем смены в формат FullCalendar
         return $query->get()
@@ -251,14 +281,69 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
     protected function headerActions(): array
     {
         $user = auth()->user();
+        $actions = [];
+        
+        // Добавляем кнопку фильтров
+        $actions[] = \Filament\Actions\Action::make('filters')
+            ->label('Фильтры')
+            ->icon('heroicon-o-funnel')
+            ->color('gray')
+            ->form([
+                \Filament\Forms\Components\Grid::make(3)
+                    ->schema([
+                        \Filament\Forms\Components\DatePicker::make('date_from')
+                            ->label('Дата с')
+                            ->displayFormat('d.m.Y')
+                            ->native(false),
+                            
+                        \Filament\Forms\Components\DatePicker::make('date_to')
+                            ->label('Дата по')
+                            ->displayFormat('d.m.Y')
+                            ->native(false),
+                            
+                        \Filament\Forms\Components\Select::make('doctor_ids')
+                            ->label('Врачи')
+                            ->multiple()
+                            ->searchable()
+                            ->options(fn() => $this->getFilterService()->getAvailableDoctorsForShifts(auth()->user())),
+                    ]),
+            ])
+            ->fillForm($this->filters)
+            ->action(function (array $data) {
+                $this->filters = $data;
+                $this->refreshRecords();
+                
+                Notification::make()
+                    ->title('Фильтры применены')
+                    ->success()
+                    ->send();
+            })
+            ->extraModalFooterActions([
+                \Filament\Actions\Action::make('clearFilters')
+                    ->label('Очистить фильтры')
+                    ->color('gray')
+                    ->action(function () {
+                        $this->filters = [
+                            'doctor_ids' => [],
+                            'date_from' => null,
+                            'date_to' => null,
+                        ];
+                        
+                        $this->refreshRecords();
+                        
+                        Notification::make()
+                            ->title('Фильтры очищены')
+                            ->success()
+                            ->send();
+                    })
+            ])
+            ->closeModalByClickingAway(false)
+            ->modalSubmitActionLabel('Применить')
+            ->modalCancelActionLabel('Отмена');
         
         // Врач не может создавать смены
-        if ($user->isDoctor()) {
-            return [];
-        }
-        
-        return [
-            \Saade\FilamentFullCalendar\Actions\CreateAction::make()
+        if (!$user->isDoctor()) {
+            $actions[] = \Saade\FilamentFullCalendar\Actions\CreateAction::make()
                 ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {
                     $form->fill([
                         'start_time' => $arguments['start'] ?? null,
@@ -275,7 +360,9 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                         ->send();
                         
                     $this->refreshRecords();
-                }),
-        ];
+                });
+        }
+        
+        return $actions;
     }
 }

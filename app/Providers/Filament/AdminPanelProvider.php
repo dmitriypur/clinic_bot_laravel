@@ -45,8 +45,6 @@ class AdminPanelProvider extends PanelProvider
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
                 \App\Filament\Widgets\AllCabinetsScheduleWidget::class,
-                // AccountWidget::class,
-                // FilamentInfoWidget::class,
             ])
             ->middleware([
                 EncryptCookies::class,

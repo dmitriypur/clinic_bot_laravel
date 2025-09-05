@@ -189,9 +189,56 @@ class CalendarFilterService
     }
 
     /**
-     * Валидирует фильтры
+     * Получает доступных врачей для фильтрации смен
+     */
+    public function getAvailableDoctorsForShifts(User $user): array
+    {
+        $query = \App\Models\Doctor::query();
+        
+        if ($user->isPartner()) {
+            // Партнер видит врачей своих клиник
+            $query->whereHas('branches', function($q) use ($user) {
+                $q->where('clinic_id', $user->clinic_id);
+            });
+        } elseif ($user->isDoctor()) {
+            // Врач видит только себя
+            $query->where('id', $user->doctor_id);
+        }
+        // super_admin видит всех врачей
+        
+        $doctors = $query->get();
+        $result = [];
+        
+        foreach ($doctors as $doctor) {
+            $result[$doctor->id] = $doctor->full_name;
+        }
+        
+        return $result;
+    }
+
+    /**
+     * Валидирует фильтры для заявок
      */
     public function validateFilters(array $filters): array
+    {
+        $errors = [];
+        
+        if (!empty($filters['date_from']) && !empty($filters['date_to'])) {
+            $dateFrom = Carbon::parse($filters['date_from']);
+            $dateTo = Carbon::parse($filters['date_to']);
+            
+            if ($dateFrom->gt($dateTo)) {
+                $errors[] = 'Дата начала не может быть позже даты окончания';
+            }
+        }
+        
+        return $errors;
+    }
+
+    /**
+     * Валидирует фильтры для смен врачей
+     */
+    public function validateShiftFilters(array $filters): array
     {
         $errors = [];
         

@@ -495,13 +495,23 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         $user = auth()->user();
         $extendedProps = $data;
         
+        // Отладочная информация
+        \Log::info('onOccupiedSlotClick вызван', [
+            'extendedProps' => $extendedProps,
+            'user_id' => $user->id,
+            'user_role' => $user->getRoleNames()->first()
+        ]);
+        
         // Проверяем, есть ли данные заявки в событии
         if (isset($extendedProps['application_id']) && $extendedProps['application_id']) {
+            \Log::info('Ищем заявку по application_id', ['application_id' => $extendedProps['application_id']]);
+            
             // Используем данные из события, но загружаем полную модель для редактирования
             $application = Application::with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
                 ->find($extendedProps['application_id']);
                 
             if (!$application) {
+                \Log::error('Заявка не найдена по application_id', ['application_id' => $extendedProps['application_id']]);
                 Notification::make()
                     ->title('Ошибка')
                     ->body('Заявка не найдена')
@@ -528,6 +538,11 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             }
         } else {
             // Fallback: ищем заявку по времени (старый способ)
+            \Log::info('Ищем заявку по fallback методу', [
+                'cabinet_id' => $extendedProps['cabinet_id'] ?? 'не указан',
+                'slot_start' => $extendedProps['slot_start'] ?? 'не указан'
+            ]);
+            
             $slotStart = $extendedProps['slot_start'];
             if (is_string($slotStart)) {
                 $slotStart = \Carbon\Carbon::parse($slotStart);
@@ -538,16 +553,39 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 ->where('cabinet_id', $extendedProps['cabinet_id'])
                 ->where('appointment_datetime', $slotStart);
             
-            // Фильтрация по ролям
-            if ($user->isPartner()) {
-                $applicationQuery->where('clinic_id', $user->clinic_id);
-            } elseif ($user->isDoctor()) {
-                $applicationQuery->where('doctor_id', $user->doctor_id);
+            // Сначала ищем заявку без фильтрации по ролям
+            $application = $applicationQuery->first();
+            
+            if ($application) {
+                // Проверяем права доступа после нахождения заявки
+                if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
+                    \Log::info('Партнер не имеет доступа к заявке', [
+                        'user_clinic_id' => $user->clinic_id,
+                        'application_clinic_id' => $application->clinic_id
+                    ]);
+                    $application = null;
+                } elseif ($user->isDoctor() && $application->doctor_id !== $user->doctor_id) {
+                    \Log::info('Врач не имеет доступа к заявке', [
+                        'user_doctor_id' => $user->doctor_id,
+                        'application_doctor_id' => $application->doctor_id
+                    ]);
+                    $application = null;
+                }
             }
             
-            $application = $applicationQuery->first();
+            \Log::info('SQL запрос для поиска заявки', [
+                'sql' => $applicationQuery->toSql(),
+                'bindings' => $applicationQuery->getBindings()
+            ]);
 
             if (!$application) {
+                \Log::error('Заявка не найдена по fallback методу', [
+                    'cabinet_id' => $extendedProps['cabinet_id'],
+                    'slot_start' => $slotStart,
+                    'user_role' => $user->getRoleNames()->first(),
+                    'user_clinic_id' => $user->clinic_id ?? null,
+                    'user_doctor_id' => $user->doctor_id ?? null
+                ]);
                 Notification::make()
                     ->title('Ошибка')
                     ->body('Заявка не найдена')
@@ -555,6 +593,8 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     ->send();
                 return;
             }
+            
+            \Log::info('Заявка найдена по fallback методу', ['application_id' => $application->id]);
         }
 
         // Заполняем данные для формы просмотра/редактирования

@@ -73,18 +73,23 @@ class CalendarEventService
      */
     private function isSlotOccupied(int $cabinetId, Carbon $slotStart, User $user): bool
     {
-        $query = Application::query()
+        $application = Application::query()
             ->where('cabinet_id', $cabinetId)
-            ->where('appointment_datetime', $slotStart);
+            ->where('appointment_datetime', $slotStart)
+            ->first();
             
-        // Применяем только фильтрацию по ролям, без дополнительных фильтров
-        if ($user->isPartner()) {
-            $query->where('clinic_id', $user->clinic_id);
-        } elseif ($user->isDoctor()) {
-            $query->where('doctor_id', $user->doctor_id);
+        if (!$application) {
+            return false;
         }
         
-        return $query->exists();
+        // Проверяем права доступа
+        if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
+            return false; // Партнер не видит заявки из других клиник
+        } elseif ($user->isDoctor() && $application->doctor_id !== $user->doctor_id) {
+            return false; // Врач не видит заявки других врачей
+        }
+        
+        return true;
     }
 
     /**
@@ -97,14 +102,19 @@ class CalendarEventService
             ->where('cabinet_id', $cabinetId)
             ->where('appointment_datetime', $slotStart);
             
-        // Применяем только фильтрацию по ролям, без дополнительных фильтров
-        if ($user->isPartner()) {
-            $query->where('clinic_id', $user->clinic_id);
-        } elseif ($user->isDoctor()) {
-            $query->where('doctor_id', $user->doctor_id);
+        // Сначала ищем заявку без фильтрации по ролям
+        $application = $query->first();
+        
+        if ($application) {
+            // Проверяем права доступа после нахождения заявки
+            if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
+                return null; // Партнер не имеет доступа к заявке из другой клиники
+            } elseif ($user->isDoctor() && $application->doctor_id !== $user->doctor_id) {
+                return null; // Врач не имеет доступа к заявке другого врача
+            }
         }
         
-        return $query->first();
+        return $application;
     }
 
     /**
@@ -138,6 +148,17 @@ class CalendarEventService
         }
         
         $title = $isOccupied ? ($application ? $application->full_name : 'Занят') : 'Свободен';
+        
+        // Отладочная информация для занятых слотов
+        if ($isOccupied && $application) {
+            \Log::info('Создаем событие для занятого слота', [
+                'application_id' => $application->id,
+                'cabinet_id' => $shift->cabinet_id,
+                'slot_start' => $slot['start'],
+                'application_clinic_id' => $application->clinic_id,
+                'application_doctor_id' => $application->doctor_id
+            ]);
+        }
         
         return [
             'id' => 'slot_' . $shift->id . '_' . $slot['start']->format('Y-m-d_H-i'),

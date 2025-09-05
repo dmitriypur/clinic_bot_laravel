@@ -193,7 +193,7 @@ class CalendarEventService
         }
         
         $eventData = [
-            'id' => 'slot_' . $shift->id . '_' . $slot['start']->format('Y-m-d_H-i'),
+            'id' => 'slot_' . $shift->id . '_' . $slot['start']->format('Y-m-d_H-i') . ($application ? '_app_' . $application->id : ''),
             'title' => $title,
             'start' => $slot['start'],
             'end' => $slot['end'],

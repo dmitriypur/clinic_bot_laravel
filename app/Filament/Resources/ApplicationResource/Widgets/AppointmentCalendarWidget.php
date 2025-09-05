@@ -177,6 +177,9 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             return [];
         }
         
+        // Добавляем уникальный идентификатор для принудительного обновления
+        $fetchInfo['_timestamp'] = time();
+        
         // Используем сервис для генерации событий
         return $this->getEventService()->generateEvents($fetchInfo, $this->filters, $user);
     }

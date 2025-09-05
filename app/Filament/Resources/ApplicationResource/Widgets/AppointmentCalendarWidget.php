@@ -195,8 +195,8 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         // Используем сервис для генерации событий
         $events = $this->getEventService()->generateEvents($fetchInfo, $this->filters, $user);
         
-        \Log::info('Generated events count:', count($events));
-        \Log::info('Events:', $events);
+        \Log::info('Generated events count:', ['count' => count($events)]);
+        \Log::info('Events:', ['events' => $events]);
         \Log::info('=== FETCH EVENTS END ===');
         
         return $events;

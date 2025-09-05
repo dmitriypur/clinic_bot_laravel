@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Application;
 use App\Models\DoctorShift;
 use App\Models\User;
+use App\Services\TimezoneService;
 use App\Traits\HasCalendarOptimizations;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -14,10 +15,12 @@ class CalendarEventService
     use HasCalendarOptimizations;
     
     protected CalendarFilterService $filterService;
+    protected TimezoneService $timezoneService;
     
-    public function __construct(CalendarFilterService $filterService)
+    public function __construct(CalendarFilterService $filterService, TimezoneService $timezoneService)
     {
         $this->filterService = $filterService;
+        $this->timezoneService = $timezoneService;
     }
 
     /**
@@ -110,7 +113,30 @@ class CalendarEventService
     private function createEventData(DoctorShift $shift, array $slot, bool $isOccupied, ?Application $application): array
     {
         $config = config('calendar');
-        $backgroundColor = $isOccupied ? $config['colors']['occupied_slot'] : $config['colors']['free_slot'];
+        $slotStart = Carbon::parse($slot['start']);
+        $slotEnd = Carbon::parse($slot['end']);
+        
+        // Получаем часовой пояс города филиала
+        $cityId = $shift->cabinet->branch->city_id;
+        $cityTimezone = $this->timezoneService->getCityTimezone($cityId);
+        
+        // Конвертируем время слота в часовой пояс города
+        $slotStartInCity = $slotStart->setTimezone($cityTimezone);
+        
+        // Проверяем, прошло ли время в часовом поясе города
+        $nowInCity = $this->timezoneService->nowInCityTimezone($cityId);
+        $isPast = $slotStartInCity->isPast();
+        
+        
+        // Определяем цвета в зависимости от времени и занятости
+        if ($isPast) {
+            // Для прошедших слотов используем серые цвета
+            $backgroundColor = $isOccupied ? '#6B7280' : '#9CA3AF'; // темно-серый для занятых, светло-серый для свободных
+        } else {
+            // Для текущих/будущих слотов используем стандартные цвета
+            $backgroundColor = $isOccupied ? $config['colors']['occupied_slot'] : $config['colors']['free_slot'];
+        }
+        
         $title = $isOccupied ? ($application ? $application->full_name : 'Занят') : 'Свободен';
         
         return [
@@ -120,6 +146,7 @@ class CalendarEventService
             'end' => $slot['end'],
             'backgroundColor' => $backgroundColor,
             'borderColor' => $backgroundColor,
+            'classNames' => $isPast ? ['past-appointment'] : ['active-appointment'],
             'extendedProps' => [
                 'shift_id' => $shift->id,
                 'cabinet_id' => $shift->cabinet_id,
@@ -128,9 +155,13 @@ class CalendarEventService
                 'cabinet_name' => $shift->cabinet->name ?? 'Кабинет не указан',
                 'branch_name' => $shift->cabinet->branch->name ?? 'Филиал не указан',
                 'clinic_name' => $shift->cabinet->branch->clinic->name ?? 'Клиника не указана',
+                'city_id' => $cityId,
+                'city_timezone' => $cityTimezone,
                 'is_occupied' => $isOccupied,
+                'is_past' => $isPast,
                 'slot_start' => $slot['start'],
                 'slot_end' => $slot['end'],
+                'slot_start_city_time' => $slotStartInCity->format('Y-m-d H:i:s'),
                 'application_id' => $application ? $application->id : null,
                 'application_data' => $application ? [
                     'full_name' => $application->full_name,

@@ -134,6 +134,24 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 'minute' => '2-digit',
                 'hour12' => false, // 24-часовой формат
             ],
+            'eventDidMount' => 'function(info) {
+                // Добавляем стили для прошедших записей
+                if (info.event.extendedProps.is_past) {
+                    info.el.style.opacity = "0.6";
+                    info.el.style.filter = "grayscale(50%)";
+                    if (info.event.extendedProps.is_occupied) {
+                        info.el.title = "Прошедшая запись: " + info.event.title;
+                    } else {
+                        info.el.title = "Прошедший свободный слот";
+                    }
+                } else {
+                    if (info.event.extendedProps.is_occupied) {
+                        info.el.title = "Активная запись: " + info.event.title;
+                    } else {
+                        info.el.title = "Свободный слот для записи";
+                    }
+                }
+            }',
         ];
     }
 
@@ -387,6 +405,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
      * 2. Для занятых слотов - открывает форму просмотра/редактирования
      * 3. Для свободных слотов - открывает форму создания новой заявки
      * 4. Проверяет права доступа пользователя
+     * 5. Проверяет, не прошла ли запись
      * 
      * @param array $data Данные события календаря
      */
@@ -395,6 +414,16 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         $user = auth()->user();
         $event = $data;
         $extendedProps = $event['extendedProps'] ?? [];
+        
+        // Проверяем, не прошла ли запись
+        if (isset($extendedProps['is_past']) && $extendedProps['is_past']) {
+            Notification::make()
+                ->title('Прошедшая запись')
+                ->body('Нельзя редактировать прошедшие записи')
+                ->warning()
+                ->send();
+            return;
+        }
         
         // Если слот занят - открываем форму просмотра/редактирования
         if (isset($extendedProps['is_occupied']) && $extendedProps['is_occupied']) {

@@ -6,6 +6,7 @@ use App\Models\DoctorShift;
 use App\Models\Doctor;
 use App\Models\Cabinet;
 use App\Services\CalendarFilterService;
+use App\Services\TimezoneService;
 use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DateTimePicker;
@@ -41,9 +42,10 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
     protected $listeners = ['refetchEvents', 'shiftFiltersUpdated', '$refresh'];
     
     /**
-     * Сервис для работы с фильтрами
+     * Сервисы для работы с фильтрами и часовыми поясами
      */
     protected ?CalendarFilterService $filterService = null;
+    protected ?TimezoneService $timezoneService = null;
     
     public function getFilterService(): CalendarFilterService
     {
@@ -51,6 +53,14 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
             $this->filterService = app(CalendarFilterService::class);
         }
         return $this->filterService;
+    }
+    
+    public function getTimezoneService(): TimezoneService
+    {
+        if ($this->timezoneService === null) {
+            $this->timezoneService = app(TimezoneService::class);
+        }
+        return $this->timezoneService;
     }
 
     /**
@@ -106,6 +116,16 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                 'minute' => '2-digit',
                 'hour12' => false,            // 24-часовой формат
             ],
+            'eventDidMount' => 'function(info) {
+                // Добавляем стили для прошедших смен
+                if (info.event.extendedProps.is_past) {
+                    info.el.style.opacity = "0.6";
+                    info.el.style.filter = "grayscale(50%)";
+                    info.el.title = "Прошедшая смена";
+                } else {
+                    info.el.title = "Активная смена";
+                }
+            }',
         ];
     }
 
@@ -128,6 +148,20 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
         // Преобразуем смены в формат FullCalendar
         return $query->get()
             ->map(function (DoctorShift $shift) {
+                $shiftStart = \Carbon\Carbon::parse($shift->start_time);
+                $shiftEnd = \Carbon\Carbon::parse($shift->end_time);
+                
+                // Получаем часовой пояс города филиала
+                $cityId = $shift->cabinet->branch->city_id;
+                $cityTimezone = $this->getTimezoneService()->getCityTimezone($cityId);
+                
+                // Конвертируем время смены в часовой пояс города
+                $shiftStartInCity = $shiftStart->setTimezone($cityTimezone);
+                
+                // Проверяем, прошла ли дата (не время!) в часовом поясе города
+                $nowInCity = $this->getTimezoneService()->nowInCityTimezone($cityId);
+                $isPast = $shiftStartInCity->format('Y-m-d') < $nowInCity->format('Y-m-d');
+                
                 return [
                     'id' => $shift->id,
                     'title' => ($shift->doctor->full_name ?? 'Врач не назначен') . ' - ' . ($shift->cabinet->name ?? 'Кабинет не указан'),
@@ -135,13 +169,17 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                     'end' => $shift->end_time,
                     'backgroundColor' => $this->getShiftColor($shift),
                     'borderColor' => $this->getShiftColor($shift),
+                    'classNames' => $isPast ? ['past-shift'] : ['active-shift'],
                     'extendedProps' => [
                         'doctor_id' => $shift->doctor_id,
                         'doctor_name' => $shift->doctor->full_name ?? 'Врач не назначен',
                         'cabinet_id' => $shift->cabinet_id,
                         'cabinet_name' => $shift->cabinet->name ?? 'Кабинет не указан',
                         'branch_name' => $shift->cabinet->branch->name ?? 'Филиал не указан',
-
+                        'city_id' => $cityId,
+                        'city_timezone' => $cityTimezone,
+                        'is_past' => $isPast,
+                        'shift_start_city_time' => $shiftStartInCity->format('Y-m-d H:i:s'),
                     ]
                 ];
             })
@@ -216,7 +254,25 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
 
     protected function getShiftColor(DoctorShift $shift): string
     {
-        // Цвета для разных кабинетов
+        // Проверяем, прошла ли дата смены
+        $shiftStart = \Carbon\Carbon::parse($shift->start_time);
+        $cityId = $shift->cabinet->branch->city_id;
+        $nowInCity = $this->getTimezoneService()->nowInCityTimezone($cityId);
+        
+        if ($shiftStart->format('Y-m-d') < $nowInCity->format('Y-m-d')) {
+            // Для прошедших смен используем серые цвета
+            $pastColors = [
+                '#9CA3AF', // серый
+                '#6B7280', // темно-серый
+                '#4B5563', // еще темнее
+                '#374151', // очень темный
+            ];
+            
+            $cabinetId = $shift->cabinet_id ?? 0;
+            return $pastColors[$cabinetId % count($pastColors)];
+        }
+        
+        // Цвета для активных смен
         $colors = [
             '#3B82F6', // синий
             '#10B981', // зеленый

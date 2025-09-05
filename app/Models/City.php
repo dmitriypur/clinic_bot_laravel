@@ -11,6 +11,7 @@ class City extends Model
     protected $fillable = [
         'name',
         'status',
+        'timezone',
     ];
 
     protected $casts = [

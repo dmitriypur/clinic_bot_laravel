@@ -144,6 +144,13 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     console.error("Ошибка в eventDidMount:", e);
                 }
             }',
+            'viewDidMount' => 'function(info) {
+                console.log("=== КАЛЕНДАРЬ ЗАГРУЖЕН ===");
+                console.log("View:", info.view.type);
+                console.log("Start:", info.view.activeStart);
+                console.log("End:", info.view.activeEnd);
+                console.log("========================");
+            }',
         ];
     }
 
@@ -162,12 +169,18 @@ class AppointmentCalendarWidget extends FullCalendarWidget
      */
     public function fetchEvents(array $fetchInfo): array
     {
+        \Log::info('=== FETCH EVENTS START ===');
+        \Log::info('FetchInfo:', $fetchInfo);
+        
         $user = auth()->user();
         
         // Если пользователь не аутентифицирован, возвращаем пустой массив
         if (!$user) {
+            \Log::info('User not authenticated');
             return [];
         }
+        
+        \Log::info('User authenticated:', ['id' => $user->id, 'role' => $user->getRoleNames()]);
         
         // Добавляем уникальный идентификатор для принудительного обновления
         $fetchInfo['_timestamp'] = time();
@@ -180,7 +193,13 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         header('Expires: 0');
         
         // Используем сервис для генерации событий
-        return $this->getEventService()->generateEvents($fetchInfo, $this->filters, $user);
+        $events = $this->getEventService()->generateEvents($fetchInfo, $this->filters, $user);
+        
+        \Log::info('Generated events count:', count($events));
+        \Log::info('Events:', $events);
+        \Log::info('=== FETCH EVENTS END ===');
+        
+        return $events;
     }
 
     /**

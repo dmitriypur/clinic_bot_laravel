@@ -495,43 +495,71 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         $user = auth()->user();
         $extendedProps = $data;
         
-        // Находим заявку по кабинету и времени приема
-        $slotStart = $extendedProps['slot_start'];
-        if (is_string($slotStart)) {
-            $slotStart = \Carbon\Carbon::parse($slotStart); // Преобразуем строку в объект Carbon
-        }
-        
-        // Строим запрос для поиска заявки
-        // Загружаем связанные данные для отображения в форме
-        $applicationQuery = Application::query()
-            ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
-            ->where('cabinet_id', $extendedProps['cabinet_id'])
-            ->where('appointment_datetime', $slotStart);
-        
-        // Фильтрация по ролям
-        if ($user->isPartner()) {
-            // Партнер видит только заявки в своих клиниках
-            $applicationQuery->where('clinic_id', $user->clinic_id);
-        } elseif ($user->isDoctor()) {
-            // Врач видит только заявки где он назначен врачом
-            $applicationQuery->where('doctor_id', $user->doctor_id);
-        }
-        
-        $application = $applicationQuery->first();
+        // Проверяем, есть ли данные заявки в событии
+        if (isset($extendedProps['application_id']) && $extendedProps['application_id']) {
+            // Используем данные из события, но загружаем полную модель для редактирования
+            $application = Application::with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
+                ->find($extendedProps['application_id']);
+                
+            if (!$application) {
+                Notification::make()
+                    ->title('Ошибка')
+                    ->body('Заявка не найдена')
+                    ->danger()
+                    ->send();
+                return;
+            }
+            
+            // Проверяем права доступа
+            if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
+                Notification::make()
+                    ->title('Ошибка доступа')
+                    ->body('Вы можете просматривать только заявки своей клиники')
+                    ->danger()
+                    ->send();
+                return;
+            } elseif ($user->isDoctor() && $application->doctor_id !== $user->doctor_id) {
+                Notification::make()
+                    ->title('Ошибка доступа')
+                    ->body('Вы можете просматривать только свои заявки')
+                    ->danger()
+                    ->send();
+                return;
+            }
+        } else {
+            // Fallback: ищем заявку по времени (старый способ)
+            $slotStart = $extendedProps['slot_start'];
+            if (is_string($slotStart)) {
+                $slotStart = \Carbon\Carbon::parse($slotStart);
+            }
+            
+            $applicationQuery = Application::query()
+                ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
+                ->where('cabinet_id', $extendedProps['cabinet_id'])
+                ->where('appointment_datetime', $slotStart);
+            
+            // Фильтрация по ролям
+            if ($user->isPartner()) {
+                $applicationQuery->where('clinic_id', $user->clinic_id);
+            } elseif ($user->isDoctor()) {
+                $applicationQuery->where('doctor_id', $user->doctor_id);
+            }
+            
+            $application = $applicationQuery->first();
 
-        if (!$application) {
-                    Notification::make()
-            ->title('Ошибка')
-            ->body('Заявка не найдена')
-            ->danger()
-            ->send();
-        return;
-    }
+            if (!$application) {
+                Notification::make()
+                    ->title('Ошибка')
+                    ->body('Заявка не найдена')
+                    ->danger()
+                    ->send();
+                return;
+            }
+        }
 
         // Заполняем данные для формы просмотра/редактирования
-        // Включаем как служебную информацию, так и данные пациента
         $this->slotData = [
-            'application_id' => $application->id, // ID заявки для обновления
+            'application_id' => $application->id,
             'city_id' => $application->city_id,
             'city_name' => $application->city->name,
             'clinic_id' => $application->clinic_id,
@@ -543,25 +571,17 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             'doctor_id' => $application->doctor_id,
             'doctor_name' => $application->doctor->full_name,
             'appointment_datetime' => $application->appointment_datetime,
-            'full_name' => $application->full_name, // ФИО ребенка
-            'phone' => $application->phone, // Телефон
-            'full_name_parent' => $application->full_name_parent, // ФИО родителя
-            'birth_date' => $application->birth_date, // Дата рождения
-            'promo_code' => $application->promo_code, // Промокод
+            'full_name' => $application->full_name,
+            'phone' => $application->phone,
+            'full_name_parent' => $application->full_name_parent,
+            'birth_date' => $application->birth_date,
+            'promo_code' => $application->promo_code,
         ];
 
         // Устанавливаем запись для действий
         $this->record = $application;
         
-        // Открываем форму для всех ролей, но с разными правами
-        // if ($user->isDoctor()) {
-        //     // Для врача показываем форму только для просмотра
-        //     $this->mountAction('view');
-        // } else {
-        //     // Открываем форму редактирования для партнеров и админов
-        //     $this->mountAction('view');
-        // }
-
+        // Открываем модальное окно для просмотра/редактирования заявки
         $this->mountAction('view');
     }
 
@@ -1095,6 +1115,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         ];
     }
     
+
     /**
      * Обработчик события обновления календаря
      * 

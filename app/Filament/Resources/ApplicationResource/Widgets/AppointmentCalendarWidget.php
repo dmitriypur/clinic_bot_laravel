@@ -135,32 +135,8 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 'hour12' => false, // 24-часовой формат
             ],
             'eventDidMount' => 'function(info) {
-                // Добавляем стили для прошедших записей
-                if (info.event.extendedProps.is_past) {
-                    info.el.style.opacity = "0.6";
-                    info.el.style.filter = "grayscale(50%)";
-                    if (info.event.extendedProps.is_occupied) {
-                        info.el.title = "Прошедшая запись: " + info.event.title;
-                    } else {
-                        info.el.title = "Прошедший свободный слот";
-                    }
-                } else {
-                    if (info.event.extendedProps.is_occupied) {
-                        info.el.title = "Активная запись: " + info.event.title;
-                    } else {
-                        info.el.title = "Свободный слот для записи";
-                    }
-                }
-                
-                // Логируем ВСЕ события для отладки
-                console.log("=== СОБЫТИЕ МОНТИРУЕТСЯ ===");
-                console.log("Event ID:", info.event.id);
-                console.log("Title:", info.event.title);
-                console.log("Is Occupied:", info.event.extendedProps.is_occupied);
+                console.log("СОБЫТИЕ МОНТИРУЕТСЯ:", info.event.id);
                 console.log("Application ID:", info.event.extendedProps.application_id);
-                console.log("Cabinet ID:", info.event.extendedProps.cabinet_id);
-                console.log("Slot Start:", info.event.extendedProps.slot_start);
-                console.log("==========================");
             }',
         ];
     }

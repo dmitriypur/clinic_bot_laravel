@@ -563,13 +563,16 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 $slotStart = \Carbon\Carbon::parse($slotStart);
             }
             
-            // Конвертируем UTC время слота в локальное время для поиска в базе данных
-            $slotStartLocal = $slotStart->setTimezone(config('app.timezone', 'UTC'));
+            // Для MySQL: используем время слота как есть, так как в базе хранится локальное время
+            // Для SQLite: конвертируем UTC в локальное время
+            $slotStartForQuery = config('database.default') === 'mysql' 
+                ? $slotStart->format('Y-m-d H:i:s')
+                : $slotStart->setTimezone(config('app.timezone', 'UTC'));
             
             $applicationQuery = Application::query()
                 ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
                 ->where('cabinet_id', $extendedProps['cabinet_id'])
-                ->where('appointment_datetime', $slotStartLocal);
+                ->where('appointment_datetime', $slotStartForQuery);
             
             // Сначала ищем заявку без фильтрации по ролям
             $application = $applicationQuery->first();

@@ -73,12 +73,15 @@ class CalendarEventService
      */
     private function isSlotOccupied(int $cabinetId, Carbon $slotStart, User $user): bool
     {
-        // Конвертируем UTC время слота в локальное время для поиска в базе данных
-        $slotStartLocal = $slotStart->setTimezone(config('app.timezone', 'UTC'));
+        // Для MySQL: используем время слота как есть, так как в базе хранится локальное время
+        // Для SQLite: конвертируем UTC в локальное время
+        $slotStartForQuery = config('database.default') === 'mysql' 
+            ? $slotStart->format('Y-m-d H:i:s')
+            : $slotStart->setTimezone(config('app.timezone', 'UTC'));
         
         $application = Application::query()
             ->where('cabinet_id', $cabinetId)
-            ->where('appointment_datetime', $slotStartLocal)
+            ->where('appointment_datetime', $slotStartForQuery)
             ->first();
             
         if (!$application) {
@@ -100,13 +103,16 @@ class CalendarEventService
      */
     private function getSlotApplication(int $cabinetId, Carbon $slotStart, User $user): ?Application
     {
-        // Конвертируем UTC время слота в локальное время для поиска в базе данных
-        $slotStartLocal = $slotStart->setTimezone(config('app.timezone', 'UTC'));
+        // Для MySQL: используем время слота как есть, так как в базе хранится локальное время
+        // Для SQLite: конвертируем UTC в локальное время
+        $slotStartForQuery = config('database.default') === 'mysql' 
+            ? $slotStart->format('Y-m-d H:i:s')
+            : $slotStart->setTimezone(config('app.timezone', 'UTC'));
         
         $query = Application::query()
             ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
             ->where('cabinet_id', $cabinetId)
-            ->where('appointment_datetime', $slotStartLocal);
+            ->where('appointment_datetime', $slotStartForQuery);
             
         // Сначала ищем заявку без фильтрации по ролям
         $application = $query->first();
@@ -114,7 +120,8 @@ class CalendarEventService
         \Log::info('Поиск заявки в слоте', [
             'cabinet_id' => $cabinetId,
             'slot_start_utc' => $slotStart,
-            'slot_start_local' => $slotStartLocal,
+            'slot_start_for_query' => $slotStartForQuery,
+            'database_type' => config('database.default'),
             'user_id' => $user->id,
             'user_role' => $user->getRoleNames()->first(),
             'found_application_id' => $application ? $application->id : null,

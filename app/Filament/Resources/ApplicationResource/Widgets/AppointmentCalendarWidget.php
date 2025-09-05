@@ -154,7 +154,13 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 
                 // Принудительно обновляем extendedProps для занятых слотов
                 if (info.event.extendedProps.is_occupied && info.event.extendedProps.application_id) {
-                    console.log("Обновляем extendedProps для события:", info.event.id, "application_id:", info.event.extendedProps.application_id);
+                    console.log("=== ОТЛАДКА СОБЫТИЯ ===");
+                    console.log("Event ID:", info.event.id);
+                    console.log("Application ID:", info.event.extendedProps.application_id);
+                    console.log("Cabinet ID:", info.event.extendedProps.cabinet_id);
+                    console.log("Slot Start:", info.event.extendedProps.slot_start);
+                    console.log("Full extendedProps:", JSON.stringify(info.event.extendedProps, null, 2));
+                    console.log("========================");
                 }
             }',
         ];
@@ -514,7 +520,10 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         \Log::info('onOccupiedSlotClick вызван', [
             'extendedProps' => $extendedProps,
             'user_id' => $user->id,
-            'user_role' => $user->getRoleNames()->first()
+            'user_role' => $user->getRoleNames()->first(),
+            'received_application_id' => $extendedProps['application_id'] ?? 'не указан',
+            'received_cabinet_id' => $extendedProps['cabinet_id'] ?? 'не указан',
+            'received_slot_start' => $extendedProps['slot_start'] ?? 'не указан'
         ]);
         
         // Проверяем, есть ли данные заявки в событии

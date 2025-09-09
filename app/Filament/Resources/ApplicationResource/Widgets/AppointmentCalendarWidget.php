@@ -163,18 +163,12 @@ class AppointmentCalendarWidget extends FullCalendarWidget
      */
     public function fetchEvents(array $fetchInfo): array
     {
-        \Log::info('=== FETCH EVENTS START ===');
-        \Log::info('FetchInfo:', $fetchInfo);
-        
         $user = auth()->user();
         
         // Если пользователь не аутентифицирован, возвращаем пустой массив
         if (!$user) {
-            \Log::info('User not authenticated');
             return [];
         }
-        
-        \Log::info('User authenticated:', ['id' => $user->id, 'role' => $user->getRoleNames()]);
         
         // Добавляем уникальный идентификатор для принудительного обновления
         $fetchInfo['_timestamp'] = time();
@@ -189,9 +183,6 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         // Используем сервис для генерации событий
         $events = $this->getEventService()->generateEvents($fetchInfo, $this->filters, $user);
         
-        \Log::info('Generated events count:', ['count' => count($events)]);
-        \Log::info('Events:', ['events' => $events]);
-        \Log::info('=== FETCH EVENTS END ===');
         
         return $events;
     }
@@ -510,42 +501,14 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         $user = auth()->user();
         $extendedProps = $data;
         
-        // Отладочная информация
-        \Log::info('onOccupiedSlotClick вызван', [
-            'extendedProps' => $extendedProps,
-            'user_id' => $user->id,
-            'user_role' => $user->getRoleNames()->first(),
-            'received_application_id' => $extendedProps['application_id'] ?? 'не указан',
-            'received_cabinet_id' => $extendedProps['cabinet_id'] ?? 'не указан',
-            'received_slot_start' => $extendedProps['slot_start'] ?? 'не указан'
-        ]);
-        
-        // Дополнительное логирование для отладки
-        $this->js("console.log('=== ОТЛАДКА EXTENDEDPROPS ==='); console.log('Full extendedProps:', " . json_encode($extendedProps) . "); console.log('=======================');");
-        
-        // Добавляем JavaScript логирование
-        $this->js('console.log("=== PHP ВЫЗВАЛ onOccupiedSlotClick ===");');
-        $this->js('console.log("Application ID:", ' . ($extendedProps['application_id'] ?? 'null') . ');');
-        $this->js('console.log("Cabinet ID:", ' . ($extendedProps['cabinet_id'] ?? 'null') . ');');
-        $this->js('console.log("Slot Start:", "' . ($extendedProps['slot_start'] ?? 'null') . '");');
-        $this->js('console.log("========================");');
-        
         // Проверяем, есть ли данные заявки в событии
         if (isset($extendedProps['application_id']) && $extendedProps['application_id']) {
-            \Log::info('Ищем заявку по application_id', ['application_id' => $extendedProps['application_id']]);
             
             // Используем данные из события, но загружаем полную модель для редактирования
             $application = Application::with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
                 ->find($extendedProps['application_id']);
                 
-            \Log::info('Результат поиска заявки', [
-                'application_id' => $extendedProps['application_id'],
-                'found' => $application ? 'да' : 'нет',
-                'application_data' => $application ? $application->toArray() : null
-            ]);
-                
             if (!$application) {
-                \Log::error('Заявка не найдена по application_id', ['application_id' => $extendedProps['application_id']]);
                 Notification::make()
                     ->title('Ошибка')
                     ->body('Заявка не найдена')
@@ -572,10 +535,6 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             }
         } else {
             // Fallback: ищем заявку по времени (старый способ)
-            \Log::info('Ищем заявку по fallback методу', [
-                'cabinet_id' => $extendedProps['cabinet_id'] ?? 'не указан',
-                'slot_start' => $extendedProps['slot_start'] ?? 'не указан'
-            ]);
             
             $slotStart = $extendedProps['slot_start'];
             if (is_string($slotStart)) {
@@ -599,33 +558,14 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             if ($application) {
                 // Проверяем права доступа после нахождения заявки
                 if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
-                    \Log::info('Партнер не имеет доступа к заявке', [
-                        'user_clinic_id' => $user->clinic_id,
-                        'application_clinic_id' => $application->clinic_id
-                    ]);
                     $application = null;
                 } elseif ($user->isDoctor() && $application->doctor_id !== $user->doctor_id) {
-                    \Log::info('Врач не имеет доступа к заявке', [
-                        'user_doctor_id' => $user->doctor_id,
-                        'application_doctor_id' => $application->doctor_id
-                    ]);
                     $application = null;
                 }
             }
             
-            \Log::info('SQL запрос для поиска заявки', [
-                'sql' => $applicationQuery->toSql(),
-                'bindings' => $applicationQuery->getBindings()
-            ]);
 
             if (!$application) {
-                \Log::error('Заявка не найдена по fallback методу', [
-                    'cabinet_id' => $extendedProps['cabinet_id'],
-                    'slot_start' => $slotStart,
-                    'user_role' => $user->getRoleNames()->first(),
-                    'user_clinic_id' => $user->clinic_id ?? null,
-                    'user_doctor_id' => $user->doctor_id ?? null
-                ]);
                 Notification::make()
                     ->title('Ошибка')
                     ->body('Заявка не найдена')
@@ -633,8 +573,6 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     ->send();
                 return;
             }
-            
-            \Log::info('Заявка найдена по fallback методу', ['application_id' => $application->id]);
         }
 
         // Заполняем данные для формы просмотра/редактирования
@@ -656,13 +594,14 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             'full_name_parent' => $application->full_name_parent,
             'birth_date' => $application->birth_date,
             'promo_code' => $application->promo_code,
+            'appointment_status' => $application->appointment_status,
         ];
 
         // Устанавливаем запись для действий
         $this->record = $application;
         
         // Открываем модальное окно для просмотра/редактирования заявки
-        $this->mountAction('view');
+        $this->mountAction('viewAppointment');
     }
 
 
@@ -688,7 +627,8 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 \Filament\Actions\Action::make('viewAppointment')
                     ->label('Информация о записи')
                     ->icon('heroicon-o-eye')
-                    ->visible(fn() => auth()->user()->isDoctor())
+                    ->visible(fn() => auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin())
+                    ->modalCancelActionLabel('Закрыть')
                     ->form([
                         Grid::make(2)
                             ->schema([
@@ -780,6 +720,12 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     ->label('Промокод')
                                     ->disabled()
                                     ->dehydrated(false),
+                                
+                                TextInput::make('appointment_status')
+                                    ->label('Статус приема')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->formatStateUsing(fn($state) => $this->record ? $this->record->getStatusLabel() : 'Неизвестно'),
                             ]),
                     ])
                     ->mountUsing(function (\Filament\Forms\Form $form) {
@@ -798,14 +744,63 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                 'full_name_parent' => $this->slotData['full_name_parent'] ?? '',
                                 'birth_date' => $this->slotData['birth_date'] ?? '',
                                 'promo_code' => $this->slotData['promo_code'] ?? '',
+                                'appointment_status' => $this->slotData['appointment_status'] ?? null,
                             ]);
                         }
                     })
                     ->extraModalFooterActions([
-                        \Filament\Actions\Action::make('close')
-                            ->label('Закрыть')
-                            ->color('gray')
-                            ->action(fn() => $this->closeModal()),
+                        // Кнопка "Начать прием"
+                        \Filament\Actions\Action::make('startAppointment')
+                            ->label('Начать прием')
+                            ->icon('heroicon-o-play')
+                            ->color('success')
+                            ->visible(function() {
+                                return $this->record && $this->record->isScheduled() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
+                            })
+                            ->action(function () {
+                                if ($this->record && $this->record->startAppointment()) {
+                                    \Filament\Notifications\Notification::make()
+                                        ->title('Прием начат')
+                                        ->body('Прием пациента успешно начат')
+                                        ->success()
+                                        ->send();
+                                    $this->refreshRecords();
+                                    $this->mountedAction = null;
+                                } else {
+                                    \Filament\Notifications\Notification::make()
+                                        ->title('Ошибка')
+                                        ->body('Не удалось начать прием')
+                                        ->danger()
+                                        ->send();
+                                }
+                            }),
+                        
+                        // Кнопка "Завершить прием"
+                        \Filament\Actions\Action::make('completeAppointment')
+                            ->label('Завершить прием')
+                            ->icon('heroicon-o-check-circle')
+                            ->color('warning')
+                            ->visible(function() {
+                                return $this->record && $this->record->isInProgress() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
+                            })
+                            ->action(function () {
+                                if ($this->record && $this->record->completeAppointment()) {
+                                    \Filament\Notifications\Notification::make()
+                                        ->title('Прием завершен')
+                                        ->body('Прием пациента успешно завершен')
+                                        ->success()
+                                        ->send();
+                                    $this->refreshRecords();
+                                    $this->mountedAction = null;
+                                } else {
+                                    \Filament\Notifications\Notification::make()
+                                        ->title('Ошибка')
+                                        ->body('Не удалось завершить прием')
+                                        ->danger()
+                                        ->send();
+                                }
+                            }),
+                        
                     ]),
             ];
         }
@@ -1016,13 +1011,6 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     // Объединяем данные формы с данными из слота
                     $applicationData = array_merge($this->slotData ?? [], $data);
                     
-                    // Отладочная информация
-                    \Log::info('Создание заявки', [
-                        'form_data' => $data,
-                        'slot_data' => $this->slotData ?? [],
-                        'merged_data' => $applicationData,
-                        'user' => $user->id
-                    ]);
                     
                     // Проверяем права доступа для партнеров
                     if ($user->isPartner()) {
@@ -1039,7 +1027,6 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     
                     try {
                         $application = Application::create($applicationData);
-                        \Log::info('Заявка создана', ['id' => $application->id]);
                     } catch (\Exception $e) {
                         \Log::error('Ошибка создания заявки', [
                             'error' => $e->getMessage(),
@@ -1066,8 +1053,9 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             \Filament\Actions\Action::make('viewAppointment')
                 ->label('Информация о записи')
                 ->icon('heroicon-o-eye')
-                ->visible(fn() => auth()->user()->isDoctor())
+                ->visible(fn() => auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin())
                 ->modalHeading('Информация о записи пациента')
+                ->modalCancelActionLabel('Закрыть')
                 ->form([
                     Grid::make(2)
                         ->schema([
@@ -1160,13 +1148,24 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                 ->disabled()
                                 ->dehydrated(false),
                         ]),
+                    
+                    // Поле статуса приема
+                    TextInput::make('appointment_status')
+                        ->label('Статус приема')
+                        ->disabled()
+                        ->dehydrated(false)
+                        ->formatStateUsing(fn($state) => $this->record ? $this->record->getStatusLabel() : 'Неизвестно'),
+                    
+                    // Сообщение для завершенных приемов
+                    \Filament\Forms\Components\Placeholder::make('completed_message')
+                        ->label('')
+                        ->content('Прием проведен')
+                        ->visible(fn() => $this->record && $this->record->isCompleted())
+                        ->extraAttributes([
+                            'style' => 'text-align: center; font-size: 18px; font-weight: bold; color: #15803d; background-color: #dcfce7; padding: 12px; border-radius: 8px; border: 1px solid #bbf7d0;'
+                        ]),
                 ])
                 ->mountUsing(function (\Filament\Forms\Form $form) {
-                    Notification::make()
-                        ->title('Отладка')
-                        ->body('mountUsing вызван для viewAppointment')
-                        ->info()
-                        ->send();
                     
                     // Заполняем форму данными из слота
                     if (!empty($this->slotData)) {
@@ -1187,10 +1186,62 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     }
                 })
                 ->extraModalFooterActions([
-                    \Filament\Actions\Action::make('close')
-                        ->label('Закрыть')
-                        ->color('gray')
-                        ->action(fn() => $this->closeModal()),
+                    // Кнопка "Начать прием"
+                    \Filament\Actions\Action::make('startAppointment')
+                        ->label('Начать прием')
+                        ->icon('heroicon-o-play')
+                        ->color('success')
+                        ->visible(function() {
+                            return $this->record && $this->record->isScheduled() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
+                        })
+                        ->action(function () {
+                            if ($this->record && $this->record->startAppointment()) {
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Прием начат')
+                                    ->body('Прием пациента успешно начат')
+                                    ->success()
+                                    ->send();
+                                
+                                // Обновляем календарь
+                                $this->refreshRecords();
+                                $this->mountedAction = null;
+                            } else {
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Ошибка')
+                                    ->body('Не удалось начать прием')
+                                    ->danger()
+                                    ->send();
+                            }
+                        }),
+                    
+                    // Кнопка "Завершить прием"
+                    \Filament\Actions\Action::make('completeAppointment')
+                        ->label('Завершить прием')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('warning')
+                        ->visible(function() {
+                            return $this->record && $this->record->isInProgress() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
+                        })
+                        ->action(function () {
+                            if ($this->record && $this->record->completeAppointment()) {
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Прием завершен')
+                                    ->body('Прием пациента успешно завершен')
+                                    ->success()
+                                    ->send();
+                                
+                                // Обновляем календарь
+                                $this->refreshRecords();
+                                $this->mountedAction = null;
+                            } else {
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Ошибка')
+                                    ->body('Не удалось завершить прием')
+                                    ->danger()
+                                    ->send();
+                            }
+                        }),
+                    
                 ]),
         ];
     }
@@ -1208,6 +1259,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         // Принудительно обновляем события календаря
         $this->dispatch('$refresh');
     }
+    
     
     /**
      * Принудительное обновление календаря

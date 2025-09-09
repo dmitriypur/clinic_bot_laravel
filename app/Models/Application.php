@@ -14,6 +14,11 @@ class Application extends Model
     public $incrementing = true;
     protected $keyType = 'integer';
 
+    // Константы статусов приема
+    const STATUS_SCHEDULED = 'scheduled';
+    const STATUS_IN_PROGRESS = 'in_progress';
+    const STATUS_COMPLETED = 'completed';
+
     protected $fillable = [
         'city_id',
         'clinic_id',
@@ -29,6 +34,7 @@ class Application extends Model
         'tg_user_id',
         'tg_chat_id',
         'send_to_1c',
+        'appointment_status',
     ];
 
     protected $casts = [
@@ -42,6 +48,7 @@ class Application extends Model
         'tg_user_id' => 'integer',
         'tg_chat_id' => 'integer',
         'send_to_1c' => 'boolean',
+        'appointment_status' => 'string',
     ];
 
     /**
@@ -106,5 +113,66 @@ class Application extends Model
     public function cabinet(): BelongsTo
     {
         return $this->belongsTo(Cabinet::class);
+    }
+
+    /**
+     * Проверяет, запланирован ли прием
+     */
+    public function isScheduled(): bool
+    {
+        return $this->appointment_status === self::STATUS_SCHEDULED;
+    }
+
+    /**
+     * Проверяет, идет ли прием в данный момент
+     */
+    public function isInProgress(): bool
+    {
+        return $this->appointment_status === self::STATUS_IN_PROGRESS;
+    }
+
+    /**
+     * Проверяет, завершен ли прием
+     */
+    public function isCompleted(): bool
+    {
+        return $this->appointment_status === self::STATUS_COMPLETED;
+    }
+
+    /**
+     * Начинает прием
+     */
+    public function startAppointment(): bool
+    {
+        if ($this->isScheduled()) {
+            $this->appointment_status = self::STATUS_IN_PROGRESS;
+            return $this->save();
+        }
+        return false;
+    }
+
+    /**
+     * Завершает прием
+     */
+    public function completeAppointment(): bool
+    {
+        if ($this->isInProgress()) {
+            $this->appointment_status = self::STATUS_COMPLETED;
+            return $this->save();
+        }
+        return false;
+    }
+
+    /**
+     * Возвращает человекочитаемое название статуса
+     */
+    public function getStatusLabel(): string
+    {
+        return match($this->appointment_status) {
+            self::STATUS_SCHEDULED => 'Запланирован',
+            self::STATUS_IN_PROGRESS => 'В процессе',
+            self::STATUS_COMPLETED => 'Завершен',
+            default => 'Неизвестно'
+        };
     }
 }

@@ -132,16 +132,8 @@ class CalendarEventService
         if ($application) {
             // Проверяем права доступа после нахождения заявки
             if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
-                \Log::info('Партнер не имеет доступа к заявке', [
-                    'user_clinic_id' => $user->clinic_id,
-                    'application_clinic_id' => $application->clinic_id
-                ]);
                 return null; // Партнер не имеет доступа к заявке из другой клиники
             } elseif ($user->isDoctor() && $application->doctor_id !== $user->doctor_id) {
-                \Log::info('Врач не имеет доступа к заявке', [
-                    'user_doctor_id' => $user->doctor_id,
-                    'application_doctor_id' => $application->doctor_id
-                ]);
                 return null; // Врач не имеет доступа к заявке другого врача
             }
         }
@@ -170,13 +162,28 @@ class CalendarEventService
         $isPast = $slotStartInCity->isPast();
         
         
-        // Определяем цвета в зависимости от времени и занятости
+        // Определяем цвета в зависимости от времени, занятости и статуса приема
         if ($isPast) {
             // Для прошедших слотов используем серые цвета
             $backgroundColor = $isOccupied ? '#6B7280' : '#9CA3AF'; // темно-серый для занятых, светло-серый для свободных
         } else {
-            // Для текущих/будущих слотов используем стандартные цвета
-            $backgroundColor = $isOccupied ? $config['colors']['occupied_slot'] : $config['colors']['free_slot'];
+            // Для текущих/будущих слотов используем цвета в зависимости от статуса приема
+            if ($isOccupied && $application) {
+                switch ($application->appointment_status) {
+                    case \App\Models\Application::STATUS_IN_PROGRESS:
+                        $backgroundColor = '#3B82F6'; // Синий для приема в процессе
+                        break;
+                    case \App\Models\Application::STATUS_COMPLETED:
+                        $backgroundColor = '#059669'; // Темно-зеленый для завершенного приема
+                        break;
+                    case \App\Models\Application::STATUS_SCHEDULED:
+                    default:
+                        $backgroundColor = $config['colors']['occupied_slot']; // Стандартный цвет для запланированного
+                        break;
+                }
+            } else {
+                $backgroundColor = $config['colors']['free_slot']; // Цвет для свободных слотов
+            }
         }
         
         $title = $isOccupied ? ($application ? $application->full_name : 'Занят') : 'Свободен';
@@ -223,12 +230,15 @@ class CalendarEventService
                 'slot_end' => $slot['end'],
                 'slot_start_city_time' => $slotStartInCity->format('Y-m-d H:i:s'),
                 'application_id' => $application ? $application->id : null,
+                'application_status' => $application ? $application->appointment_status : null,
                 'application_data' => $application ? [
                     'full_name' => $application->full_name,
                     'phone' => $application->phone,
                     'full_name_parent' => $application->full_name_parent,
                     'birth_date' => $application->birth_date,
                     'promo_code' => $application->promo_code,
+                    'appointment_status' => $application->appointment_status,
+                    'status_label' => $application->getStatusLabel(),
                 ] : null,
             ]
         ];

@@ -869,7 +869,11 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                             ->options(function (Get $get) {
                                                 $clinicId = $get('clinic_id');
                                                 if (!$clinicId) return [];
-                                                return \App\Models\Doctor::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
+                                                return \App\Models\Doctor::whereHas('clinics', function($query) use ($clinicId) {
+                                                    $query->where('clinic_id', $clinicId);
+                                                })->get()->mapWithKeys(function($doctor) {
+                                                    return [$doctor->id => $doctor->full_name];
+                                                })->toArray();
                                             }),
                                         
                                         DateTimePicker::make('appointment_datetime')
@@ -1480,7 +1484,11 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                         ->options(function (Get $get) {
                                             $clinicId = $get('clinic_id');
                                             if (!$clinicId) return [];
-                                            return \App\Models\Doctor::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
+                                            return \App\Models\Doctor::whereHas('clinics', function($query) use ($clinicId) {
+                                                $query->where('clinic_id', $clinicId);
+                                            })->get()->mapWithKeys(function($doctor) {
+                                                return [$doctor->id => $doctor->full_name];
+                                            })->toArray();
                                         }),
                                     
                                     DateTimePicker::make('appointment_datetime')

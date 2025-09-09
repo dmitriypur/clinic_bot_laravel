@@ -174,7 +174,7 @@ class CalendarEventService
                         $backgroundColor = '#3B82F6'; // Синий для приема в процессе
                         break;
                     case \App\Models\Application::STATUS_COMPLETED:
-                        $backgroundColor = '#059669'; // Темно-зеленый для завершенного приема
+                        $backgroundColor = '#4a7b6c'; // Темно-зеленый для завершенного приема
                         break;
                     case \App\Models\Application::STATUS_SCHEDULED:
                     default:

@@ -275,7 +275,7 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
         // Цвета для активных смен
         $colors = [
             '#3B82F6', // синий
-            '#10B981', // зеленый
+            '#31c090', // зеленый
             '#F59E0B', // желтый
             '#EF4444', // красный
             '#8B5CF6', // фиолетовый

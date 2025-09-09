@@ -39,7 +39,7 @@ return [
     ],
     
     'colors' => [
-        'free_slot' => '#10b981', // зеленый
+        'free_slot' => '#31c090', // зеленый
         'occupied_slot' => '#dc2626', // красный
         'doctor_shift' => '#3b82f6', // синий
         'holiday' => '#f59e0b', // оранжевый

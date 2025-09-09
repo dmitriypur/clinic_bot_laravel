@@ -801,6 +801,176 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                 }
                             }),
                         
+                        // Кнопка "Редактировать"
+                        \Filament\Actions\Action::make('edit_application')
+                            ->label('Редактировать')
+                            ->color('warning')
+                            ->icon('heroicon-o-pencil')
+                            ->visible(fn() => $this->record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $this->record->clinic_id === auth()->user()->clinic_id)))
+                            ->form([
+                                Grid::make(2)
+                                    ->schema([
+                                        Select::make('city_id')
+                                            ->label('Город')
+                                            ->options(function () {
+                                                return \App\Models\City::pluck('name', 'id')->toArray();
+                                            })
+                                            ->reactive()
+                                            ->afterStateUpdated(function (\Filament\Forms\Set $set) {
+                                                $set('clinic_id', null);
+                                                $set('branch_id', null);
+                                                $set('cabinet_id', null);
+                                                $set('doctor_id', null);
+                                            }),
+                                        
+                                        Select::make('clinic_id')
+                                            ->label('Клиника')
+                                            ->options(function (Get $get) {
+                                                $cityId = $get('city_id');
+                                                if (!$cityId) return [];
+                                                return \App\Models\Clinic::whereIn('id', function($q) use ($cityId) {
+                                                    $q->select('clinic_id')->from('branches')->where('city_id', $cityId);
+                                                })->pluck('name', 'id')->toArray();
+                                            })
+                                            ->reactive()
+                                            ->afterStateUpdated(function (\Filament\Forms\Set $set) {
+                                                $set('branch_id', null);
+                                                $set('cabinet_id', null);
+                                                $set('doctor_id', null);
+                                            }),
+                                        
+                                        Select::make('branch_id')
+                                            ->label('Филиал')
+                                            ->options(function (Get $get) {
+                                                $clinicId = $get('clinic_id');
+                                                if (!$clinicId) return [];
+                                                return \App\Models\Branch::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
+                                            })
+                                            ->reactive()
+                                            ->afterStateUpdated(function (\Filament\Forms\Set $set) {
+                                                $set('cabinet_id', null);
+                                                $set('doctor_id', null);
+                                            }),
+                                        
+                                        Select::make('cabinet_id')
+                                            ->label('Кабинет')
+                                            ->options(function (Get $get) {
+                                                $branchId = $get('branch_id');
+                                                if (!$branchId) return [];
+                                                return \App\Models\Cabinet::where('branch_id', $branchId)->pluck('name', 'id')->toArray();
+                                            })
+                                            ->reactive()
+                                            ->afterStateUpdated(function (\Filament\Forms\Set $set) {
+                                                $set('doctor_id', null);
+                                            }),
+                                        
+                                        Select::make('doctor_id')
+                                            ->label('Врач')
+                                            ->options(function (Get $get) {
+                                                $clinicId = $get('clinic_id');
+                                                if (!$clinicId) return [];
+                                                return \App\Models\Doctor::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
+                                            }),
+                                        
+                                        DateTimePicker::make('appointment_datetime')
+                                            ->label('Дата и время приема')
+                                            ->displayFormat('d.m.Y H:i')
+                                            ->native(false)
+                                            ->seconds(false),
+                                    ]),
+                                
+                                Grid::make(2)
+                                    ->schema([
+                                        TextInput::make('full_name')
+                                            ->label('ФИО пациента')
+                                            ->required()
+                                            ->maxLength(255),
+                                        
+                                        TextInput::make('phone')
+                                            ->label('Телефон')
+                                            ->tel()
+                                            ->required()
+                                            ->maxLength(20),
+                                        
+                                        TextInput::make('full_name_parent')
+                                            ->label('ФИО родителя/представителя')
+                                            ->maxLength(255),
+                                        
+                                        TextInput::make('birth_date')
+                                            ->label('Дата рождения')
+                                            ->maxLength(50),
+                                        
+                                        TextInput::make('promo_code')
+                                            ->label('Промо-код')
+                                            ->maxLength(50),
+                                    ]),
+                            ])
+                            ->mountUsing(function (\Filament\Forms\Form $form) {
+                                if ($this->record) {
+                                    $form->fill([
+                                        'city_id' => $this->record->city_id,
+                                        'clinic_id' => $this->record->clinic_id,
+                                        'branch_id' => $this->record->branch_id,
+                                        'cabinet_id' => $this->record->cabinet_id,
+                                        'doctor_id' => $this->record->doctor_id,
+                                        'appointment_datetime' => $this->record->appointment_datetime,
+                                        'full_name' => $this->record->full_name,
+                                        'phone' => $this->record->phone,
+                                        'full_name_parent' => $this->record->full_name_parent,
+                                        'birth_date' => $this->record->birth_date,
+                                        'promo_code' => $this->record->promo_code,
+                                    ]);
+                                }
+                            })
+                            ->action(function (array $data) {
+                                $user = auth()->user();
+                                
+                                // Проверяем права доступа
+                                if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
+                                    Notification::make()
+                                        ->title('Ошибка доступа')
+                                        ->body('Вы можете редактировать заявки только своей клиники')
+                                        ->danger()
+                                        ->send();
+                                    return;
+                                }
+                                
+                                $this->record->update($data);
+                                
+                                Notification::make()
+                                    ->title('Заявка обновлена')
+                                    ->body('Заявка успешно обновлена')
+                                    ->success()
+                                    ->send();
+                                    
+                                $this->refreshRecords();
+                                $this->mountedAction = null;
+                            }),
+                        
+                        // Кнопка "Удалить"
+                        \Filament\Actions\Action::make('delete_application')
+                            ->label('Удалить')
+                            ->color('danger')
+                            ->icon('heroicon-o-trash')
+                            ->visible(fn() => $this->record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $this->record->clinic_id === auth()->user()->clinic_id)))
+                            ->requiresConfirmation()
+                            ->modalHeading('Удаление заявки')
+                            ->modalDescription('Вы уверены, что хотите удалить эту заявку? Это действие нельзя отменить.')
+                            ->action(function () {
+                                if ($this->record) {
+                                    $this->record->delete();
+                                    
+                                    Notification::make()
+                                        ->title('Заявка удалена')
+                                        ->body('Заявка удалена из календаря')
+                                        ->success()
+                                        ->send();
+                                    
+                                    $this->refreshRecords();
+                                    $this->mountedAction = null;
+                                }
+                            }),
+                        
                     ]),
             ];
         }
@@ -1239,6 +1409,176 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     ->body('Не удалось завершить прием')
                                     ->danger()
                                     ->send();
+                            }
+                        }),
+                    
+                    // Кнопка "Редактировать"
+                    \Filament\Actions\Action::make('edit_application')
+                        ->label('Редактировать')
+                        ->color('warning')
+                        ->icon('heroicon-o-pencil')
+                        ->visible(fn() => $this->record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $this->record->clinic_id === auth()->user()->clinic_id)))
+                        ->form([
+                            Grid::make(2)
+                                ->schema([
+                                    Select::make('city_id')
+                                        ->label('Город')
+                                        ->options(function () {
+                                            return \App\Models\City::pluck('name', 'id')->toArray();
+                                        })
+                                        ->reactive()
+                                        ->afterStateUpdated(function (\Filament\Forms\Set $set) {
+                                            $set('clinic_id', null);
+                                            $set('branch_id', null);
+                                            $set('cabinet_id', null);
+                                            $set('doctor_id', null);
+                                        }),
+                                    
+                                    Select::make('clinic_id')
+                                        ->label('Клиника')
+                                        ->options(function (Get $get) {
+                                            $cityId = $get('city_id');
+                                            if (!$cityId) return [];
+                                            return \App\Models\Clinic::whereIn('id', function($q) use ($cityId) {
+                                                $q->select('clinic_id')->from('branches')->where('city_id', $cityId);
+                                            })->pluck('name', 'id')->toArray();
+                                        })
+                                        ->reactive()
+                                        ->afterStateUpdated(function (\Filament\Forms\Set $set) {
+                                            $set('branch_id', null);
+                                            $set('cabinet_id', null);
+                                            $set('doctor_id', null);
+                                        }),
+                                    
+                                    Select::make('branch_id')
+                                        ->label('Филиал')
+                                        ->options(function (Get $get) {
+                                            $clinicId = $get('clinic_id');
+                                            if (!$clinicId) return [];
+                                            return \App\Models\Branch::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
+                                        })
+                                        ->reactive()
+                                        ->afterStateUpdated(function (\Filament\Forms\Set $set) {
+                                            $set('cabinet_id', null);
+                                            $set('doctor_id', null);
+                                        }),
+                                    
+                                    Select::make('cabinet_id')
+                                        ->label('Кабинет')
+                                        ->options(function (Get $get) {
+                                            $branchId = $get('branch_id');
+                                            if (!$branchId) return [];
+                                            return \App\Models\Cabinet::where('branch_id', $branchId)->pluck('name', 'id')->toArray();
+                                        })
+                                        ->reactive()
+                                        ->afterStateUpdated(function (\Filament\Forms\Set $set) {
+                                            $set('doctor_id', null);
+                                        }),
+                                    
+                                    Select::make('doctor_id')
+                                        ->label('Врач')
+                                        ->options(function (Get $get) {
+                                            $clinicId = $get('clinic_id');
+                                            if (!$clinicId) return [];
+                                            return \App\Models\Doctor::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
+                                        }),
+                                    
+                                    DateTimePicker::make('appointment_datetime')
+                                        ->label('Дата и время приема')
+                                        ->displayFormat('d.m.Y H:i')
+                                        ->native(false)
+                                        ->seconds(false),
+                                ]),
+                            
+                            Grid::make(2)
+                                ->schema([
+                                    TextInput::make('full_name')
+                                        ->label('ФИО пациента')
+                                        ->required()
+                                        ->maxLength(255),
+                                    
+                                    TextInput::make('phone')
+                                        ->label('Телефон')
+                                        ->tel()
+                                        ->required()
+                                        ->maxLength(20),
+                                    
+                                    TextInput::make('full_name_parent')
+                                        ->label('ФИО родителя/представителя')
+                                        ->maxLength(255),
+                                    
+                                    TextInput::make('birth_date')
+                                        ->label('Дата рождения')
+                                        ->maxLength(50),
+                                    
+                                    TextInput::make('promo_code')
+                                        ->label('Промо-код')
+                                        ->maxLength(50),
+                                ]),
+                        ])
+                        ->mountUsing(function (\Filament\Forms\Form $form) {
+                            if ($this->record) {
+                                $form->fill([
+                                    'city_id' => $this->record->city_id,
+                                    'clinic_id' => $this->record->clinic_id,
+                                    'branch_id' => $this->record->branch_id,
+                                    'cabinet_id' => $this->record->cabinet_id,
+                                    'doctor_id' => $this->record->doctor_id,
+                                    'appointment_datetime' => $this->record->appointment_datetime,
+                                    'full_name' => $this->record->full_name,
+                                    'phone' => $this->record->phone,
+                                    'full_name_parent' => $this->record->full_name_parent,
+                                    'birth_date' => $this->record->birth_date,
+                                    'promo_code' => $this->record->promo_code,
+                                ]);
+                            }
+                        })
+                        ->action(function (array $data) {
+                            $user = auth()->user();
+                            
+                            // Проверяем права доступа
+                            if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
+                                Notification::make()
+                                    ->title('Ошибка доступа')
+                                    ->body('Вы можете редактировать заявки только своей клиники')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            }
+                            
+                            $this->record->update($data);
+                            
+                            Notification::make()
+                                ->title('Заявка обновлена')
+                                ->body('Заявка успешно обновлена')
+                                ->success()
+                                ->send();
+                                
+                            $this->refreshRecords();
+                            $this->mountedAction = null;
+                        }),
+                    
+                    // Кнопка "Удалить"
+                    \Filament\Actions\Action::make('delete_application')
+                        ->label('Удалить')
+                        ->color('danger')
+                        ->icon('heroicon-o-trash')
+                        ->visible(fn() => $this->record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $this->record->clinic_id === auth()->user()->clinic_id)))
+                        ->requiresConfirmation()
+                        ->modalHeading('Удаление заявки')
+                        ->modalDescription('Вы уверены, что хотите удалить эту заявку? Это действие нельзя отменить.')
+                        ->action(function () {
+                            if ($this->record) {
+                                $this->record->delete();
+                                
+                                Notification::make()
+                                    ->title('Заявка удалена')
+                                    ->body('Заявка удалена из календаря')
+                                    ->success()
+                                    ->send();
+                                
+                                $this->refreshRecords();
+                                $this->mountedAction = null;
                             }
                         }),
                     

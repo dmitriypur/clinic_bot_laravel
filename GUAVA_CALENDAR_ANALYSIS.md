@@ -520,3 +520,4 @@ Cache::remember("calendar_events_{$userId}_{$dateRange}", 300, function() {
 *Текущий пакет: saade/filament-fullcalendar v3.0*  
 *Альтернатива: GuavaCZ/calendar v2.0.2*
 
+

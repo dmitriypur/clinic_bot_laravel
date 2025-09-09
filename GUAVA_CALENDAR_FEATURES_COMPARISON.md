@@ -530,3 +530,4 @@ public function onEventClick(array $data): void
 *Текущий пакет: saade/filament-fullcalendar v3.0*  
 *Альтернатива: GuavaCZ/calendar v2.0.2*
 
+

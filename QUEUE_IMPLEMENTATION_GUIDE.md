@@ -990,3 +990,4 @@ class QueueMonitor extends Command
 *Документ создан: {{ date('Y-m-d H:i:s') }}*
 *Версия приложения: Laravel 11.x*
 
+

@@ -96,9 +96,12 @@ class CabinetResource extends Resource
     {
         return $table
             ->columns([
-                // Название филиала
+                // Название филиала с клиникой
                 TextColumn::make('branch.name')
-                    ->label('Филиал'),
+                    ->label('Филиал')
+                    ->formatStateUsing(function ($record) {
+                        return $record->branch->name . ' (' . $record->branch->clinic->name . ')';
+                    }),
                 // Название кабинета
                 TextColumn::make('name')
                     ->label('Название кабинета'),
@@ -121,7 +124,6 @@ class CabinetResource extends Resource
                 CabinetFilters::make(),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),    // Просмотр
                 Tables\Actions\EditAction::make(),    // Редактирование
                 Tables\Actions\DeleteAction::make(),  // Удаление
             ])
@@ -141,6 +143,9 @@ class CabinetResource extends Resource
         $user = auth()->user();
         
         $query = parent::getEloquentQuery();
+        
+        // Добавляем eager loading для оптимизации запросов
+        $query->with(['branch.clinic']);
         
         // Фильтрация по ролям
         if ($user->isPartner()) {

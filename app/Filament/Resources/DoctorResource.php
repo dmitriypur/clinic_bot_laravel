@@ -140,12 +140,9 @@ class DoctorResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('last_name')
-                    ->label('Фамилия')
-                    ->searchable(),
-                TextColumn::make('first_name')
-                    ->label('Имя')
-                    ->searchable(),
+                TextColumn::make('full_name')
+                    ->label('ФИО')
+                    ->searchable(['first_name', 'last_name']),
                 TextColumn::make('clinics.name')
                     ->label('Клиники')
                     ->searchable()

@@ -19,6 +19,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
@@ -27,10 +28,10 @@ class ApplicationResource extends Resource
 {
     protected static ?string $model = Application::class;
 
-    protected static ?string $navigationLabel = 'Заявки';
-    protected static ?string $pluralNavigationLabel = 'Заявки';
-    protected static ?string $pluralLabel = 'Заявки';
-    protected static ?string $label = 'Заявка';
+    protected static ?string $navigationLabel = 'Записи на прием';
+    protected static ?string $pluralNavigationLabel = 'Записи на прием';
+    protected static ?string $pluralLabel = 'Записи на прием';
+    protected static ?string $label = 'Запись на прием';
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
     protected static ?int $navigationSort = 5;
@@ -274,9 +275,6 @@ class ApplicationResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('city.name')
-                    ->label('Город')
-                    ->searchable(),
                 TextColumn::make('clinic.name')
                     ->label('Клиника')
                     ->searchable(),
@@ -286,25 +284,44 @@ class ApplicationResource extends Resource
                     ->formatStateUsing(function ($record) {
                         return $record->branch ? $record->branch->name : '-';
                     }),
-                TextColumn::make('doctor.last_name')
-                    ->label('Врач')
-                    ->searchable(),
                 TextColumn::make('full_name')
                     ->label('Имя ребенка')
-                    ->searchable(),
-                TextColumn::make('phone')
-                    ->label('Телефон')
                     ->searchable(),
                 TextColumn::make('appointment_datetime')
                     ->label('Дата и время приема')
                     ->dateTime('d.m.Y H:i')
                     ->sortable(),
-                TextColumn::make('cabinet.name')
-                    ->label('Кабинет')
-                    ->searchable(),
+                TextColumn::make('appointment_status')
+                    ->label('Статус')
+                    ->formatStateUsing(function ($record) {
+                        return $record->appointment_datetime ? 'Запись на прием' : 'Заявка';
+                    })
+                    ->badge()
+                    ->color(function ($record) {
+                        return $record->appointment_datetime ? 'success' : 'warning';
+                    })
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        return $query->orderBy('appointment_datetime', $direction);
+                    }),
             ])
             ->filters([
                 ApplicationFilters::make(),
+                TernaryFilter::make('appointment_status')
+                    ->label('Тип записи')
+                    ->placeholder('Все записи')
+                    ->trueLabel('Записи на прием')
+                    ->falseLabel('Заявки')
+                    ->queries(
+                        true: fn (Builder $query) => $query->whereNotNull('appointment_datetime')
+                            ->whereNotNull('cabinet_id')
+                            ->whereNotNull('branch_id'),
+                        false: fn (Builder $query) => $query->where(function ($q) {
+                            $q->whereNull('appointment_datetime')
+                              ->orWhereNull('cabinet_id')
+                              ->orWhereNull('branch_id');
+                        }),
+                        blank: fn (Builder $query) => $query,
+                    ),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

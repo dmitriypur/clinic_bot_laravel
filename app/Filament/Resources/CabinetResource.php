@@ -30,7 +30,7 @@ class CabinetResource extends Resource
     protected static ?string $model = Cabinet::class;
 
     // Настройки интерфейса Filament
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';  // Иконка в навигации
+    protected static ?string $navigationIcon = 'heroicon-o-calendar-days';  // Иконка в навигации
     protected static ?string $modelLabel = 'Кабинет';  // Единственное число
     protected static ?string $pluralModelLabel = 'Кабинеты';  // Множественное число
     protected static ?string $navigationLabel = 'Кабинеты';  // Название в навигации

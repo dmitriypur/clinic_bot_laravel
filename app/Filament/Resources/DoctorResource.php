@@ -29,7 +29,7 @@ class DoctorResource extends Resource
     protected static ?string $label = 'Врач';
     protected static ?int $navigationSort = 4;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-user-circle';
 
     public static function getEloquentQuery(): Builder
     {

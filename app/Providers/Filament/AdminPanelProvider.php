@@ -4,6 +4,8 @@ namespace App\Providers\Filament;
 
 use Filament\Http\Middleware\Authenticate;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
+use Filament\Support\Facades\FilamentAsset;
+use Filament\Support\Facades\FilamentView;
 use Saade\FilamentFullCalendar\FilamentFullCalendarPlugin;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -23,6 +25,14 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
 {
+    public function boot(): void
+    {
+        // Подключаем кастомные стили
+        FilamentAsset::register([
+            \Filament\Support\Assets\Css::make('filament-custom', resource_path('css/filament-custom.css')),
+        ]);
+    }
+
     public function panel(Panel $panel): Panel
     {
         return $panel
@@ -34,6 +44,7 @@ class AdminPanelProvider extends PanelProvider
             ->passwordReset(false)
             ->emailVerification(false)
             ->sidebarCollapsibleOnDesktop()
+            ->sidebarWidth('14rem')
             ->colors([
                 'primary' => Color::Cyan,
             ])

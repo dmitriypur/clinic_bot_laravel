@@ -28,7 +28,7 @@ class ReviewResource extends Resource
     protected static ?string $pluralLabel = 'Отзывы';
     protected static ?string $label = 'Отзыв';
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
     protected static ?int $navigationSort = 6;
 
     public static function form(Form $form): Form

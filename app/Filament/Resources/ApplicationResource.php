@@ -32,7 +32,7 @@ class ApplicationResource extends Resource
     protected static ?string $pluralLabel = 'Заявки';
     protected static ?string $label = 'Заявка';
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
     protected static ?int $navigationSort = 5;
 
     public static function getEloquentQuery(): Builder

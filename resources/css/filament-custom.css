@@ -1,0 +1,27 @@
+/* Убираем ограничение ширины контейнера main */
+.fi-main {
+    max-width: none !important;
+    width: 100% !important;
+}
+
+/* Дополнительные стили для полной ширины */
+.fi-main-content {
+    max-width: none !important;
+    width: 100% !important;
+}
+
+/* Убираем ограничения у внутренних контейнеров */
+.fi-main .fi-container {
+    max-width: none !important;
+    width: 100% !important;
+}
+
+/* Стили для таблиц на полную ширину */
+.fi-main .fi-ta-table {
+    width: 100% !important;
+}
+
+/* Стили для форм на полную ширину */
+.fi-main .fi-fo-form {
+    width: 100% !important;
+}

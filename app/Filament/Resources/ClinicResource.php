@@ -27,7 +27,7 @@ class ClinicResource extends Resource
     protected static ?string $pluralLabel = 'Клиники';
     protected static ?string $label = 'Клиника';
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-plus';
 
     protected static ?int $navigationSort = 2;
 

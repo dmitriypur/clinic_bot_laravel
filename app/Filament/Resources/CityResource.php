@@ -28,7 +28,7 @@ class CityResource extends Resource
     protected static ?string $label = 'Город';
     protected static ?int $navigationSort = 1;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-building-office-2';
 
     public static function getEloquentQuery(): Builder
     {

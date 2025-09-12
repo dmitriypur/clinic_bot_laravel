@@ -63,18 +63,30 @@ class BidResource extends Resource
                     ->label('ФИО родителя'),
                 TextInput::make('full_name')
                     ->label('ФИО ребенка')
-                    ->required(),
+                    ->rules([
+                        fn (): \Closure => function (string $attribute, $value, \Closure $fail) {
+                            if (request()->isMethod('POST') && !$value) {
+                                $fail("Поле ФИО ребенка обязательно для заполнения.");
+                            }
+                        },
+                    ]),
                 DatePicker::make('birth_date')
                     ->label('Дата рождения'),
                 TextInput::make('phone')
                     ->label('Телефон')
                     ->tel()
-                    ->required(),
+                    ->rules([
+                        fn (): \Closure => function (string $attribute, $value, \Closure $fail) {
+                            if (request()->isMethod('POST') && !$value) {
+                                $fail("Поле телефон обязательно для заполнения.");
+                            }
+                        },
+                    ]),
                 TextInput::make('promo_code')
                     ->label('Промокод'),
                 Select::make('city_id')
                     ->label('Город')
-                    ->reactive()
+                    ->live()
                     ->options(function (callable $get) {
                         $user = auth()->user();
                         
@@ -90,15 +102,25 @@ class BidResource extends Resource
                         // Для остальных пользователей - все города
                         return \App\Models\City::pluck('name', 'id');
                     })
-                    ->required()
-                    ->afterStateUpdated(function (callable $set) {
-                        $set('clinic_id', null);
-                        $set('branch_id', null);
-                        $set('doctor_id', null);
+                    ->rules([
+                        fn (): \Closure => function (string $attribute, $value, \Closure $fail) {
+                            if (request()->isMethod('POST') && !$value) {
+                                $fail("Поле город обязательно для заполнения.");
+                            }
+                        },
+                    ])
+                    ->afterStateUpdated(function (callable $set, callable $get) {
+                        // Сбрасываем зависимые поля только если город действительно изменился
+                        $currentCityId = $get('city_id');
+                        if ($currentCityId) {
+                            $set('clinic_id', null);
+                            $set('branch_id', null);
+                            $set('doctor_id', null);
+                        }
                     }),
                 Select::make('clinic_id')
                     ->label('Клиника')
-                    ->reactive()
+                    ->live()
                     ->options(function (callable $get) {
                         $cityId = $get('city_id');
                         if (!$cityId) {
@@ -121,15 +143,26 @@ class BidResource extends Resource
                             $query->where('cities.id', $cityId);
                         })->pluck('name', 'id');
                     })
-                    ->afterStateUpdated(function (callable $set) {
-                        $set('branch_id', null);
-                        $set('doctor_id', null);
+                    ->afterStateUpdated(function (callable $set, callable $get) {
+                        // Сбрасываем зависимые поля только если клиника действительно изменилась
+                        $currentClinicId = $get('clinic_id');
+                        if ($currentClinicId) {
+                            $set('branch_id', null);
+                            $set('doctor_id', null);
+                        }
                     })
-                    ->required(),
+                    ->rules([
+                        fn (\Filament\Forms\Get $get): \Closure => function (string $attribute, $value, \Closure $fail) use ($get) {
+                            // Проверяем только если форма отправляется (не при каждом изменении)
+                            if (request()->isMethod('POST') && $get('city_id') && !$value) {
+                                $fail("Поле клиника обязательно для заполнения.");
+                            }
+                        },
+                    ]),
                 
                 Select::make('branch_id')
                     ->label('Филиал')
-                    ->reactive()
+                    ->live()
                     ->options(function (callable $get) {
                         $cityId = $get('city_id');
                         $clinicId = $get('clinic_id');
@@ -171,12 +204,24 @@ class BidResource extends Resource
                             return [$branch->id => $branch->name];
                         });
                     })
-                    ->afterStateUpdated(function (callable $set) {
-                        $set('doctor_id', null);
-                    }),
+                    ->afterStateUpdated(function (callable $set, callable $get) {
+                        // Сбрасываем зависимые поля только если филиал действительно изменился
+                        $currentBranchId = $get('branch_id');
+                        if ($currentBranchId) {
+                            $set('doctor_id', null);
+                        }
+                    })
+                    ->rules([
+                        fn (\Filament\Forms\Get $get): \Closure => function (string $attribute, $value, \Closure $fail) use ($get) {
+                            // Проверяем только если форма отправляется (не при каждом изменении)
+                            if (request()->isMethod('POST') && $get('city_id') && !$value) {
+                                $fail("Поле клиника обязательно для заполнения.");
+                            }
+                        },
+                    ]),
                 Select::make('doctor_id')
                     ->label('Врач')
-                    ->reactive()
+                    ->live()
                     ->options(function (callable $get) {
                         $cityId = $get('city_id');
                         $clinicId = $get('clinic_id');
@@ -210,11 +255,18 @@ class BidResource extends Resource
                             return [$doctor->id => $doctor->full_name];
                         });
                     })
-                    ->required(),
+                    ->rules([
+                        fn (\Filament\Forms\Get $get): \Closure => function (string $attribute, $value, \Closure $fail) use ($get) {
+                            // Проверяем только если форма отправляется (не при каждом изменении)
+                            if (request()->isMethod('POST') && $get('city_id') && !$value) {
+                                $fail("Поле клиника обязательно для заполнения.");
+                            }
+                        },
+                    ]),
 
                 Select::make('cabinet_id')
                     ->label('Кабинет')
-                    ->reactive()
+                    ->live()
                     ->options(function (callable $get) {
                         $branchId = $get('branch_id');
                         if (!$branchId) {
@@ -224,14 +276,14 @@ class BidResource extends Resource
                         return \App\Models\Cabinet::where('branch_id', $branchId)
                             ->pluck('name', 'id');
                     })
-                    ->required(),
-
-                DateTimePicker::make('appointment_datetime')
-                    ->label('Дата и время приема')
-                    ->required()
-                    ->native(false)
-                    ->displayFormat('d.m.Y H:i')
-                    ->seconds(false),
+                    ->rules([
+                        fn (\Filament\Forms\Get $get): \Closure => function (string $attribute, $value, \Closure $fail) use ($get) {
+                            // Проверяем только если форма отправляется (не при каждом изменении)
+                            if (request()->isMethod('POST') && $get('branch_id') && !$value) {
+                                $fail("Поле кабинет обязательно для заполнения.");
+                            }
+                        },
+                    ]),
 
                 TextInput::make('tg_user_id')
                     ->label('ID пользователя в Telegram')
@@ -253,10 +305,43 @@ class BidResource extends Resource
                     ->relationship('status', 'name')
                     ->searchable()
                     ->preload()
-                    ->required(),
-            ])
-            ->extraAttributes([
-                'class' => 'space-y-6'
+                    ->rules([
+                        fn (): \Closure => function (string $attribute, $value, \Closure $fail) {
+                            if (request()->isMethod('POST') && !$value) {
+                                $fail("Поле статус заявки обязательно для заполнения.");
+                            }
+                        },
+                    ]),
+                DateTimePicker::make('appointment_datetime')
+                    ->label('Дата и время приема')
+                    ->rules([
+                        fn (): \Closure => function (string $attribute, $value, \Closure $fail) {
+                            if (request()->isMethod('POST') && !$value) {
+                                $fail("Поле дата и время приема обязательно для заполнения.");
+                            }
+                        },
+                    ])
+                    ->native(false)
+                    ->displayFormat('d.m.Y H:i')
+                    ->seconds(false)
+                    ->live()
+                    ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                        // Обновляем связанные поля при изменении времени
+                        $appointmentDatetime = $state;
+                        if ($appointmentDatetime) {
+                            $carbon = \Carbon\Carbon::parse($appointmentDatetime);
+                            
+                            // Находим кабинет по времени приема
+                            $application = \App\Models\Application::where('appointment_datetime', $carbon->format('Y-m-d H:i:s'))->first();
+                            if ($application) {
+                                $set('city_id', $application->city_id);
+                                $set('clinic_id', $application->clinic_id);
+                                $set('branch_id', $application->branch_id);
+                                $set('cabinet_id', $application->cabinet_id);
+                                $set('doctor_id', $application->doctor_id);
+                            }
+                        }
+                    }),
             ]);
     }
 

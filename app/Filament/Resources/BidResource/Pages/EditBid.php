@@ -38,15 +38,23 @@ class EditBid extends EditRecord
 
     /**
      * Виджеты в заголовке страницы
-     * Включает календарь для выбора времени приема
+     * Включает календарь для выбора времени приема только при статусе "Записан"
      */
     protected function getFooterWidgets(): array
     {
-        return [
-            BidCalendarWidget::make([
-                'formData' => $this->getFormDataForCalendar(),
-            ]),
-        ];
+        // Получаем текущий статус из формы
+        $statusId = $this->form->getState()['status_id'] ?? null;
+        
+        // Показываем виджет только если статус "Записан" (ID 2)
+        if ($statusId == 2) {
+            return [
+                BidCalendarWidget::make([
+                    'formData' => $this->getFormDataForCalendar(),
+                ]),
+            ];
+        }
+        
+        return [];
     }
 
     /**
@@ -73,6 +81,11 @@ class EditBid extends EditRecord
         // Обновляем календарь при изменении полей фильтрации
         if (in_array($property, ['data.city_id', 'data.clinic_id', 'data.branch_id', 'data.doctor_id', 'data.cabinet_id'])) {
             $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
+        }
+        
+        // При изменении статуса обновляем виджеты
+        if ($property === 'data.status_id') {
+            $this->dispatch('$refresh');
         }
     }
 
@@ -120,6 +133,11 @@ class EditBid extends EditRecord
     {
         try {
             $data = $this->form->getState();
+            
+            // Если статус "Новая" (ID 1) или "Отменен" (ID 3) - очищаем appointment_datetime
+            if (in_array($data['status_id'], [1, 3])) {
+                $data['appointment_datetime'] = null;
+            }
             
             // Обновляем заявку
             $this->record->update($data);

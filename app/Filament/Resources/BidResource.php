@@ -306,6 +306,7 @@ class BidResource extends Resource
                     ->relationship('status', 'name')
                     ->searchable()
                     ->preload()
+                    ->live()
                     ->rules([
                         fn (): \Closure => function (string $attribute, $value, \Closure $fail) {
                             if (request()->isMethod('POST') && !$value) {
@@ -316,16 +317,19 @@ class BidResource extends Resource
                 DateTimePicker::make('appointment_datetime')
                     ->label('Дата и время приема')
                     ->rules([
-                        fn (): \Closure => function (string $attribute, $value, \Closure $fail) {
-                            if (request()->isMethod('POST') && !$value) {
-                                $fail("Поле дата и время приема обязательно для заполнения.");
+                        fn (\Filament\Forms\Get $get): \Closure => function (string $attribute, $value, \Closure $fail) use ($get) {
+                            // Проверяем только если статус "Записан" (ID 2)
+                            if (request()->isMethod('POST') && $get('status_id') == 2 && !$value) {
+                                $fail("Поле дата и время приема обязательно для заполнения при статусе 'Записан'.");
                             }
                         },
                     ])
                     ->native(false)
                     ->displayFormat('d.m.Y H:i')
                     ->seconds(false)
+                    ->readonly()
                     ->live()
+                    ->visible(fn (\Filament\Forms\Get $get): bool => $get('status_id') == 2)
                     ->afterStateUpdated(function ($state, callable $set, callable $get) {
                         // Обновляем связанные поля при изменении времени
                         $appointmentDatetime = $state;

@@ -46,6 +46,9 @@ class ApplicationController extends Controller
         // Генерируем ID как в Python версии (BigInteger)
         $validated['id'] = now()->format('YmdHis') . rand(1000, 9999);
 
+        // Автоматически устанавливаем источник как фронтенд
+        $validated['source'] = Application::SOURCE_FRONTEND;
+
         $application = Application::create($validated);
 
         // TODO: Отправка в 1C через очередь

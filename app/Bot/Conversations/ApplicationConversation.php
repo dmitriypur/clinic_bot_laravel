@@ -609,6 +609,7 @@ class ApplicationConversation extends Conversation
                 'tg_user_id' => $user->getId(),
                 'tg_chat_id' => $this->getBot()->getMessage()->getRecipient(),
                 'send_to_1c' => false,
+                'source' => Application::SOURCE_TELEGRAM,
             ];
 
             $application = Application::create($applicationData);

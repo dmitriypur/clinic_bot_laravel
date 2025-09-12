@@ -19,6 +19,10 @@ class Application extends Model
     const STATUS_IN_PROGRESS = 'in_progress';
     const STATUS_COMPLETED = 'completed';
 
+    // Константы источников создания заявки
+    const SOURCE_TELEGRAM = 'telegram';
+    const SOURCE_FRONTEND = 'frontend';
+
     protected $fillable = [
         'city_id',
         'clinic_id',
@@ -35,6 +39,7 @@ class Application extends Model
         'tg_chat_id',
         'send_to_1c',
         'appointment_status',
+        'source',
     ];
 
     protected $casts = [
@@ -172,6 +177,19 @@ class Application extends Model
             self::STATUS_SCHEDULED => 'Запланирован',
             self::STATUS_IN_PROGRESS => 'В процессе',
             self::STATUS_COMPLETED => 'Завершен',
+            default => 'Неизвестно'
+        };
+    }
+
+    /**
+     * Возвращает человекочитаемое название источника
+     */
+    public function getSourceLabel(): string
+    {
+        return match($this->source) {
+            self::SOURCE_TELEGRAM => 'Telegram бот',
+            self::SOURCE_FRONTEND => 'Фронтенд форма',
+            null => 'Не указан',
             default => 'Неизвестно'
         };
     }

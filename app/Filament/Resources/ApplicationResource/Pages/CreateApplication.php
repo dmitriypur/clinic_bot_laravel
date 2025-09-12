@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ApplicationResource\Pages;
 
 use App\Filament\Resources\ApplicationResource;
+use App\Models\Application;
 use Filament\Actions;
 use Filament\Resources\Pages\CreateRecord;
 
@@ -13,6 +14,13 @@ class CreateApplication extends CreateRecord
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');
-        label('Заявки');
+    }
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        // Автоматически устанавливаем источник как админ-панель
+        $data['source'] = Application::SOURCE_ADMIN;
+        
+        return $data;
     }
 }

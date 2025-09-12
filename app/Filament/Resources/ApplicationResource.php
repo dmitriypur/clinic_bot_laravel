@@ -259,15 +259,16 @@ class ApplicationResource extends Resource
 
                 TextInput::make('tg_user_id')
                     ->label('ID пользователя в Telegram')
-                    ->numeric()
-                    ->hidden(),
+                    ->numeric(),
                 TextInput::make('tg_chat_id')
                     ->label('ID чата в Telegram')
-                    ->numeric()
-                    ->hidden(),
+                    ->numeric(),
                 Toggle::make('send_to_1c')
                     ->label('Отправить в 1С')
                     ->hidden(),
+                TextInput::make('source')
+                    ->label('Источник создания')
+                    ->readonly(),
             ]);
     }
 
@@ -303,6 +304,20 @@ class ApplicationResource extends Resource
                     ->sortable(query: function (Builder $query, string $direction): Builder {
                         return $query->orderBy('appointment_datetime', $direction);
                     }),
+                TextColumn::make('source')
+                    ->label('Источник')
+                    ->formatStateUsing(function ($record) {
+                        return $record->getSourceLabel();
+                    })
+                    ->badge()
+                    ->color(function ($record) {
+                        return match($record->source) {
+                            Application::SOURCE_TELEGRAM => 'info',
+                            Application::SOURCE_FRONTEND => 'warning',
+                            default => 'gray'
+                        };
+                    })
+                    ->sortable(),
             ])
             ->filters([
                 ApplicationFilters::make(),

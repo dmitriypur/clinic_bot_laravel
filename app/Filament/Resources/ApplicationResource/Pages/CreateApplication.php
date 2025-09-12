@@ -18,8 +18,11 @@ class CreateApplication extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        // Автоматически устанавливаем источник как админ-панель
-        $data['source'] = Application::SOURCE_ADMIN;
+        // Для заявок из админ-панели source остается null
+        // Это означает, что заявка создана через админку
+        if (!isset($data['source'])) {
+            $data['source'] = null;
+        }
         
         return $data;
     }

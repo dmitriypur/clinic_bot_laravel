@@ -2,10 +2,8 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Filters\ApplicationFilters;
-use App\Filament\Resources\ApplicationResource\Pages;
-use App\Filament\Resources\ApplicationResource\RelationManagers;
-use App\Filament\Resources\ApplicationResource\Widgets\AppointmentCalendarWidget;
+use App\Filament\Resources\BidResource\Pages;
+use App\Filament\Resources\BidResource\RelationManagers;
 use App\Models\Application;
 use App\Models\Clinic;
 use Filament\Forms;
@@ -24,17 +22,17 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
-class ApplicationResource extends Resource
+class BidResource extends Resource
 {
     protected static ?string $model = Application::class;
 
-    protected static ?string $navigationLabel = 'Записи на прием';
-    protected static ?string $pluralNavigationLabel = 'Записи на прием';
-    protected static ?string $pluralLabel = 'Записи на прием';
-    protected static ?string $label = 'Запись на прием';
+    protected static ?string $navigationLabel = 'Заявки';
+    protected static ?string $pluralNavigationLabel = 'Заявки';
+    protected static ?string $pluralLabel = 'Заявки';
+    protected static ?string $label = 'Заявка';
 
-    protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
-    protected static ?int $navigationSort = 5;
+    protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
+    protected static ?int $navigationSort = 6;
 
     public static function getEloquentQuery(): Builder
     {
@@ -43,15 +41,15 @@ class ApplicationResource extends Resource
         // Получаем текущего пользователя
         $user = auth()->user();
 
-        // Если пользователь с ролью 'user' — показываем только их город
+        // Если пользователь с ролью 'partner' — показываем только их город
         if ($user->hasRole('partner')) {
             $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
             $applications = $clinic->applications->pluck('id')->toArray();
             $query->whereIn('id', $applications);
         }
 
-        // Показываем только заявки из админки (source = null)
-        $query->whereNull('source');
+        // Показываем только заявки из внешних источников (не из админки)
+        $query->whereNotNull('source');
 
         return $query;
     }
@@ -232,33 +230,7 @@ class ApplicationResource extends Resource
                     ->required()
                     ->native(false)
                     ->displayFormat('d.m.Y H:i')
-                    ->seconds(false)
-                    ->rules([
-                        function () {
-                            return function (string $attribute, $value, \Closure $fail) {
-                                if (!$value) return;
-                                
-                                $cabinetId = request()->input('cabinet_id');
-                                if (!$cabinetId) return;
-                                
-                                // Проверяем, не занят ли слот (исключаем текущую запись при редактировании)
-                                $query = Application::query()
-                                    ->where('cabinet_id', $cabinetId)
-                                    ->where('appointment_datetime', $value);
-                                
-                                // Если это редактирование, исключаем текущую запись
-                                if (request()->route('record')) {
-                                    $query->where('id', '!=', request()->route('record'));
-                                }
-                                
-                                $isOccupied = $query->exists();
-                                
-                                if ($isOccupied) {
-                                    $fail('Этот временной слот уже занят.');
-                                }
-                            };
-                        }
-                    ]),
+                    ->seconds(false),
 
                 TextInput::make('tg_user_id')
                     ->label('ID пользователя в Telegram')
@@ -270,6 +242,10 @@ class ApplicationResource extends Resource
                     ->numeric(),
                 Toggle::make('send_to_1c')
                     ->label('Отправить в 1С')
+                    ->hidden(),
+                TextInput::make('source')
+                    ->label('Источник создания')
+                    ->readonly()
                     ->hidden(),
             ]);
     }
@@ -293,10 +269,9 @@ class ApplicationResource extends Resource
                 TextColumn::make('appointment_datetime')
                     ->label('Дата и время приема')
                     ->dateTime('d.m.Y H:i')
-                    ->sortable()
+                    ->sortable(),
             ])
             ->filters([
-                ApplicationFilters::make(),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
@@ -318,16 +293,9 @@ class ApplicationResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListApplications::route('/'),
-            'create' => Pages\CreateApplication::route('/create'),
-            'edit' => Pages\EditApplication::route('/{record}/edit'),
-        ];
-    }
-
-    public static function getWidgets(): array
-    {
-        return [
-            AppointmentCalendarWidget::class,
+            'index' => Pages\ListBids::route('/'),
+            'create' => Pages\CreateBid::route('/create'),
+            'edit' => Pages\EditBid::route('/{record}/edit'),
         ];
     }
 }

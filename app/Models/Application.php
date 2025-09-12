@@ -189,7 +189,7 @@ class Application extends Model
         return match($this->source) {
             self::SOURCE_TELEGRAM => 'Telegram бот',
             self::SOURCE_FRONTEND => 'Фронтенд форма',
-            null => 'Не указан',
+            null => 'Админ-панель',
             default => 'Неизвестно'
         };
     }

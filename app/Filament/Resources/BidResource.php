@@ -301,6 +301,7 @@ class BidResource extends Resource
                     ->readonly()
                     ->hidden(),
                 Select::make('status_id')
+                    ->default(1)
                     ->label('Статус заявки')
                     ->relationship('status', 'name')
                     ->searchable()

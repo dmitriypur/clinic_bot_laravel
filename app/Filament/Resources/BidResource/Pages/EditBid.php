@@ -14,6 +14,11 @@ class EditBid extends EditRecord
     protected static string $resource = BidResource::class;
 
     /**
+     * Слушатели событий Livewire
+     */
+    protected $listeners = ['slotSelected'];
+
+    /**
      * Инициализация при монтировании компонента
      */
     public function mount(string|int $record): void
@@ -72,6 +77,35 @@ class EditBid extends EditRecord
     }
 
     /**
+     * Обработчик выбора слота из календаря
+     */
+    public function slotSelected($slotData): void
+    {
+        // Получаем текущие данные формы
+        $currentData = $this->form->getState();
+        
+        // Обновляем только поля связанные с календарем, сохраняя уже заполненные данные
+        $this->form->fill([
+            'city_id' => $slotData['city_id'] ?? $currentData['city_id'] ?? null,
+            'clinic_id' => $slotData['clinic_id'] ?? $currentData['clinic_id'] ?? null,
+            'branch_id' => $slotData['branch_id'] ?? $currentData['branch_id'] ?? null,
+            'cabinet_id' => $slotData['cabinet_id'] ?? $currentData['cabinet_id'] ?? null,
+            'doctor_id' => $slotData['doctor_id'] ?? $currentData['doctor_id'] ?? null,
+            'appointment_datetime' => $slotData['appointment_datetime'] ?? null,
+            // Сохраняем уже заполненные обязательные поля
+            'full_name' => $currentData['full_name'] ?? null,
+            'full_name_parent' => $currentData['full_name_parent'] ?? null,
+            'phone' => $currentData['phone'] ?? null,
+            'birth_date' => $currentData['birth_date'] ?? null,
+            'promo_code' => $currentData['promo_code'] ?? null,
+            'status_id' => $currentData['status_id'] ?? null,
+        ]);
+
+        // Обновляем календарь с новыми данными
+        $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
+    }
+
+    /**
      * Подключаем JavaScript для интеграции с календарем
      */
     public function getFooter(): ?View
@@ -104,13 +138,17 @@ class EditBid extends EditRecord
                 $this->redirect(static::getResource()::getUrl('index'));
             }
         } catch (\Exception $e) {
-            // Логируем ошибку
-            \Log::error('Ошибка сохранения заявки: ' . $e->getMessage());
+            // Логируем ошибку с деталями
+            \Log::error('Ошибка сохранения заявки: ' . $e->getMessage(), [
+                'data' => $data,
+                'record_id' => $this->record->id,
+                'trace' => $e->getTraceAsString()
+            ]);
             
-            // Показываем уведомление об ошибке
+            // Показываем уведомление об ошибке с деталями
             \Filament\Notifications\Notification::make()
                 ->title('Ошибка сохранения заявки')
-                ->body('Произошла ошибка при сохранении заявки. Попробуйте еще раз.')
+                ->body('Ошибка: ' . $e->getMessage())
                 ->danger()
                 ->send();
         }

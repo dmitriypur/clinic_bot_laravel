@@ -38,7 +38,7 @@
                 <!-- Календарь заявок -->
                 <div class="appointments-tab">
                     <div class="fi-wi-widget">
-                        @livewire(\App\Filament\Resources\ApplicationResource\Widgets\AppointmentCalendarWidget::class)
+                        @livewire(\App\Filament\Widgets\AppointmentCalendarWidget::class)
                     </div>
                 </div>
             @elseif($activeTab === 'schedule')

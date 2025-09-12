@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\ApplicationResource\Pages;
 
 use App\Filament\Resources\ApplicationResource;
-use App\Filament\Resources\ApplicationResource\Widgets\AppointmentCalendarWidget;
+use App\Filament\Widgets\AppointmentCalendarWidget;
 use Filament\Actions;
 use Filament\Resources\Pages\ListRecords;
 

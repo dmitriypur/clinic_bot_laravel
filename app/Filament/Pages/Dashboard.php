@@ -3,7 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Widgets\AllCabinetsScheduleWidget;
-use App\Filament\Resources\ApplicationResource\Widgets\AppointmentCalendarWidget;
+use App\Filament\Widgets\AppointmentCalendarWidget;
 use Filament\Pages\Page;
 
 class Dashboard extends Page

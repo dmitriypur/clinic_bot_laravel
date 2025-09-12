@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Filament\Resources\ApplicationResource\Widgets;
+namespace App\Filament\Widgets;
 
 use App\Models\Application;
 use App\Models\DoctorShift;

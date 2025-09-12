@@ -5,7 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Filters\ApplicationFilters;
 use App\Filament\Resources\ApplicationResource\Pages;
 use App\Filament\Resources\ApplicationResource\RelationManagers;
-use App\Filament\Resources\ApplicationResource\Widgets\AppointmentCalendarWidget;
+use App\Filament\Widgets\AppointmentCalendarWidget;
 use App\Models\Application;
 use App\Models\Clinic;
 use Filament\Forms;
@@ -51,7 +51,7 @@ class ApplicationResource extends Resource
         }
 
         // Показываем только заявки из админки (source = null)
-        $query->whereNull('source');
+        $query->where('status_id', '2');
 
         return $query;
     }
@@ -271,6 +271,13 @@ class ApplicationResource extends Resource
                 Toggle::make('send_to_1c')
                     ->label('Отправить в 1С')
                     ->hidden(),
+                    
+                Select::make('status_id')
+                    ->label('Статус заявки')
+                    ->relationship('status', 'name')
+                    ->searchable()
+                    ->preload()
+                    ->required(),
             ]);
     }
 
@@ -293,7 +300,23 @@ class ApplicationResource extends Resource
                 TextColumn::make('appointment_datetime')
                     ->label('Дата и время приема')
                     ->dateTime('d.m.Y H:i')
-                    ->sortable()
+                    ->sortable(),
+                    
+                TextColumn::make('status.name')
+                    ->label('Статус')
+                    ->badge()
+                    ->color(fn ($record) => match($record->status?->color) {
+                        'blue' => 'primary',
+                        'green' => 'success', 
+                        'red' => 'danger',
+                        'yellow' => 'warning',
+                        'purple' => 'info',
+                        'pink' => 'secondary',
+                        'indigo' => 'info',
+                        default => 'gray'
+                    })
+                    ->searchable()
+                    ->sortable(),
             ])
             ->filters([
                 ApplicationFilters::make(),

@@ -29,7 +29,7 @@
                 <!-- Календарь заявок -->
                 <div class="calendar-tab">
                     <div class="fi-wi-widget">
-                        @livewire(\App\Filament\Resources\ApplicationResource\Widgets\AppointmentCalendarWidget::class)
+                        @livewire(\App\Filament\Widgets\AppointmentCalendarWidget::class)
                     </div>
                 </div>
             @else

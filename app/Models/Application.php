@@ -14,7 +14,7 @@ class Application extends Model
     public $incrementing = true;
     protected $keyType = 'integer';
 
-    // Константы статусов приема
+    // Константы статусов приема (устаревшие, используйте ApplicationStatus)
     const STATUS_SCHEDULED = 'scheduled';
     const STATUS_IN_PROGRESS = 'in_progress';
     const STATUS_COMPLETED = 'completed';
@@ -40,6 +40,7 @@ class Application extends Model
         'send_to_1c',
         'appointment_status',
         'source',
+        'status_id',
     ];
 
     protected $casts = [
@@ -54,6 +55,7 @@ class Application extends Model
         'tg_chat_id' => 'integer',
         'send_to_1c' => 'boolean',
         'appointment_status' => 'string',
+        'status_id' => 'integer',
     ];
 
     /**
@@ -118,6 +120,11 @@ class Application extends Model
     public function cabinet(): BelongsTo
     {
         return $this->belongsTo(Cabinet::class);
+    }
+
+    public function status(): BelongsTo
+    {
+        return $this->belongsTo(ApplicationStatus::class, 'status_id');
     }
 
     /**
@@ -192,5 +199,78 @@ class Application extends Model
             null => 'Админ-панель',
             default => 'Неизвестно'
         };
+    }
+
+    /**
+     * Возвращает название статуса заявки
+     */
+    public function getStatusName(): string
+    {
+        return $this->status?->name ?? 'Не указан';
+    }
+
+    /**
+     * Возвращает цвет статуса заявки
+     */
+    public function getStatusColor(): string
+    {
+        return $this->status?->color ?? 'gray';
+    }
+
+    /**
+     * Проверяет, является ли заявка новой
+     */
+    public function isNew(): bool
+    {
+        return $this->status?->isNew() ?? false;
+    }
+
+    /**
+     * Проверяет, является ли заявка записанной
+     */
+    public function isScheduledStatus(): bool
+    {
+        return $this->status?->isScheduled() ?? false;
+    }
+
+    /**
+     * Проверяет, является ли заявка отмененной
+     */
+    public function isCancelled(): bool
+    {
+        return $this->status?->isCancelled() ?? false;
+    }
+
+    /**
+     * Устанавливает статус заявки по slug
+     */
+    public function setStatusBySlug(string $slug): bool
+    {
+        $status = ApplicationStatus::getBySlug($slug);
+        if ($status) {
+            $this->status_id = $status->id;
+            return $this->save();
+        }
+        return false;
+    }
+
+    /**
+     * Scope для фильтрации по статусу
+     */
+    public function scopeWithStatus($query, string $slug)
+    {
+        return $query->whereHas('status', function ($q) use ($slug) {
+            $q->where('slug', $slug);
+        });
+    }
+
+    /**
+     * Scope для активных статусов
+     */
+    public function scopeWithActiveStatus($query)
+    {
+        return $query->whereHas('status', function ($q) {
+            $q->where('is_active', true);
+        });
     }
 }

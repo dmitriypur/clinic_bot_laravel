@@ -77,6 +77,11 @@ class CalendarFilterService
         if (!empty($filters['doctor_ids'])) {
             $query->whereIn('doctor_id', $filters['doctor_ids']);
         }
+        
+        // Фильтры по статусам
+        if (!empty($filters['status_ids'])) {
+            $query->whereIn('status_id', $filters['status_ids']);
+        }
 
         // Применяем фильтрацию по ролям для заявок
         $this->applyApplicationRoleFilters($query, $user);

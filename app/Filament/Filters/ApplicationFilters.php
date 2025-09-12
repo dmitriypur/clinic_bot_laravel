@@ -71,6 +71,16 @@ class ApplicationFilters extends Filter
                         $filterService = app(CalendarFilterService::class);
                         return $filterService->getAvailableDoctors(auth()->user(), $branchIds);
                     }),
+                    
+                Select::make('status_ids')
+                    ->label('Статусы')
+                    ->multiple()
+                    ->searchable()
+                    ->options(function () {
+                        return \App\Models\ApplicationStatus::getActiveStatuses()
+                            ->pluck('name', 'id')
+                            ->toArray();
+                    }),
             ])
             ->query(function (Builder $query, array $data): Builder {
                 $filterService = app(CalendarFilterService::class);
@@ -81,6 +91,7 @@ class ApplicationFilters extends Filter
                     'clinic_ids' => $data['clinic_ids'] ?? [],
                     'branch_ids' => $data['branch_ids'] ?? [],
                     'doctor_ids' => $data['doctor_ids'] ?? [],
+                    'status_ids' => $data['status_ids'] ?? [],
                 ];
                 return $filterService->applyApplicationFilters($query, $filters, $user);
             });

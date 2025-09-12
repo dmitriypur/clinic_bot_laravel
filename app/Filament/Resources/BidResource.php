@@ -6,6 +6,7 @@ use App\Filament\Resources\BidResource\Pages;
 use App\Filament\Resources\BidResource\RelationManagers;
 use App\Models\Application;
 use App\Models\Clinic;
+use App\Filament\Widgets\AppointmentCalendarWidget;
 use Filament\Forms;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
@@ -247,8 +248,18 @@ class BidResource extends Resource
                     ->label('Источник создания')
                     ->readonly()
                     ->hidden(),
+                Select::make('status_id')
+                    ->label('Статус заявки')
+                    ->relationship('status', 'name')
+                    ->searchable()
+                    ->preload()
+                    ->required(),
+            ])
+            ->extraAttributes([
+                'class' => 'space-y-6'
             ]);
     }
+
 
     public static function table(Table $table): Table
     {
@@ -269,6 +280,21 @@ class BidResource extends Resource
                 TextColumn::make('appointment_datetime')
                     ->label('Дата и время приема')
                     ->dateTime('d.m.Y H:i')
+                    ->sortable(),
+                TextColumn::make('status.name')
+                    ->label('Статус')
+                    ->badge()
+                    ->color(fn ($record) => match($record->status?->color) {
+                        'blue' => 'primary',
+                        'green' => 'success', 
+                        'red' => 'danger',
+                        'yellow' => 'warning',
+                        'purple' => 'info',
+                        'pink' => 'secondary',
+                        'indigo' => 'info',
+                        default => 'gray'
+                    })
+                    ->searchable()
                     ->sortable(),
             ])
             ->filters([

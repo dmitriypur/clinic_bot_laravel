@@ -194,8 +194,8 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 'list' => 'Список'
             ],
             'allDaySlot' => false,            // Не показывать слот "Весь день"
-            'slotMinTime' => '08:00:00',      // Минимальное время отображения
-            'slotMaxTime' => '20:00:00',      // Максимальное время отображения
+            'slotMinTime' => '06:00:00',      // Минимальное время отображения (расширили для ранних смен)
+            'slotMaxTime' => '22:00:00',      // Максимальное время отображения (расширили для поздних смен)
             'slotDuration' => $slotDuration,  // Длительность слота из настроек филиала
             'snapDuration' => $slotDuration,  // Шаг привязки времени равен длительности слота
             'slotLabelFormat' => [            // Формат отображения времени в слотах
@@ -236,6 +236,29 @@ class CabinetScheduleWidget extends FullCalendarWidget
             ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
             ->with(['doctor']);
 
+        // Дополнительно загружаем смены для текущего дня, если они не попадают в диапазон
+        $today = now()->format('Y-m-d');
+        $todayStart = $today . ' 00:00:00';
+        $todayEnd = $today . ' 23:59:59';
+        
+        $todayQuery = DoctorShift::query()
+            ->where('cabinet_id', $cabinetId)
+            ->whereBetween('start_time', [$todayStart, $todayEnd])
+            ->with(['doctor']);
+            
+        // Применяем ту же фильтрацию по ролям для смен сегодня
+        if ($user->isDoctor()) {
+            $todayQuery->where('doctor_id', $user->doctor_id);
+        } elseif ($user->isPartner()) {
+            $cabinet = \App\Models\Cabinet::with('branch')->find($cabinetId);
+            if (!$cabinet || $cabinet->branch->clinic_id !== $user->clinic_id) {
+                $todayQuery->whereRaw('1=0'); // Пустой результат
+            }
+        }
+        
+        // Объединяем результаты
+        $allShifts = $query->get()->merge($todayQuery->get())->unique('id');
+
         // Дополнительная фильтрация по ролям
         if ($user->isDoctor()) {
             // Врач видит только свои смены
@@ -249,8 +272,19 @@ class CabinetScheduleWidget extends FullCalendarWidget
         }
         // super_admin видит все смены
 
+        // Отладочная информация (отключена)
+        // \Log::info('CabinetScheduleWidget fetchEvents', [
+        //     'cabinet_id' => $cabinetId,
+        //     'fetch_start' => $fetchInfo['start'],
+        //     'fetch_end' => $fetchInfo['end'],
+        //     'user_role' => $user->role ?? 'unknown',
+        //     'query_count' => $query->count(),
+        //     'today_query_count' => $todayQuery->count(),
+        //     'all_shifts_count' => $allShifts->count()
+        // ]);
+
         // Преобразуем смены в формат FullCalendar
-        return $query->get()
+        return $allShifts
             ->map(function (DoctorShift $shift) {
                 $shiftStart = \Carbon\Carbon::parse($shift->start_time);
                 $shiftEnd = \Carbon\Carbon::parse($shift->end_time);
@@ -266,6 +300,11 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 // Проверяем, прошла ли дата (не время!) в часовом поясе города
                 $nowInCity = $this->getTimezoneService()->nowInCityTimezone($cityId);
                 $isPast = $shiftStartInCity->format('Y-m-d') < $nowInCity->format('Y-m-d');
+                
+                // Для отладки: не считаем смены в текущем дне прошедшими
+                if ($shiftStartInCity->format('Y-m-d') === $nowInCity->format('Y-m-d')) {
+                    $isPast = false; // Смены в текущем дне всегда активные
+                }
 
                 return [
                     'id' => $shift->id,
@@ -369,12 +408,11 @@ class CabinetScheduleWidget extends FullCalendarWidget
             return $pastColors[$doctorId % count($pastColors)];
         }
 
-        // Палитра цветов для активных смен разных врачей
+        // Палитра цветов для активных смен разных врачей (текущий день и будущие дни)
         $colors = [
             '#3B82F6', // синий
             '#31c090', // зеленый
             '#F59E0B', // желтый
-            '#EF4444', // красный
             '#8B5CF6', // фиолетовый
             '#06B6D4', // голубой
             '#84CC16', // лайм

@@ -197,7 +197,7 @@ class BidCalendarWidget extends FullCalendarWidget
     public function formDataUpdated($formData): void
     {
         $this->formData = $formData;
-        $this->refreshRecords();
+        // $this->refreshRecords();
     }
 
     /**

@@ -32,7 +32,7 @@ class BidResource extends Resource
     protected static ?string $pluralLabel = 'Заявки';
     protected static ?string $label = 'Заявка';
 
-    protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
+    protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-bottom-center-text';
     protected static ?int $navigationSort = 6;
 
     public static function getEloquentQuery(): Builder

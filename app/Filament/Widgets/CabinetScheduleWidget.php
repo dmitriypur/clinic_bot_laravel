@@ -272,17 +272,6 @@ class CabinetScheduleWidget extends FullCalendarWidget
         }
         // super_admin видит все смены
 
-        // Отладочная информация (отключена)
-        // \Log::info('CabinetScheduleWidget fetchEvents', [
-        //     'cabinet_id' => $cabinetId,
-        //     'fetch_start' => $fetchInfo['start'],
-        //     'fetch_end' => $fetchInfo['end'],
-        //     'user_role' => $user->role ?? 'unknown',
-        //     'query_count' => $query->count(),
-        //     'today_query_count' => $todayQuery->count(),
-        //     'all_shifts_count' => $allShifts->count()
-        // ]);
-
         // Преобразуем смены в формат FullCalendar
         return $allShifts
             ->map(function (DoctorShift $shift) {

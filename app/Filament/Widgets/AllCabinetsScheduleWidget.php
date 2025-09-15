@@ -107,8 +107,8 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                 'list' => 'Список'
             ],
             'allDaySlot' => false,            // Не показывать слот "Весь день"
-            'slotMinTime' => '08:00:00',      // Минимальное время отображения
-            'slotMaxTime' => '20:00:00',      // Максимальное время отображения
+            'slotMinTime' => '08:00:00',      // Минимальное время отображения (расширили для ранних смен)
+            'slotMaxTime' => '20:00:00',      // Максимальное время отображения (расширили для поздних смен)
             'slotDuration' => '00:15:00',     // Минимальная длительность слота для общего календаря
             'snapDuration' => '00:15:00',     // Шаг привязки времени (15 минут)
             'slotLabelFormat' => [            // Формат отображения времени в слотах
@@ -142,11 +142,26 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
             ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
             ->with(['doctor', 'cabinet.branch']);
         
-        // Применяем пользовательские фильтры
+        // Дополнительно загружаем смены для текущего дня, если они не попадают в диапазон
+        $today = now()->format('Y-m-d');
+        $todayStart = $today . ' 00:00:00';
+        $todayEnd = $today . ' 23:59:59';
+        
+        $todayQuery = DoctorShift::query()
+            ->whereBetween('start_time', [$todayStart, $todayEnd])
+            ->with(['doctor', 'cabinet.branch']);
+        
+        // Применяем пользовательские фильтры к основному запросу
         $this->getFilterService()->applyShiftFilters($query, $this->filters, $user);
         
+        // Применяем пользовательские фильтры к запросу для текущего дня
+        $this->getFilterService()->applyShiftFilters($todayQuery, $this->filters, $user);
+        
+        // Объединяем результаты
+        $allShifts = $query->get()->merge($todayQuery->get())->unique('id');
+        
         // Преобразуем смены в формат FullCalendar
-        return $query->get()
+        return $allShifts
             ->map(function (DoctorShift $shift) {
                 $shiftStart = \Carbon\Carbon::parse($shift->start_time);
                 $shiftEnd = \Carbon\Carbon::parse($shift->end_time);
@@ -161,6 +176,11 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                 // Проверяем, прошла ли дата (не время!) в часовом поясе города
                 $nowInCity = $this->getTimezoneService()->nowInCityTimezone($cityId);
                 $isPast = $shiftStartInCity->format('Y-m-d') < $nowInCity->format('Y-m-d');
+                
+                // Для отладки: не считаем смены в текущем дне прошедшими
+                if ($shiftStartInCity->format('Y-m-d') === $nowInCity->format('Y-m-d')) {
+                    $isPast = false; // Смены в текущем дне всегда активные
+                }
                 
                 return [
                     'id' => $shift->id,

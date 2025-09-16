@@ -50,14 +50,6 @@ class BidResource extends Resource
             $query->whereIn('id', $applications);
         }
 
-        // Показываем заявки из внешних источников ИЛИ исключаем заявки со статусом типа 'appointment'
-        // $query->where(function ($query) {
-        //     $query->whereIn('source', ['frontend', 'telegram'])
-        //           ->orWhereHas('status', function ($query) {
-        //               $query->where('type', '!=', 'appointment');
-        //           });
-        // });
-
         $query->where(function ($query) {
             $query->whereHas('status', function ($query) {
                 $query->where('type', '!=', 'appointment');

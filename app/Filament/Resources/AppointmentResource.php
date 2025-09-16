@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\AppointmentResource\Pages;
 use App\Filament\Resources\AppointmentResource\RelationManagers;
 use App\Models\Appointment;
+use App\Models\Clinic;
 use App\Enums\AppointmentStatus;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -28,6 +29,26 @@ class AppointmentResource extends Resource
     
     protected static ?string $navigationGroup = 'Журнал приемов';
     protected static ?int $navigationSort = 7;
+
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        // Получаем текущего пользователя
+        $user = auth()->user();
+
+        // Если пользователь с ролью 'partner' — показываем только приемы его клиники
+        if ($user->hasRole('partner')) {
+            $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
+            if ($clinic) {
+                $query->whereHas('application', function ($query) use ($clinic) {
+                    $query->where('clinic_id', $clinic->id);
+                });
+            }
+        }
+
+        return $query;
+    }
 
     public static function form(Form $form): Form
     {

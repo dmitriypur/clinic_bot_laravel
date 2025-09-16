@@ -32,33 +32,153 @@ class AppointmentResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Select::make('application_id')
-                    ->label('Заявка')
-                    ->relationship('application', 'id')
-                    ->getOptionLabelFromRecordUsing(fn ($record) => 
-                        "ID: {$record->id} - {$record->full_name} ({$record->appointment_datetime?->format('d.m.Y H:i')})"
-                    )
-                    ->required()
-                    ->searchable()
-                    ->preload(),
+                Forms\Components\Section::make('Информация о заявке')
+                    ->schema([
+                        Forms\Components\Select::make('application_id')
+                            ->label('Заявка')
+                            ->relationship('application', 'id')
+                            ->getOptionLabelFromRecordUsing(fn ($record) => 
+                                "ID: {$record->id} - {$record->full_name} ({$record->appointment_datetime?->format('d.m.Y H:i')})"
+                            )
+                            ->required()
+                            ->searchable()
+                            ->preload()
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
+                                if ($state) {
+                                    $application = \App\Models\Application::with(['city', 'clinic', 'branch', 'doctor', 'cabinet'])->find($state);
+                                    if ($application) {
+                                        $set('patient_info', [
+                                            'full_name' => $application->full_name,
+                                            'full_name_parent' => $application->full_name_parent,
+                                            'birth_date' => $application->birth_date?->format('d.m.Y'),
+                                            'phone' => $application->phone,
+                                        ]);
+                                        $set('appointment_info', [
+                                            'datetime' => $application->appointment_datetime?->format('d.m.Y H:i'),
+                                            'city' => $application->city?->name,
+                                            'clinic' => $application->clinic?->name,
+                                            'branch' => $application->branch?->name,
+                                            'doctor' => $application->doctor?->name,
+                                            'cabinet' => $application->cabinet?->name,
+                                        ]);
+                                    }
+                                }
+                            }),
+                            
+                        Forms\Components\TextInput::make('patient_full_name')
+                            ->label('ФИО пациента')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(function (Forms\Get $get) {
+                                $info = $get('patient_info');
+                                return $info['full_name'] ?? '';
+                            }),
+                            
+                        Forms\Components\TextInput::make('patient_parent')
+                            ->label('ФИО родителя')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(function (Forms\Get $get) {
+                                $info = $get('patient_info');
+                                return $info['full_name_parent'] ?? '';
+                            }),
+                            
+                        Forms\Components\TextInput::make('patient_birth_date')
+                            ->label('Дата рождения')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(function (Forms\Get $get) {
+                                $info = $get('patient_info');
+                                return $info['birth_date'] ?? '';
+                            }),
+                            
+                        Forms\Components\TextInput::make('patient_phone')
+                            ->label('Телефон')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(function (Forms\Get $get) {
+                                $info = $get('patient_info');
+                                return $info['phone'] ?? '';
+                            }),
+                            
+                        Forms\Components\TextInput::make('appointment_datetime')
+                            ->label('Дата и время приема')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(function (Forms\Get $get) {
+                                $info = $get('appointment_info');
+                                return $info['datetime'] ?? '';
+                            }),
+                            
+                        Forms\Components\TextInput::make('appointment_city')
+                            ->label('Город')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(function (Forms\Get $get) {
+                                $info = $get('appointment_info');
+                                return $info['city'] ?? '';
+                            }),
+                            
+                        Forms\Components\TextInput::make('appointment_clinic')
+                            ->label('Клиника')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(function (Forms\Get $get) {
+                                $info = $get('appointment_info');
+                                return $info['clinic'] ?? '';
+                            }),
+                            
+                        Forms\Components\TextInput::make('appointment_branch')
+                            ->label('Филиал')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(function (Forms\Get $get) {
+                                $info = $get('appointment_info');
+                                return $info['branch'] ?? '';
+                            }),
+                            
+                        Forms\Components\TextInput::make('appointment_doctor')
+                            ->label('Врач')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(function (Forms\Get $get) {
+                                $info = $get('appointment_info');
+                                return $info['doctor'] ?? '';
+                            }),
+                            
+                        Forms\Components\TextInput::make('appointment_cabinet')
+                            ->label('Кабинет')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(function (Forms\Get $get) {
+                                $info = $get('appointment_info');
+                                return $info['cabinet'] ?? '';
+                            }),
+                    ])
+                    ->columns(2),
                     
-                Forms\Components\Select::make('status')
-                    ->label('Статус')
-                    ->options(AppointmentStatus::options())
-                    ->required()
-                    ->default(AppointmentStatus::IN_PROGRESS),
-                    
-                Forms\Components\DateTimePicker::make('started_at')
-                    ->label('Начало приема')
-                    ->required(),
-                    
-                Forms\Components\DateTimePicker::make('completed_at')
-                    ->label('Окончание приема'),
-                    
-                Forms\Components\Textarea::make('notes')
-                    ->label('Заметки врача')
-                    ->rows(3)
-                    ->columnSpanFull(),
+                Forms\Components\Section::make('Детали приема')
+                    ->schema([
+                        Forms\Components\Select::make('status')
+                            ->label('Статус')
+                            ->options(AppointmentStatus::options())
+                            ->required()
+                            ->default(AppointmentStatus::IN_PROGRESS),
+                            
+                        Forms\Components\DateTimePicker::make('started_at')
+                            ->label('Начало приема')
+                            ->required(),
+                            
+                        Forms\Components\DateTimePicker::make('completed_at')
+                            ->label('Окончание приема'),
+                            
+                        Forms\Components\Textarea::make('notes')
+                            ->label('Заметки врача')
+                            ->rows(3)
+                            ->columnSpanFull(),
+                    ])
+                    ->columns(2),
             ]);
     }
 

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use App\Traits\HasCalendarOptimizations;
 use Illuminate\Support\Facades\Cache;
 
@@ -139,6 +140,11 @@ class Application extends Model
         return $this->belongsTo(ApplicationStatus::class, 'status_id');
     }
 
+    public function appointment(): HasOne
+    {
+        return $this->hasOne(Appointment::class);
+    }
+
     /**
      * Проверяет, запланирован ли прием
      */
@@ -168,9 +174,17 @@ class Application extends Model
      */
     public function startAppointment(): bool
     {
-        if ($this->isScheduled()) {
-            $this->appointment_status = self::STATUS_IN_PROGRESS;
-            return $this->save();
+        if ($this->isScheduled() && !$this->appointment) {
+            // Создаем новый прием
+            $appointment = $this->appointment()->create([
+                'status' => \App\Enums\AppointmentStatus::IN_PROGRESS,
+                'started_at' => now(),
+            ]);
+            
+            if ($appointment) {
+                $this->appointment_status = self::STATUS_IN_PROGRESS;
+                return $this->save();
+            }
         }
         return false;
     }
@@ -180,9 +194,14 @@ class Application extends Model
      */
     public function completeAppointment(): bool
     {
-        if ($this->isInProgress()) {
-            $this->appointment_status = self::STATUS_COMPLETED;
-            return $this->save();
+        if ($this->isInProgress() && $this->appointment) {
+            // Завершаем прием
+            $appointmentCompleted = $this->appointment->complete();
+            
+            if ($appointmentCompleted) {
+                $this->appointment_status = self::STATUS_COMPLETED;
+                return $this->save();
+            }
         }
         return false;
     }

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\BidResource\Pages;
 
 use App\Filament\Resources\BidResource;
 use App\Filament\Widgets\BidCalendarWidget;
+use App\Models\ApplicationStatus;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Facades\FilamentView;
@@ -137,8 +138,9 @@ class EditBid extends EditRecord
         try {
             $data = $this->form->getState();
             
-            // Если статус "Новая" (ID 1) или "Отменен" (ID 3) - очищаем appointment_datetime
-            if (in_array($data['status_id'], [1, 3])) {
+            // Если статус "Новая" или "Отменен" - очищаем appointment_datetime
+            $status = ApplicationStatus::find($data['status_id']);
+            if ($status && in_array($status->slug, ['new', 'bid_cancelled'])) {
                 $data['appointment_datetime'] = null;
             }
             

@@ -49,12 +49,12 @@ class BidResource extends Resource
             $query->whereIn('id', $applications);
         }
 
-        // Показываем только заявки из внешних источников (не из админки)
-        $query->whereNotNull('source');
-        
-        // Исключаем заявки со статусом типа 'appointment'
-        $query->whereHas('status', function ($query) {
-            $query->where('type', '!=', 'appointment');
+        // Показываем заявки из внешних источников ИЛИ исключаем заявки со статусом типа 'appointment'
+        $query->where(function ($query) {
+            $query->whereNotNull('source')
+                  ->orWhereHas('status', function ($query) {
+                      $query->where('type', '!=', 'appointment');
+                  });
         });
 
         return $query;

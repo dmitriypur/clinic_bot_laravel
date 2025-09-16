@@ -32,7 +32,7 @@ class BidResource extends Resource
     protected static ?string $pluralLabel = 'Заявки';
     protected static ?string $label = 'Заявка';
 
-    protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
+    protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-bottom-center-text';
     protected static ?int $navigationSort = 6;
 
     public static function getEloquentQuery(): Builder
@@ -51,6 +51,11 @@ class BidResource extends Resource
 
         // Показываем только заявки из внешних источников (не из админки)
         $query->whereNotNull('source');
+        
+        // Исключаем заявки со статусом типа 'appointment'
+        $query->whereHas('status', function ($query) {
+            $query->where('type', '!=', 'appointment');
+        });
 
         return $query;
     }
@@ -301,26 +306,26 @@ class BidResource extends Resource
                     ->readonly()
                     ->hidden(),
                 Select::make('status_id')
-                    ->default(1)
                     ->label('Статус заявки')
-                    ->relationship('status', 'name')
+                    ->relationship('status', 'name', fn ($query) => $query->where('type', 'bid'))
                     ->searchable()
                     ->preload()
                     ->live()
-                    ->rules([
-                        fn (): \Closure => function (string $attribute, $value, \Closure $fail) {
-                            if (request()->isMethod('POST') && !$value) {
-                                $fail("Поле статус заявки обязательно для заполнения.");
-                            }
-                        },
-                    ]),
+                    ->default(function () {
+                        $newStatus = \App\Models\ApplicationStatus::where('slug', 'new')->first();
+                        return $newStatus ? $newStatus->id : null;
+                    }),
                 DateTimePicker::make('appointment_datetime')
                     ->label('Дата и время приема')
                     ->rules([
                         fn (\Filament\Forms\Get $get): \Closure => function (string $attribute, $value, \Closure $fail) use ($get) {
-                            // Проверяем только если статус "Записан" (ID 2)
-                            if (request()->isMethod('POST') && $get('status_id') == 2 && !$value) {
-                                $fail("Поле дата и время приема обязательно для заполнения при статусе 'Записан'.");
+                            // Проверяем только если статус "Запись на прием" (slug: appointment)
+                            $statusId = $get('status_id');
+                            if (request()->isMethod('POST') && $statusId) {
+                                $status = \App\Models\ApplicationStatus::find($statusId);
+                                if ($status && $status->slug === 'appointment' && !$value) {
+                                    $fail("Поле дата и время приема обязательно для заполнения при статусе 'Запись на прием'.");
+                                }
                             }
                         },
                     ])
@@ -329,7 +334,13 @@ class BidResource extends Resource
                     ->seconds(false)
                     ->readonly()
                     ->live()
-                    ->visible(fn (\Filament\Forms\Get $get): bool => $get('status_id') == 2)
+                    ->visible(function (\Filament\Forms\Get $get): bool {
+                        $statusId = $get('status_id');
+                        if (!$statusId) return false;
+                        
+                        $status = \App\Models\ApplicationStatus::find($statusId);
+                        return $status && $status->slug === 'appointment';
+                    })
                     ->afterStateUpdated(function ($state, callable $set, callable $get) {
                         // Обновляем связанные поля при изменении времени
                         $appointmentDatetime = $state;

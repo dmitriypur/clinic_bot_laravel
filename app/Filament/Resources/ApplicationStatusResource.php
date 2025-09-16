@@ -43,6 +43,14 @@ class ApplicationStatusResource extends Resource
                     ->unique(ignoreRecord: true)
                     ->rules(['regex:/^[a-z0-9_-]+$/'])
                     ->helperText('Только строчные буквы, цифры, дефисы и подчеркивания'),
+
+                Forms\Components\Select::make('type')
+                    ->label('Тип')
+                    ->options([
+                        'bid' => 'Заявка',
+                        'appointment' => 'Запись на прием',
+                    ])
+                    ->required(),
                     
                 Forms\Components\Select::make('color')
                     ->label('Цвет')
@@ -80,9 +88,8 @@ class ApplicationStatusResource extends Resource
                     ->searchable()
                     ->sortable(),
                     
-                Tables\Columns\TextColumn::make('slug')
-                    ->label('Slug')
-                    ->searchable()
+                Tables\Columns\TextColumn::make('type')
+                    ->label('Тип')
                     ->sortable(),
                     
                 Tables\Columns\ColorColumn::make('color')

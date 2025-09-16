@@ -23,6 +23,7 @@ use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Models\ApplicationStatus;
 
 class ApplicationResource extends Resource
 {
@@ -51,7 +52,11 @@ class ApplicationResource extends Resource
         }
 
         // Показываем только заявки из админки (source = null)
-        $query->where('status_id', '2');
+        $query->whereHas('status', function ($query) {
+            $query->where('type', 'appointment')
+                  ->orWhere('slug', 'appointment');
+        });
+
 
         return $query;
     }
@@ -274,7 +279,8 @@ class ApplicationResource extends Resource
                     
                 Select::make('status_id')
                     ->label('Статус заявки')
-                    ->relationship('status', 'name')
+                    ->relationship('status', 'name', fn ($query) => $query->where('type', 'appointment'))
+                    ->default(fn () => ApplicationStatus::where('slug', 'appointment_scheduled')->first()?->id)
                     ->searchable()
                     ->preload()
                     ->required(),

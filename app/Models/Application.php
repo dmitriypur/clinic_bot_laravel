@@ -73,6 +73,18 @@ class Application extends Model
         // Очищаем кэш календаря при обновлении заявки
         static::updated(function ($application) {
             static::clearCalendarCache();
+            
+            // Автоматически меняем статус на "Создана" при назначении статуса "Запись на прием"
+            // if ($application->wasChanged('status_id')) {
+            //     $newStatus = $application->status;
+            //     if ($newStatus && $newStatus->slug === 'appointment') {
+            //         $createdStatus = ApplicationStatus::where('slug', 'appointment_scheduled')->first();
+            //         if ($createdStatus) {
+            //             $application->status_id = $createdStatus->id;
+            //             $application->saveQuietly(); // saveQuietly чтобы избежать рекурсии
+            //         }
+            //     }
+            // }
         });
 
         // Очищаем кэш календаря при удалении заявки

@@ -13,6 +13,7 @@ class ApplicationStatus extends Model
         'color',
         'sort_order',
         'is_active',
+        'type',
     ];
 
     protected $casts = [

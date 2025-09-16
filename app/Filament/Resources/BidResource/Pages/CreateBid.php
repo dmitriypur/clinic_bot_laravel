@@ -39,13 +39,16 @@ class CreateBid extends CreateRecord
         // Получаем текущий статус из формы
         $statusId = $this->form->getState()['status_id'] ?? null;
         
-        // Показываем виджет только если статус "Записан" (ID 2)
-        if ($statusId == 2) {
-            return [
-                BidCalendarWidget::make([
-                    'formData' => $this->getFormDataForCalendar(),
-                ]),
-            ];
+        // Показываем виджет только если статус "Запись на прием" (slug: appointment)
+        if ($statusId) {
+            $status = \App\Models\ApplicationStatus::find($statusId);
+            if ($status && $status->slug === 'appointment') {
+                return [
+                    BidCalendarWidget::make([
+                        'formData' => $this->getFormDataForCalendar(),
+                    ]),
+                ];
+            }
         }
         
         return [];
@@ -131,10 +134,16 @@ class CreateBid extends CreateRecord
             // Добавляем значения по умолчанию
             $data['source'] = 'admin';
             $data['send_to_1c'] = false;
-            $data['status_id'] = $data['status_id'] ?? 1; // Статус "Новая" по умолчанию
             
-            // Если статус "Новая" (ID 1) или "Отменен" (ID 3) - очищаем appointment_datetime
-            if (in_array($data['status_id'], [1, 3])) {
+            // Устанавливаем статус "Новая" по умолчанию, если не выбран
+            if (empty($data['status_id'])) {
+                $newStatus = \App\Models\ApplicationStatus::where('slug', 'new')->first();
+                $data['status_id'] = $newStatus ? $newStatus->id : null;
+            }
+            
+            // Если статус "Новая" или "Отказался" - очищаем appointment_datetime
+            $status = \App\Models\ApplicationStatus::find($data['status_id']);
+            if ($status && in_array($status->slug, ['new', 'bid_cancelled'])) {
                 $data['appointment_datetime'] = null;
             }
             

@@ -23,6 +23,37 @@ class Appointment extends Model
     ];
 
     /**
+     * Boot the model and register event listeners
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Синхронизируем статус с заявкой при обновлении приема
+        static::updated(function ($appointment) {
+            if ($appointment->wasChanged('status') && $appointment->application) {
+                $application = $appointment->application;
+                
+                // Синхронизируем статус заявки со статусом приема
+                switch ($appointment->status) {
+                    case AppointmentStatus::IN_PROGRESS:
+                        $application->appointment_status = Application::STATUS_IN_PROGRESS;
+                        break;
+                    case AppointmentStatus::COMPLETED:
+                        $application->appointment_status = Application::STATUS_COMPLETED;
+                        break;
+                    case AppointmentStatus::SCHEDULED:
+                        $application->appointment_status = Application::STATUS_SCHEDULED;
+                        break;
+                }
+                
+                // Сохраняем без вызова событий, чтобы избежать рекурсии
+                $application->saveQuietly();
+            }
+        });
+    }
+
+    /**
      * Связь с заявкой
      */
     public function application(): BelongsTo

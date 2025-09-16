@@ -17,6 +17,12 @@ class EditAppointment extends EditRecord
             Actions\DeleteAction::make(),
         ];
     }
+
+    protected function afterSave(): void
+    {
+        // Обновляем календарь после изменения статуса приема
+        $this->dispatch('refetchEvents');
+    }
     
     protected function mutateFormDataBeforeFill(array $data): array
     {

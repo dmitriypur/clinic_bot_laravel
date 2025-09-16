@@ -383,6 +383,9 @@ class BidResource extends Resource
                     ->label('Дата и время приема')
                     ->dateTime('d.m.Y H:i')
                     ->sortable(),
+                TextColumn::make('source')
+                    ->label('Источник')
+                    ->searchable(),
                 TextColumn::make('status.name')
                     ->label('Статус')
                     ->badge()

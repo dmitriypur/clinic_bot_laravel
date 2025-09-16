@@ -37,6 +37,7 @@ class CabinetResource extends Resource
     protected static ?string $pluralLabel = 'Кабинеты';  // Альтернативное множественное число
     protected static ?string $label = 'Кабинет';  // Альтернативное единственное число
     protected static ?int $navigationSort = 3;  // Порядок в навигации
+    protected static ?string $navigationGroup = 'Клиники';
 
     /**
      * Форма для создания/редактирования кабинета

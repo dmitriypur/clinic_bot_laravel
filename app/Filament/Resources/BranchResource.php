@@ -24,6 +24,7 @@ class BranchResource extends Resource
     protected static ?string $navigationLabel = 'Филиалы';
     protected static ?string $pluralLabel = 'Филиалы';
     protected static ?string $label = 'Филиал';
+    protected static ?string $navigationGroup = 'Клиники';
     protected static ?int $navigationSort = 3;
 
     public static function getEloquentQuery(): Builder

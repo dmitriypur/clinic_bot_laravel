@@ -57,6 +57,11 @@ class AdminPanelProvider extends PanelProvider
             ->widgets([
                 \App\Filament\Widgets\AllCabinetsScheduleWidget::class,
             ])
+            ->navigationGroups([
+                'Клиники',
+                'Заявки',
+                'Система',
+            ])
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

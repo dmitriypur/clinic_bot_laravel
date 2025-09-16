@@ -29,13 +29,14 @@ class ApplicationResource extends Resource
 {
     protected static ?string $model = Application::class;
 
-    protected static ?string $navigationLabel = 'Записи на прием';
-    protected static ?string $pluralNavigationLabel = 'Записи на прием';
-    protected static ?string $pluralLabel = 'Записи на прием';
-    protected static ?string $label = 'Запись на прием';
+    protected static ?string $navigationLabel = 'Журнал приемов';
+    protected static ?string $pluralNavigationLabel = 'Журнал приемов';
+    protected static ?string $pluralLabel = 'Журнал приемов';
+    protected static ?string $label = 'Журнал приемов';
+    protected static ?string $navigationGroup = 'Заявки';
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 6;
 
     public static function getEloquentQuery(): Builder
     {

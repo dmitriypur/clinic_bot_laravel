@@ -24,6 +24,10 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Models\ApplicationStatus;
+use Filament\Tables\Actions\ExportAction;
+use Filament\Actions\Exports\Enums\ExportFormat;
+use App\Filament\Exports\ApplicationExporter;
+
 
 class ApplicationResource extends Resource
 {
@@ -291,6 +295,14 @@ class ApplicationResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->headerActions([
+                ExportAction::make()
+                    ->exporter(ApplicationExporter::class)
+                    ->formats([ExportFormat::Csv, ExportFormat::Xlsx])
+                    ->columnMapping(true) // показывает выбор колонок в модальном окне
+                    ->successNotificationTitle('Экспорт завершен')
+                    ->successNotificationMessage('Файл готов к скачиванию!'),
+            ])
             ->columns([
                 TextColumn::make('clinic.name')
                     ->label('Клиника')

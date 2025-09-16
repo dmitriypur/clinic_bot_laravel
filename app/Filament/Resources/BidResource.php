@@ -31,7 +31,7 @@ class BidResource extends Resource
     protected static ?string $pluralNavigationLabel = 'Заявки';
     protected static ?string $pluralLabel = 'Заявки';
     protected static ?string $label = 'Заявка';
-    protected static ?string $navigationGroup = 'Заявки';
+    protected static ?string $navigationGroup = 'Журнал приемов';
 
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-bottom-center-text';
     protected static ?int $navigationSort = 5;

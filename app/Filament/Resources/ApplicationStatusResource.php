@@ -25,7 +25,7 @@ class ApplicationStatusResource extends Resource
     
     protected static ?string $pluralModelLabel = 'Статусы заявок';
     
-    protected static ?string $navigationGroup = 'Заявки';
+    protected static ?string $navigationGroup = 'Журнал приемов';
 
     public static function form(Form $form): Form
     {

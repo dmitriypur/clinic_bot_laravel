@@ -26,46 +26,36 @@ class AppointmentResource extends Resource
     
     protected static ?string $pluralModelLabel = 'Приемы';
     
-    protected static ?string $navigationGroup = 'Медицинские записи';
+    protected static ?string $navigationGroup = 'Журнал приемов';
+    protected static ?int $navigationSort = 7;
 
     public static function form(Form $form): Form
     {
         return $form
-            ->schema([
+            ->schema([    
+                Forms\Components\Section::make('Детали приема')
+                    ->schema([
+                        Forms\Components\Select::make('status')
+                            ->label('Статус')
+                            ->options(AppointmentStatus::options())
+                            ->required()
+                            ->default(AppointmentStatus::IN_PROGRESS),
+                            
+                        Forms\Components\DateTimePicker::make('started_at')
+                            ->label('Начало приема')
+                            ->required(),
+                            
+                        Forms\Components\DateTimePicker::make('completed_at')
+                            ->label('Окончание приема'),
+                            
+                        Forms\Components\Textarea::make('notes')
+                            ->label('Заметки врача')
+                            ->rows(3)
+                            ->columnSpanFull(),
+                    ])
+                    ->columns(2),
                 Forms\Components\Section::make('Информация о заявке')
                     ->schema([
-                        Forms\Components\Select::make('application_id')
-                            ->label('Заявка')
-                            ->relationship('application', 'id')
-                            ->getOptionLabelFromRecordUsing(fn ($record) => 
-                                "ID: {$record->id} - {$record->full_name} ({$record->appointment_datetime?->format('d.m.Y H:i')})"
-                            )
-                            ->required()
-                            ->searchable()
-                            ->preload()
-                            ->reactive()
-                            ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
-                                if ($state) {
-                                    $application = \App\Models\Application::with(['city', 'clinic', 'branch', 'doctor', 'cabinet'])->find($state);
-                                    if ($application) {
-                                        $set('patient_info', [
-                                            'full_name' => $application->full_name,
-                                            'full_name_parent' => $application->full_name_parent,
-                                            'birth_date' => $application->birth_date?->format('d.m.Y'),
-                                            'phone' => $application->phone,
-                                        ]);
-                                        $set('appointment_info', [
-                                            'datetime' => $application->appointment_datetime?->format('d.m.Y H:i'),
-                                            'city' => $application->city?->name,
-                                            'clinic' => $application->clinic?->name,
-                                            'branch' => $application->branch?->name,
-                                            'doctor' => $application->doctor?->name,
-                                            'cabinet' => $application->cabinet?->name,
-                                        ]);
-                                    }
-                                }
-                            }),
-                            
                         Forms\Components\TextInput::make('patient_full_name')
                             ->label('ФИО пациента')
                             ->disabled()
@@ -155,28 +145,6 @@ class AppointmentResource extends Resource
                                 $info = $get('appointment_info');
                                 return $info['cabinet'] ?? '';
                             }),
-                    ])
-                    ->columns(2),
-                    
-                Forms\Components\Section::make('Детали приема')
-                    ->schema([
-                        Forms\Components\Select::make('status')
-                            ->label('Статус')
-                            ->options(AppointmentStatus::options())
-                            ->required()
-                            ->default(AppointmentStatus::IN_PROGRESS),
-                            
-                        Forms\Components\DateTimePicker::make('started_at')
-                            ->label('Начало приема')
-                            ->required(),
-                            
-                        Forms\Components\DateTimePicker::make('completed_at')
-                            ->label('Окончание приема'),
-                            
-                        Forms\Components\Textarea::make('notes')
-                            ->label('Заметки врача')
-                            ->rows(3)
-                            ->columnSpanFull(),
                     ])
                     ->columns(2),
             ]);

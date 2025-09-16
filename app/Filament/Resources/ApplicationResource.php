@@ -33,7 +33,7 @@ class ApplicationResource extends Resource
     protected static ?string $pluralNavigationLabel = 'Журнал приемов';
     protected static ?string $pluralLabel = 'Журнал приемов';
     protected static ?string $label = 'Журнал приемов';
-    protected static ?string $navigationGroup = 'Заявки';
+    protected static ?string $navigationGroup = 'Журнал приемов';
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
     protected static ?int $navigationSort = 6;

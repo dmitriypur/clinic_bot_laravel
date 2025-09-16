@@ -54,7 +54,7 @@ class BidResource extends Resource
         $query->where(function ($query) {
             $query->whereIn('source', ['frontend', 'telegram'])
                   ->orWhereHas('status', function ($query) {
-                      $query->where('type', 'bid');
+                      $query->where('type', '!=', 'appointment');
                   });
         });
 
@@ -383,9 +383,6 @@ class BidResource extends Resource
                     ->label('Дата и время приема')
                     ->dateTime('d.m.Y H:i')
                     ->sortable(),
-                TextColumn::make('source')
-                    ->label('Источник')
-                    ->searchable(),
                 TextColumn::make('status.name')
                     ->label('Статус')
                     ->badge()

@@ -46,12 +46,15 @@ class EditBid extends EditRecord
         $statusId = $this->form->getState()['status_id'] ?? null;
         
         // Показываем виджет только если статус "Записан" (ID 2)
-        if ($statusId == 16) {
-            return [
-                BidCalendarWidget::make([
-                    'formData' => $this->getFormDataForCalendar(),
-                ]),
-            ];
+        if ($statusId) {
+            $status = \App\Models\ApplicationStatus::find($statusId);
+            if ($status && $status->slug === 'appointment') {
+                return [
+                    BidCalendarWidget::make([
+                        'formData' => $this->getFormDataForCalendar(),
+                    ]),
+                ];
+            }
         }
         
         return [];

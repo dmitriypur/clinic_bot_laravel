@@ -52,9 +52,9 @@ class BidResource extends Resource
 
         // Показываем заявки из внешних источников ИЛИ исключаем заявки со статусом типа 'appointment'
         $query->where(function ($query) {
-            $query->whereNotNull('source')
+            $query->whereIn('source', ['frontend', 'telegram'])
                   ->orWhereHas('status', function ($query) {
-                      $query->where('type', '!=', 'appointment');
+                      $query->where('type', 'bid');
                   });
         });
 

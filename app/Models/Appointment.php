@@ -41,6 +41,11 @@ class Appointment extends Model
                         break;
                     case AppointmentStatus::COMPLETED:
                         $application->appointment_status = Application::STATUS_COMPLETED;
+                        // Автоматически заполняем время завершения приема
+                        if (!$appointment->completed_at) {
+                            $appointment->completed_at = now();
+                            $appointment->saveQuietly();
+                        }
                         break;
                     case AppointmentStatus::SCHEDULED:
                         $application->appointment_status = Application::STATUS_SCHEDULED;

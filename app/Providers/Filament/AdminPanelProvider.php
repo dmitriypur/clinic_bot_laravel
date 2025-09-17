@@ -44,9 +44,15 @@ class AdminPanelProvider extends PanelProvider
             ->passwordReset(false)
             ->emailVerification(false)
             ->sidebarCollapsibleOnDesktop()
-            ->sidebarWidth('14rem')
+            ->sidebarWidth('16rem')
+            ->brandLogo(asset('images/logo.png'))
+            ->brandLogoHeight('2.5rem')
             ->colors([
-                'primary' => Color::Cyan,
+                'primary' => [
+                    500 => '#d89730', // основной
+                    600 => '#f5ad3d',
+                ],
+                'success' => '#068c39',
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')

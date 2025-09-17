@@ -27,6 +27,26 @@ else
 fi
 echo ""
 
+# Проверяем pending миграции
+echo "🔍 Проверка pending миграций..."
+PENDING_COUNT=$(php artisan migrate:status 2>/dev/null | grep -c "Pending" 2>/dev/null || echo "0")
+
+if [ "$PENDING_COUNT" -gt 0 ]; then
+    echo "⚠️  Найдено $PENDING_COUNT pending миграций"
+    echo "🔧 Исправление pending миграций..."
+    
+    if php artisan migrate:fix-pending --force 2>/dev/null; then
+        echo "✅ Pending миграции исправлены"
+    else
+        echo "❌ Ошибка при исправлении pending миграций"
+        echo "💡 Попробуйте выполнить: php artisan migrate:fix-pending"
+        exit 1
+    fi
+else
+    echo "✅ Нет pending миграций"
+fi
+echo ""
+
 # Проверяем и создаем таблицу exports
 echo "🔍 Проверка таблицы exports..."
 if php artisan exports:check-table 2>/dev/null; then

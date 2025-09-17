@@ -41,6 +41,12 @@ class CalendarEventService
         $this->filterService->applyShiftFilters($shiftsQuery, $filters, $user);
         $shifts = $shiftsQuery->get();
 
+        // Предзагружаем часовые пояса для всех городов в сменах
+        $cityIds = $shifts->pluck('cabinet.branch.city_id')->unique()->filter()->toArray();
+        if (!empty($cityIds)) {
+            $this->timezoneService->preloadCityTimezones($cityIds);
+        }
+
         // Обрабатываем каждую смену
         foreach ($shifts as $shift) {
             $events = array_merge($events, $this->generateShiftEvents($shift, $user));
@@ -158,8 +164,7 @@ class CalendarEventService
         $slotStartInCity = $slotStart->setTimezone($cityTimezone);
         
         // Проверяем, прошло ли время в часовом поясе города
-        $nowInCity = $this->timezoneService->nowInCityTimezone($cityId);
-        $isPast = $slotStartInCity->isPast();
+        $isPast = $this->timezoneService->isPastInCityTimezone($slotStart, $cityId);
         
         
         // Определяем цвета в зависимости от времени, занятости и статуса приема

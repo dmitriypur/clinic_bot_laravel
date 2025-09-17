@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\TimezoneService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -51,5 +52,30 @@ class Clinic extends Model
     public function getEffectiveSlotDuration(): int
     {
         return $this->slot_duration ?? 30;
+    }
+
+    /**
+     * Boot the model and register event listeners
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Очищаем кэш часового пояса клиники при обновлении
+        static::updated(function ($clinic) {
+            app(TimezoneService::class)->clearClinicTimezoneCache($clinic->id);
+        });
+
+        // Очищаем кэш часового пояса клиники при удалении
+        static::deleted(function ($clinic) {
+            app(TimezoneService::class)->clearClinicTimezoneCache($clinic->id);
+        });
+
+        // Очищаем кэш при изменении связей с городами
+        static::saved(function ($clinic) {
+            if ($clinic->wasRecentlyCreated || $clinic->wasChanged()) {
+                app(TimezoneService::class)->clearClinicTimezoneCache($clinic->id);
+            }
+        });
     }
 }

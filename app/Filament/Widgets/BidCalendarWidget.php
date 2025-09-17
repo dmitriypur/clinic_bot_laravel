@@ -124,18 +124,97 @@ class BidCalendarWidget extends FullCalendarWidget
                 'minute' => '2-digit',
                 'hour12' => false, // 24-часовой формат
             ],
-            'eventDidMount' => 'function(info) {
-                try {
-                    console.log("=== BID CALENDAR EVENT ===");
-                    console.log("СОБЫТИЕ МОНТИРУЕТСЯ:", info.event.id);
-                    console.log("Application ID:", info.event.extendedProps.application_id);
-                    console.log("Full extendedProps:", info.event.extendedProps);
-                    console.log("========================");
-                } catch (e) {
-                    console.error("Ошибка в eventDidMount:", e);
-                }
-            }',
         ];
+    }
+
+    /**
+     * JavaScript код для обработки монтирования событий
+     * Добавляет подсказки с информацией о кабинете
+     */
+    public function eventDidMount(): string
+    {
+        return '
+            function(info) {
+                const extendedProps = info.event.extendedProps;
+                if (extendedProps && extendedProps.cabinet_name) {
+                    
+                    // Создаем кастомную подсказку
+                    const tooltip = document.createElement("div");
+                    tooltip.className = "custom-tooltip";
+                    tooltip.innerHTML = `
+                        <div style="padding: 10px; background: #f5ad3d; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 12px; line-height: 1.4; max-width: 220px;">
+                            <strong style="color: rgba(43, 43, 43, 0.9); font-weight: 600;">${extendedProps.cabinet_name}</strong><br>
+                            <span style="color: rgba(43, 43, 43, 0.9);">Филиал: ${extendedProps.branch_name || "Не указан"}</span><br>
+                            <span style="color: rgba(43, 43, 43,0.9);">Клиника: ${extendedProps.clinic_name || "Не указана"}</span><br>
+                            <span style="color: rgba(43, 43, 43,0.9);">Врач: ${extendedProps.doctor_name || "Не назначен"}</span>
+                        </div>
+                    `;
+                    
+                    tooltip.style.cssText = `
+                        position: fixed !important;
+                        z-index: 99999 !important;
+                        opacity: 0;
+                        transition: opacity 0.2s ease;
+                        pointer-events: none;
+                        display: none;
+                    `;
+                    
+                    document.body.appendChild(tooltip);
+                    
+                    // Обработчики событий
+                    let showTimeout;
+                    let hideTimeout;
+                    
+                    info.el.addEventListener("mouseenter", function(e) {
+                        clearTimeout(hideTimeout);
+                        showTimeout = setTimeout(() => {
+                            const rect = info.el.getBoundingClientRect();
+                            const tooltipRect = tooltip.getBoundingClientRect();
+                            
+                            // Позиционируем справа от слота
+                            let left = rect.right + 10; // 10px отступ справа от слота
+                            let top = rect.top + (rect.height / 2) - (tooltipRect.height / 2) - 40; // По центру по вертикали, но на 40px выше
+                            
+                            // Проверяем, не выходит ли подсказка за границы экрана
+                            if (left + tooltipRect.width > window.innerWidth - 10) {
+                                // Если не помещается справа, показываем слева
+                                left = rect.left - tooltipRect.width - 10;
+                            }
+                            
+                            // Проверяем вертикальные границы
+                            if (top < 10) {
+                                top = 10;
+                            } else if (top + tooltipRect.height > window.innerHeight - 10) {
+                                top = window.innerHeight - tooltipRect.height - 10;
+                            }
+                            
+                            tooltip.style.display = "block";
+                            tooltip.style.left = left + "px";
+                            tooltip.style.top = top + "px";
+                            tooltip.style.opacity = "1";
+                        }, 300);
+                    });
+                    
+                    info.el.addEventListener("mouseleave", function(e) {
+                        clearTimeout(showTimeout);
+                        hideTimeout = setTimeout(() => {
+                            tooltip.style.opacity = "0";
+                            setTimeout(() => {
+                                tooltip.style.display = "none";
+                            }, 200);
+                        }, 100);
+                    });
+                    
+                    // Очистка при удалении события
+                    info.el.addEventListener("remove", function() {
+                        if (tooltip.parentNode) {
+                            tooltip.parentNode.removeChild(tooltip);
+                        }
+                    });
+                    
+                }
+            }
+        ';
     }
 
     /**

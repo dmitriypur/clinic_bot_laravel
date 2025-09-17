@@ -206,6 +206,12 @@ class CalendarEventService
             ]);
         }
         
+        // Создаем текст подсказки
+        $tooltipText = $shift->cabinet->name . "\n" .
+                      "Филиал: " . ($shift->cabinet->branch->name ?? "Не указан") . "\n" .
+                      "Клиника: " . ($shift->cabinet->branch->clinic->name ?? "Не указана") . "\n" .
+                      "Врач: " . ($shift->doctor->full_name ?? "Не назначен");
+        
         $eventData = [
             'id' => 'slot_' . $shift->id . '_' . $slot['start']->format('Y-m-d_H-i') . ($application ? '_app_' . $application->id : ''),
             'title' => $title,
@@ -214,6 +220,7 @@ class CalendarEventService
             'backgroundColor' => $backgroundColor,
             'borderColor' => $backgroundColor,
             'classNames' => $isPast ? ['past-appointment'] : ['active-appointment'],
+            'tooltip' => $tooltipText,
             'extendedProps' => [
                 'shift_id' => $shift->id,
                 'cabinet_id' => $shift->cabinet_id,

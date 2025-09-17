@@ -24,6 +24,13 @@ class CalendarFilterService
             $query->where('start_time', '<=', Carbon::parse($filters['date_to']));
         }
 
+        // Фильтры по городам
+        if (!empty($filters['city_ids'])) {
+            $query->whereHas('cabinet.branch', function($q) use ($filters) {
+                $q->whereIn('city_id', $filters['city_ids']);
+            });
+        }
+
         // Фильтры по клиникам
         if (!empty($filters['clinic_ids'])) {
             $query->whereHas('cabinet.branch', function($q) use ($filters) {

@@ -195,7 +195,7 @@ class BidCalendarWidget extends FullCalendarWidget
     public function formDataUpdated($formData): void
     {
         $this->formData = $formData;
-        // $this->refreshRecords();
+        $this->refreshRecords();
     }
 
     /**
@@ -204,12 +204,18 @@ class BidCalendarWidget extends FullCalendarWidget
     protected function createFiltersFromFormData(): array
     {
         $filters = [
+            'city_ids' => [],
             'clinic_ids' => [],
             'branch_ids' => [],
             'doctor_ids' => [],
             'date_from' => null,
             'date_to' => null,
         ];
+
+        // Если выбран город
+        if (!empty($this->formData['city_id'])) {
+            $filters['city_ids'] = [$this->formData['city_id']];
+        }
 
         // Если выбрана клиника
         if (!empty($this->formData['clinic_id'])) {

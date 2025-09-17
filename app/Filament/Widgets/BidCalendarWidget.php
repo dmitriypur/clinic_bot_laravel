@@ -160,7 +160,7 @@ class BidCalendarWidget extends FullCalendarWidget
             return [];
         }
         
-        // Если нет данных формы для фильтрации, возвращаем пустой массив
+        // Если нет данных формы для фильтрации, показываем все доступные слоты
         // Проверяем наличие хотя бы одного поля для фильтрации
         $hasFilterData = !empty($this->formData['city_id']) || 
                         !empty($this->formData['clinic_id']) || 
@@ -168,9 +168,7 @@ class BidCalendarWidget extends FullCalendarWidget
                         !empty($this->formData['doctor_id']) || 
                         !empty($this->formData['cabinet_id']);
         
-        if (!$hasFilterData) {
-            return [];
-        }
+        // Если нет фильтров - показываем все слоты (не возвращаем пустой массив)
         
         // Добавляем уникальный идентификатор для принудительного обновления
         $fetchInfo['_timestamp'] = time();

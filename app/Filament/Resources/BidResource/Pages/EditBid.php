@@ -39,26 +39,15 @@ class EditBid extends EditRecord
 
     /**
      * Виджеты в заголовке страницы
-     * Включает календарь для выбора времени приема только при статусе "Записан"
+     * Включает календарь для выбора времени приема
      */
     protected function getFooterWidgets(): array
     {
-        // Получаем текущий статус из формы
-        $statusId = $this->form->getState()['status_id'] ?? null;
-        
-        // Показываем виджет только если статус "Записан" (ID 2)
-        if ($statusId) {
-            $status = \App\Models\ApplicationStatus::find($statusId);
-            if ($status && $status->slug === 'appointment') {
-                return [
-                    BidCalendarWidget::make([
-                        'formData' => $this->getFormDataForCalendar(),
-                    ]),
-                ];
-            }
-        }
-        
-        return [];
+        return [
+            BidCalendarWidget::make([
+                'formData' => $this->getFormDataForCalendar(),
+            ]),
+        ];
     }
 
     /**

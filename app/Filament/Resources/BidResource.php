@@ -322,30 +322,11 @@ class BidResource extends Resource
                     }),
                 DateTimePicker::make('appointment_datetime')
                     ->label('Дата и время приема')
-                    ->rules([
-                        fn (\Filament\Forms\Get $get): \Closure => function (string $attribute, $value, \Closure $fail) use ($get) {
-                            // Проверяем только если статус "Запись на прием" (slug: appointment)
-                            $statusId = $get('status_id');
-                            if (request()->isMethod('POST') && $statusId) {
-                                $status = \App\Models\ApplicationStatus::find($statusId);
-                                if ($status && $status->slug === 'appointment' && !$value) {
-                                    $fail("Поле дата и время приема обязательно для заполнения при статусе 'Запись на прием'.");
-                                }
-                            }
-                        },
-                    ])
                     ->native(false)
                     ->displayFormat('d.m.Y H:i')
                     ->seconds(false)
                     ->readonly()
                     ->live()
-                    ->visible(function (\Filament\Forms\Get $get): bool {
-                        $statusId = $get('status_id');
-                        if (!$statusId) return false;
-                        
-                        $status = \App\Models\ApplicationStatus::find($statusId);
-                        return $status && $status->slug === 'appointment';
-                    })
                     ->afterStateUpdated(function ($state, callable $set, callable $get) {
                         // Обновляем связанные поля при изменении времени
                         $appointmentDatetime = $state;

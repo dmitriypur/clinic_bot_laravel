@@ -4,8 +4,10 @@ namespace App\Filament\Resources\BidResource\Pages;
 
 use App\Filament\Resources\BidResource;
 use App\Filament\Widgets\BidCalendarWidget;
+use App\Models\Application;
 use App\Models\ApplicationStatus;
 use Filament\Actions;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Facades\FilamentView;
 use Illuminate\Contracts\View\View;
@@ -17,7 +19,7 @@ class EditBid extends EditRecord
     /**
      * Слушатели событий Livewire
      */
-    protected $listeners = ['slotSelected'];
+    protected $listeners = ['slotSelected', 'updateApplicationFromSlot'];
 
     /**
      * Инициализация при монтировании компонента
@@ -117,6 +119,51 @@ class EditBid extends EditRecord
     public function getFooter(): ?View
     {
         return view('filament.pages.bid-calendar-integration');
+    }
+
+    /**
+     * Обработчик обновления заявки данными из календаря
+     */
+    public function updateApplicationFromSlot($slotData): void
+    {
+        try {
+            // Получаем текущие данные формы
+            $currentData = $this->form->getState();
+            
+            // Объединяем данные формы с данными слота
+            $applicationData = array_merge($currentData, $slotData);
+            
+            // Устанавливаем статус "Запись на прием"
+            $appointmentStatus = \App\Models\ApplicationStatus::where('slug', 'appointment')->first();
+            if ($appointmentStatus) {
+                $applicationData['status_id'] = $appointmentStatus->id;
+            }
+            
+            // Обновляем форму с новыми данными
+            $this->form->fill($applicationData);
+            
+            // Показываем уведомление об успехе
+            Notification::make()
+                ->title('Время выбрано')
+                ->body('Время приема выбрано из календаря. Статус изменен на "Запись на прием"')
+                ->success()
+                ->send();
+            
+        } catch (\Exception $e) {
+            // Логируем ошибку
+            \Log::error('Ошибка обновления заявки данными слота в EditBid: ' . $e->getMessage(), [
+                'slotData' => $slotData,
+                'currentRecord' => $this->record->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Показываем уведомление об ошибке
+            Notification::make()
+                ->title('Ошибка обновления')
+                ->body('Ошибка: ' . $e->getMessage())
+                ->danger()
+                ->send();
+        }
     }
 
     /**

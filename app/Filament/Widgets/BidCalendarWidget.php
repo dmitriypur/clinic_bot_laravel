@@ -53,7 +53,7 @@ class BidCalendarWidget extends FullCalendarWidget
     /**
      * Слушатели событий для обновления календаря
      */
-    protected $listeners = ['refetchEvents', 'formDataUpdated', 'slotSelected'];
+    protected $listeners = ['refetchEvents', 'formDataUpdated', 'slotSelected', 'updateApplicationFromSlot'];
     
     /**
      * Сервисы для работы с фильтрами и событиями
@@ -276,7 +276,7 @@ class BidCalendarWidget extends FullCalendarWidget
     /**
      * Обработка клика по свободному слоту
      * 
-     * Передает данные слота в форму для заполнения поля appointment_datetime
+     * Автоматически создает заявку со статусом "Запись на прием"
      * 
      * @param array $data Данные слота с информацией о кабинете и времени
      */
@@ -308,29 +308,15 @@ class BidCalendarWidget extends FullCalendarWidget
         $cityId = $shift->cabinet->branch->city_id;
         $slotStartInCity = $timezoneService->convertToCityTimezone($slotStart, $cityId);
         
-        // Заполняем массив данными для формы
-        $this->slotData = [
+        // Отправляем событие для обновления заявки данными слота
+        $this->dispatch('updateApplicationFromSlot', [
             'city_id' => $cityId,
-            'city_name' => $shift->cabinet->branch->city->name,
             'clinic_id' => $shift->cabinet->branch->clinic_id,
-            'clinic_name' => $shift->cabinet->branch->clinic->name,
             'branch_id' => $shift->cabinet->branch_id,
-            'branch_name' => $shift->cabinet->branch->name,
             'cabinet_id' => $shift->cabinet_id,
-            'cabinet_name' => $shift->cabinet->name,
             'doctor_id' => $shift->doctor_id,
-            'doctor_name' => $shift->doctor->full_name,
             'appointment_datetime' => $slotStartInCity->format('Y-m-d H:i:s'),
-        ];
-
-        // Отправляем событие с данными слота через Livewire
-        $this->dispatch('slotSelected', $this->slotData);
-        
-        Notification::make()
-            ->title('Время выбрано')
-            ->body('Время приема выбрано из календаря')
-            ->success()
-            ->send();
+        ]);
     }
 
     /**

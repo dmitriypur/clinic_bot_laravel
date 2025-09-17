@@ -6,6 +6,7 @@ use App\Filament\Resources\BidResource;
 use App\Filament\Widgets\BidCalendarWidget;
 use App\Models\Application;
 use Filament\Actions;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Facades\FilamentView;
 use Illuminate\Contracts\View\View;
@@ -17,7 +18,7 @@ class CreateBid extends CreateRecord
     /**
      * Слушатели событий Livewire
      */
-    protected $listeners = ['slotSelected'];
+    protected $listeners = ['slotSelected', 'updateApplicationFromSlot'];
 
     /**
      * Инициализация при монтировании компонента
@@ -102,6 +103,50 @@ class CreateBid extends CreateRecord
 
         // Обновляем календарь с новыми данными
         $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
+    }
+
+    /**
+     * Обработчик обновления заявки данными из календаря
+     */
+    public function updateApplicationFromSlot($slotData): void
+    {
+        try {
+            // Получаем текущие данные формы
+            $currentData = $this->form->getState();
+            
+            // Объединяем данные формы с данными слота
+            $applicationData = array_merge($currentData, $slotData);
+            
+            // Устанавливаем статус "Запись на прием"
+            $appointmentStatus = \App\Models\ApplicationStatus::where('slug', 'appointment')->first();
+            if ($appointmentStatus) {
+                $applicationData['status_id'] = $appointmentStatus->id;
+            }
+            
+            // Обновляем форму с новыми данными
+            $this->form->fill($applicationData);
+            
+            // Показываем уведомление об успехе
+            Notification::make()
+                ->title('Время выбрано')
+                ->body('Время приема выбрано из календаря. Статус изменен на "Запись на прием"')
+                ->success()
+                ->send();
+            
+        } catch (\Exception $e) {
+            // Логируем ошибку
+            \Log::error('Ошибка обновления заявки данными слота: ' . $e->getMessage(), [
+                'slotData' => $slotData,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Показываем уведомление об ошибке
+            Notification::make()
+                ->title('Ошибка обновления')
+                ->body('Ошибка: ' . $e->getMessage())
+                ->danger()
+                ->send();
+        }
     }
 
     /**

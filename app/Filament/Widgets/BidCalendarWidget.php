@@ -381,9 +381,9 @@ class BidCalendarWidget extends FullCalendarWidget
             $slotStart = \Carbon\Carbon::parse($slotStart);
         }
         
-        // Используем время слота как есть
+        // Конвертируем время в часовой пояс приложения (Europe/Moscow)
         $cityId = $shift->cabinet->branch->city_id;
-        $slotStartInCity = $slotStart;
+        $slotStartInCity = $slotStart->setTimezone(config('app.timezone', 'Europe/Moscow'));
         
         // Отправляем событие для обновления заявки данными слота
         $this->dispatch('updateApplicationFromSlot', [
@@ -393,6 +393,15 @@ class BidCalendarWidget extends FullCalendarWidget
             'cabinet_id' => $shift->cabinet_id,
             'doctor_id' => $shift->doctor_id,
             'appointment_datetime' => $slotStartInCity->format('Y-m-d H:i:s'),
+        ]);
+        
+        // Отладочная информация
+        \Log::info('BidCalendarWidget: Slot selected', [
+            'original_slot_start' => $slotStart->format('Y-m-d H:i:s'),
+            'converted_slot_start' => $slotStartInCity->format('Y-m-d H:i:s'),
+            'app_timezone' => config('app.timezone'),
+            'shift_id' => $shift->id,
+            'cabinet_id' => $shift->cabinet_id,
         ]);
     }
 

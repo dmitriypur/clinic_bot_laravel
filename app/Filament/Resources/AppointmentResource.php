@@ -175,9 +175,6 @@ class AppointmentResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('id')
-                    ->label('ID')
-                    ->sortable(),
                     
                 Tables\Columns\TextColumn::make('application.full_name')
                     ->label('Пациент')
@@ -189,7 +186,7 @@ class AppointmentResource extends Resource
                     ->dateTime('d.m.Y H:i')
                     ->sortable(),
                     
-                Tables\Columns\TextColumn::make('application.doctor.name')
+                Tables\Columns\TextColumn::make('application.doctor.full_name')
                     ->label('Врач')
                     ->sortable(),
                     
@@ -251,7 +248,6 @@ class AppointmentResource extends Resource
                     }),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
             ])
             ->bulkActions([

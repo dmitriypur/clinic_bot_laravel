@@ -30,9 +30,6 @@ class ApplicationExporter extends Exporter
             ExportColumn::make('branch.name')->label('Филиал'),
             ExportColumn::make('appointment_datetime')->label('Дата и время приема'),
             ExportColumn::make('cabinet.name')->label('Кабинет'),
-            ExportColumn::make('appointment_status')->label('Статус приема'),
-            ExportColumn::make('source')->label('Источник'),
-            ExportColumn::make('status.name')->label('Статус заявки'),
         ];
     }
 

@@ -3,7 +3,6 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use App\Services\TimezoneService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -147,24 +146,4 @@ class User extends Authenticatable implements FilamentUser
         return collect();
     }
 
-    /**
-     * Boot the model and register event listeners
-     */
-    protected static function boot()
-    {
-        parent::boot();
-
-        // Очищаем кэш часового пояса пользователя при обновлении
-        static::updated(function ($user) {
-            // Очищаем кэш если изменились поля, влияющие на часовой пояс
-            if ($user->isDirty(['clinic_id', 'doctor_id'])) {
-                app(TimezoneService::class)->clearUserTimezoneCache($user->id);
-            }
-        });
-
-        // Очищаем кэш часового пояса пользователя при удалении
-        static::deleted(function ($user) {
-            app(TimezoneService::class)->clearUserTimezoneCache($user->id);
-        });
-    }
 }

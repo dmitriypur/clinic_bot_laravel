@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Application;
 use App\Models\DoctorShift;
 use App\Models\User;
-use App\Services\TimezoneService;
 use App\Traits\HasCalendarOptimizations;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -15,12 +14,10 @@ class CalendarEventService
     use HasCalendarOptimizations;
     
     protected CalendarFilterService $filterService;
-    protected TimezoneService $timezoneService;
     
-    public function __construct(CalendarFilterService $filterService, TimezoneService $timezoneService)
+    public function __construct(CalendarFilterService $filterService)
     {
         $this->filterService = $filterService;
-        $this->timezoneService = $timezoneService;
     }
 
     /**
@@ -41,11 +38,6 @@ class CalendarEventService
         $this->filterService->applyShiftFilters($shiftsQuery, $filters, $user);
         $shifts = $shiftsQuery->get();
 
-        // Предзагружаем часовые пояса для всех городов в сменах
-        $cityIds = $shifts->pluck('cabinet.branch.city_id')->unique()->filter()->toArray();
-        if (!empty($cityIds)) {
-            $this->timezoneService->preloadCityTimezones($cityIds);
-        }
 
         // Обрабатываем каждую смену
         foreach ($shifts as $shift) {
@@ -156,15 +148,8 @@ class CalendarEventService
         $slotStart = Carbon::parse($slot['start']);
         $slotEnd = Carbon::parse($slot['end']);
         
-        // Получаем часовой пояс города филиала
-        $cityId = $shift->cabinet->branch->city_id;
-        $cityTimezone = $this->timezoneService->getCityTimezone($cityId);
-        
-        // Конвертируем время слота в часовой пояс города
-        $slotStartInCity = $slotStart->setTimezone($cityTimezone);
-        
-        // Проверяем, прошло ли время в часовом поясе города
-        $isPast = $this->timezoneService->isPastInCityTimezone($slotStart, $cityId);
+        // Проверяем, прошло ли время
+        $isPast = $slotStart->isPast();
         
         
         // Определяем цвета в зависимости от времени, занятости и статуса приема
@@ -234,13 +219,11 @@ class CalendarEventService
                 'cabinet_name' => $shift->cabinet->name ?? 'Кабинет не указан',
                 'branch_name' => $shift->cabinet->branch->name ?? 'Филиал не указан',
                 'clinic_name' => $shift->cabinet->branch->clinic->name ?? 'Клиника не указана',
-                'city_id' => $cityId,
-                'city_timezone' => $cityTimezone,
+                'city_id' => $shift->cabinet->branch->city_id ?? null,
                 'is_occupied' => $isOccupied,
                 'is_past' => $isPast,
                 'slot_start' => $slot['start'],
                 'slot_end' => $slot['end'],
-                'slot_start_city_time' => $slotStartInCity->format('Y-m-d H:i:s'),
                 'application_id' => $application ? $application->id : null,
                 'application_status' => $application ? $application->appointment_status : null,
                 'application_data' => $application ? [

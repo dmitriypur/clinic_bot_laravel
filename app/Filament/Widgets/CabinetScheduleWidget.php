@@ -5,7 +5,6 @@ namespace App\Filament\Widgets;
 use App\Models\DoctorShift;
 use App\Models\Doctor;
 use App\Models\Cabinet;
-use App\Services\TimezoneService;
 use Filament\Widgets\Widget;
 use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 use Filament\Forms\Components\Select;
@@ -31,18 +30,6 @@ class CabinetScheduleWidget extends FullCalendarWidget
     // ID кабинета для которого отображается расписание
     public ?int $cabinetId = null;
 
-    /**
-     * Сервис для работы с часовыми поясами
-     */
-    protected ?TimezoneService $timezoneService = null;
-
-    public function getTimezoneService(): TimezoneService
-    {
-        if ($this->timezoneService === null) {
-            $this->timezoneService = app(TimezoneService::class);
-        }
-        return $this->timezoneService;
-    }
 
     /**
      * Получение ID кабинета
@@ -278,16 +265,8 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 $shiftStart = \Carbon\Carbon::parse($shift->start_time);
                 $shiftEnd = \Carbon\Carbon::parse($shift->end_time);
 
-                // Получаем часовой пояс города филиала
-                $cabinet = \App\Models\Cabinet::with('branch')->find($shift->cabinet_id);
-                $cityId = $cabinet->branch->city_id;
-                $cityTimezone = $this->getTimezoneService()->getCityTimezone($cityId);
-
-                // Конвертируем время смены в часовой пояс города
-                $shiftStartInCity = $shiftStart->setTimezone($cityTimezone);
-
-                // Проверяем, прошла ли дата в часовом поясе города
-                $isPast = $this->getTimezoneService()->isPastInCityTimezone($shiftStart, $cityId);
+                // Проверяем, прошла ли дата
+                $isPast = $shiftStart->isPast();
 
                 return [
                     'id' => $shift->id,
@@ -300,10 +279,9 @@ class CabinetScheduleWidget extends FullCalendarWidget
                     'extendedProps' => [
                         'doctor_id' => $shift->doctor_id,
                         'doctor_name' => $shift->doctor->full_name ?? 'Врач не назначен',
-                        'city_id' => $cityId,
-                        'city_timezone' => $cityTimezone,
+                        'city_id' => $shift->cabinet->branch->city_id ?? null,
                         'is_past' => $isPast,
-                        'shift_start_city_time' => $shiftStartInCity->format('Y-m-d H:i:s'),
+                        'shift_start_time' => $shiftStart->format('Y-m-d H:i:s'),
                     ]
                 ];
             })
@@ -374,11 +352,9 @@ class CabinetScheduleWidget extends FullCalendarWidget
     {
         // Проверяем, прошла ли дата смены
         $shiftStart = \Carbon\Carbon::parse($shift->start_time);
-        $cabinet = \App\Models\Cabinet::with('branch')->find($shift->cabinet_id);
-        $cityId = $cabinet->branch->city_id;
-        $nowInCity = $this->getTimezoneService()->nowInCityTimezone($cityId);
+        $now = now();
 
-        if ($shiftStart->format('Y-m-d') < $nowInCity->format('Y-m-d')) {
+        if ($shiftStart->format('Y-m-d') < $now->format('Y-m-d')) {
             // Для прошедших смен используем серые цвета
             $pastColors = [
                 '#9CA3AF', // серый

@@ -6,9 +6,7 @@ use App\Filament\Resources\CityResource\Pages;
 use App\Filament\Resources\CityResource\RelationManagers;
 use App\Models\City;
 use App\Models\Clinic;
-use App\Services\TimezoneService;
 use Filament\Forms;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
@@ -40,11 +38,13 @@ class CityResource extends Resource
         // Получаем текущего пользователя
         $user = auth()->user();
 
-        // Если пользователь с ролью 'user' — показываем только их город
+        // Если пользователь с ролью 'partner' — показываем только их город
         if ($user->hasRole('partner')) {
             $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
-            $cities = $clinic->cities->pluck('id')->toArray();
-            $query->whereIn('id', $cities);
+            if ($clinic) {
+                $cities = $clinic->cities->pluck('id')->toArray();
+                $query->whereIn('id', $cities);
+            }
         }
 
         return $query;
@@ -52,20 +52,12 @@ class CityResource extends Resource
 
     public static function form(Form $form): Form
     {
-        $timezoneService = app(TimezoneService::class);
-        
         return $form
             ->schema([
                 TextInput::make('name')
                     ->label('Название')
                     ->required()
                     ->maxLength(255),
-                Select::make('timezone')
-                    ->label('Часовой пояс')
-                    ->required()
-                    ->options($timezoneService->getRussianTimezones())
-                    ->searchable()
-                    ->default('Europe/Moscow'),
                 Toggle::make('status')
                     ->label('Активен')
                     ->required(),
@@ -79,14 +71,6 @@ class CityResource extends Resource
                 TextColumn::make('name')
                     ->label('Название')
                     ->searchable(),
-                TextColumn::make('timezone')
-                    ->label('Часовой пояс')
-                    ->searchable()
-                    ->formatStateUsing(function (string $state): string {
-                        $timezoneService = app(TimezoneService::class);
-                        $timezones = $timezoneService->getRussianTimezones();
-                        return $timezones[$state] ?? $state;
-                    }),
                 TextColumn::make('branches_count')
                     ->label('Филиалов')
                     ->counts('branches')

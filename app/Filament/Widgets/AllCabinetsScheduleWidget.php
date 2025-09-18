@@ -6,7 +6,6 @@ use App\Models\DoctorShift;
 use App\Models\Doctor;
 use App\Models\Cabinet;
 use App\Services\CalendarFilterService;
-use App\Services\TimezoneService;
 use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DateTimePicker;
@@ -42,10 +41,9 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
     protected $listeners = ['refetchEvents', 'shiftFiltersUpdated', '$refresh'];
     
     /**
-     * Сервисы для работы с фильтрами и часовыми поясами
+     * Сервис для работы с фильтрами
      */
     protected ?CalendarFilterService $filterService = null;
-    protected ?TimezoneService $timezoneService = null;
     
     public function getFilterService(): CalendarFilterService
     {
@@ -53,14 +51,6 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
             $this->filterService = app(CalendarFilterService::class);
         }
         return $this->filterService;
-    }
-    
-    public function getTimezoneService(): TimezoneService
-    {
-        if ($this->timezoneService === null) {
-            $this->timezoneService = app(TimezoneService::class);
-        }
-        return $this->timezoneService;
     }
 
     /**
@@ -166,15 +156,8 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                 $shiftStart = \Carbon\Carbon::parse($shift->start_time);
                 $shiftEnd = \Carbon\Carbon::parse($shift->end_time);
                 
-                // Получаем часовой пояс города филиала
-                $cityId = $shift->cabinet->branch->city_id;
-                $cityTimezone = $this->getTimezoneService()->getCityTimezone($cityId);
-                
-                // Конвертируем время смены в часовой пояс города
-                $shiftStartInCity = $shiftStart->setTimezone($cityTimezone);
-                
-                // Проверяем, прошла ли дата в часовом поясе города
-                $isPast = $this->getTimezoneService()->isPastInCityTimezone($shiftStart, $cityId);
+                // Проверяем, прошла ли дата
+                $isPast = $shiftStart->isPast();
                 
                 return [
                     'id' => $shift->id,
@@ -190,10 +173,9 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                         'cabinet_id' => $shift->cabinet_id,
                         'cabinet_name' => $shift->cabinet->name ?? 'Кабинет не указан',
                         'branch_name' => $shift->cabinet->branch->name ?? 'Филиал не указан',
-                        'city_id' => $cityId,
-                        'city_timezone' => $cityTimezone,
+                        'city_id' => $shift->cabinet->branch->city_id ?? null,
                         'is_past' => $isPast,
-                        'shift_start_city_time' => $shiftStartInCity->format('Y-m-d H:i:s'),
+                        'shift_start_time' => $shiftStart->format('Y-m-d H:i:s'),
                     ]
                 ];
             })
@@ -270,9 +252,8 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
     {
         // Проверяем, прошла ли дата смены
         $shiftStart = \Carbon\Carbon::parse($shift->start_time);
-        $cityId = $shift->cabinet->branch->city_id;
         
-        if ($this->getTimezoneService()->isPastInCityTimezone($shiftStart, $cityId)) {
+        if ($shiftStart->isPast()) {
             // Для прошедших смен используем серые цвета
             $pastColors = [
                 '#9CA3AF', // серый

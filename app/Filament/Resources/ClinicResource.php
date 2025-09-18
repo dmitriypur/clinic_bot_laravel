@@ -39,7 +39,7 @@ class ClinicResource extends Resource
         // Получаем текущего пользователя
         $user = auth()->user();
 
-        // Если пользователь с ролью 'user' — показываем только их город
+        // Если пользователь с ролью 'partner' — показываем только их клинику
         if ($user->hasRole('partner')) {
             $query->where('id', $user->clinic_id);
         }
@@ -82,13 +82,6 @@ class ClinicResource extends Resource
                     ->default(30)
                     ->helperText('Используется для всех филиалов, если у них не задана своя длительность')
                     ->required(),
-                Select::make('city_id')
-                    ->label('Города')
-                    ->multiple()
-                    ->searchable()
-                    ->preload()
-                    ->relationship('cities', 'name')
-                    ->required(),
             ]);
     }
 
@@ -118,11 +111,13 @@ class ClinicResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->visible(fn () => auth()->check() && (auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('partner'))),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(fn () => auth()->check() && (auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('partner'))),
                 ]),
             ]);
     }

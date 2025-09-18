@@ -374,8 +374,6 @@ class BidCalendarWidget extends FullCalendarWidget
             return;
         }
 
-        // Получаем сервис для работы с часовыми поясами
-        $timezoneService = app(\App\Services\TimezoneService::class);
         
         // Сохраняем данные слота в свойстве виджета для передачи в форму
         $slotStart = $data['slot_start'];
@@ -383,9 +381,9 @@ class BidCalendarWidget extends FullCalendarWidget
             $slotStart = \Carbon\Carbon::parse($slotStart);
         }
         
-        // Конвертируем время в часовой пояс города для корректного отображения
+        // Используем время слота как есть
         $cityId = $shift->cabinet->branch->city_id;
-        $slotStartInCity = $timezoneService->convertToCityTimezone($slotStart, $cityId);
+        $slotStartInCity = $slotStart;
         
         // Отправляем событие для обновления заявки данными слота
         $this->dispatch('updateApplicationFromSlot', [

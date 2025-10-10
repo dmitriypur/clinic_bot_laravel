@@ -25,7 +25,7 @@ use Filament\Actions\Action;
 
 /**
  * Виджет календаря расписания для всех кабинетов
- * 
+ *
  * Отображает календарь с расписанием врачей по всем кабинетам.
  * Позволяет создавать, редактировать и удалять смены врачей.
  * Включает фильтрацию по ролям пользователей и выбор кабинета при создании смены.
@@ -34,7 +34,7 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
 {
     // Модель для работы с данными
     public \Illuminate\Database\Eloquent\Model | string | null $model = DoctorShift::class;
-    
+
     /**
      * Фильтры для календаря смен врачей
      * Сохраняют состояние фильтрации по врачам и датам
@@ -44,17 +44,17 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
         'date_from' => null,
         'date_to' => null,
     ];
-    
+
     /**
      * Слушатели событий для обновления календаря
      */
     protected $listeners = ['refetchEvents', 'shiftFiltersUpdated', '$refresh'];
-    
+
     /**
      * Сервис для работы с фильтрами
      */
     protected ?CalendarFilterService $filterService = null;
-    
+
     public function getFilterService(): CalendarFilterService
     {
         if ($this->filterService === null) {
@@ -81,7 +81,7 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
     {
         $user = auth()->user();
         $isDoctor = $user && $user->isDoctor();
-        
+
         // Для общего календаря используем минимальную длительность слота (15 минут)
         // чтобы показать все возможные слоты
         return [
@@ -144,41 +144,41 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
         $user = auth()->user();
         $rangeStart = Carbon::parse($fetchInfo['start'])->setTimezone('UTC');
         $rangeEnd = Carbon::parse($fetchInfo['end'])->setTimezone('UTC');
-        
+
         // Базовый запрос смен в указанном диапазоне дат
         $query = DoctorShift::query()
             ->whereBetween('start_time', [$rangeStart, $rangeEnd])
             ->with(['doctor', 'cabinet.branch']);
-        
+
         // Дополнительно загружаем смены для текущего дня, если они не попадают в диапазон
         $todayStartLocal = now()->startOfDay();
         $todayEndLocal = now()->endOfDay();
         $todayStart = $todayStartLocal->copy()->setTimezone('UTC');
         $todayEnd = $todayEndLocal->copy()->setTimezone('UTC');
-        
+
         $todayQuery = DoctorShift::query()
             ->whereBetween('start_time', [$todayStart, $todayEnd])
             ->with(['doctor', 'cabinet.branch']);
-        
+
         // Применяем пользовательские фильтры к основному запросу
         $this->getFilterService()->applyShiftFilters($query, $this->filters, $user);
-        
+
         // Применяем пользовательские фильтры к запросу для текущего дня
         $this->getFilterService()->applyShiftFilters($todayQuery, $this->filters, $user);
-        
+
         // Объединяем результаты
         $allShifts = $query->get()->merge($todayQuery->get())->unique('id');
-        
+
         // Преобразуем смены в формат FullCalendar
         return $allShifts
             ->map(function (DoctorShift $shift) {
                 $appTimezone = Config::get('app.timezone', 'UTC');
                 $shiftStart = Carbon::parse($shift->getRawOriginal('start_time'), 'UTC')->setTimezone($appTimezone);
                 $shiftEnd = Carbon::parse($shift->getRawOriginal('end_time'), 'UTC')->setTimezone($appTimezone);
-                
+
                 // Проверяем, прошла ли дата
                 $isPast = $shiftStart->isPast();
-                
+
                 return [
                     'id' => $shift->id,
                     'title' => ($shift->doctor->full_name ?? 'Врач не назначен') . ' - ' . ($shift->cabinet->name ?? 'Кабинет не указан'),
@@ -211,9 +211,9 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                 ->searchable()
                 ->options(function () {
                     $user = auth()->user();
-                    
+
                     $query = Cabinet::with('branch');
-                    
+
                     // Фильтрация по ролям
                     if ($user->isPartner()) {
                         $query->whereHas('branch', function($q) use ($user) {
@@ -225,12 +225,12 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                         });
                     }
                     // super_admin видит все
-                    
+
                     return $query->get()->mapWithKeys(function ($cabinet) {
                         return [$cabinet->id => $cabinet->branch->name . ' - ' . $cabinet->name];
                     })->toArray();
                 }),
-            
+
             Select::make('doctor_id')
                 ->label('Врач')
                 ->required()
@@ -240,26 +240,26 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                     if (!$cabinetId) {
                         return [];
                     }
-                    
+
                     $cabinet = Cabinet::with('branch.doctors')->find($cabinetId);
-                    
+
                     if (!$cabinet || !$cabinet->branch) {
                         return [];
                     }
-                    
+
                     return $cabinet->branch->doctors->mapWithKeys(function ($doctor) {
                         return [$doctor->id => $doctor->full_name];
                     })->toArray();
                 }),
-            
 
-            
+
+
             DateTimePicker::make('start_time')
                 ->label('Начало смены')
                 ->required()
                 ->seconds(false)
                 ->minutesStep(15),
-            
+
             DateTimePicker::make('end_time')
                 ->label('Конец смены')
                 ->required()
@@ -291,7 +291,7 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
     {
         $appTimezone = Config::get('app.timezone', 'UTC');
         $shiftStart = Carbon::parse($shift->getRawOriginal('start_time'), 'UTC')->setTimezone($appTimezone);
-        
+
         if ($shiftStart->isPast()) {
             // Для прошедших смен используем серые цвета
             $pastColors = [
@@ -300,11 +300,11 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                 '#4B5563', // еще темнее
                 '#374151', // очень темный
             ];
-            
+
             $cabinetId = $shift->cabinet_id ?? 0;
             return $pastColors[$cabinetId % count($pastColors)];
         }
-        
+
         // Цвета для активных смен
         $colors = [
             '#3B82F6', // синий
@@ -316,7 +316,7 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
             '#84CC16', // лайм
             '#F97316', // оранжевый
         ];
-        
+
         $cabinetId = $shift->cabinet_id ?? 0;
         return $colors[$cabinetId % count($colors)];
     }
@@ -324,12 +324,12 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
     protected function modalActions(): array
     {
         $user = auth()->user();
-        
+
         // Врач может только просматривать
         if ($user->isDoctor()) {
             return [];
         }
-        
+
         return [
             \Saade\FilamentFullCalendar\Actions\EditAction::make()
                 ->mountUsing($this->buildMountCallback())
@@ -340,6 +340,8 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                     $start = $data['start_time'];
                     $end = $data['end_time'];
                     $cabinetId = $data['cabinet_id'] ?? $this->record->cabinet_id;
+                    $workdayStart = $this->extractTimeComponent($data['start_time']);
+                    $workdayEnd = $this->extractTimeComponent($data['end_time']);
 
                     if ($start instanceof CarbonInterface) {
                         $start = $start->toDateTimeString();
@@ -350,10 +352,6 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                     }
 
                     if ($hasBreak) {
-                        $calendarConfig = $this->config();
-                        $workdayStart = $calendarConfig['slotMinTime'] ?? null;
-                        $workdayEnd = $calendarConfig['slotMaxTime'] ?? null;
-
                         /** @var MassShiftCreator $creator */
                         $creator = app(MassShiftCreator::class);
 
@@ -391,27 +389,27 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                         'start_time' => $start,
                         'end_time' => $end,
                     ]);
-                    
+
                     Notification::make()
                         ->title('Смена обновлена')
                         ->body('Смена врача успешно обновлена')
                         ->success()
                         ->send();
-                        
+
                     $this->refreshRecords();
                 }),
-                
+
             \Saade\FilamentFullCalendar\Actions\DeleteAction::make()
                 ->mountUsing($this->buildMountCallback())
                 ->action(function () {
                     $this->record->delete();
-                    
+
                     Notification::make()
                         ->title('Смена удалена')
                         ->body('Смена врача удалена из расписания')
                         ->success()
                         ->send();
-                        
+
                     $this->refreshRecords();
                 }),
 
@@ -448,7 +446,7 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
     {
         $user = auth()->user();
         $actions = [];
-        
+
         // Добавляем кнопку фильтров
         $actions[] = \Filament\Actions\Action::make('filters')
             ->label('Фильтры')
@@ -461,12 +459,12 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                             ->label('Дата с')
                             ->displayFormat('d.m.Y')
                             ->native(false),
-                            
+
                         \Filament\Forms\Components\DatePicker::make('date_to')
                             ->label('Дата по')
                             ->displayFormat('d.m.Y')
                             ->native(false),
-                            
+
                         \Filament\Forms\Components\Select::make('doctor_ids')
                             ->label('Врачи')
                             ->multiple()
@@ -478,7 +476,7 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
             ->action(function (array $data) {
                 $this->filters = $data;
                 $this->refreshRecords();
-                
+
                 Notification::make()
                     ->title('Фильтры применены')
                     ->success()
@@ -494,9 +492,9 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                             'date_from' => null,
                             'date_to' => null,
                         ];
-                        
+
                         $this->refreshRecords();
-                        
+
                         Notification::make()
                             ->title('Фильтры очищены')
                             ->success()
@@ -506,7 +504,7 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
             ->closeModalByClickingAway(false)
             ->modalSubmitActionLabel('Применить')
             ->modalCancelActionLabel('Отмена');
-        
+
         // Врач не может создавать смены
         if (!$user->isDoctor()) {
             $actions[] = \Saade\FilamentFullCalendar\Actions\CreateAction::make()
@@ -528,9 +526,8 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
 
                     /** @var MassShiftCreator $creator */
                     $creator = app(MassShiftCreator::class);
-                    $calendarConfig = $this->config();
-                    $workdayStart = $calendarConfig['slotMinTime'] ?? null;
-                    $workdayEnd = $calendarConfig['slotMaxTime'] ?? null;
+                    $workdayStart = $this->extractTimeComponent($data['start_time']);
+                    $workdayEnd = $this->extractTimeComponent($data['end_time']);
 
                     try {
                         $created = $creator->createSeries([
@@ -571,17 +568,17 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                     $title = $createdCount > 1
                         ? "Создано смен: {$createdCount}"
                         : 'Смена создана';
-                    
+
                     Notification::make()
                         ->title($title)
                         ->body('Смена врача успешно добавлена в расписание')
                         ->success()
                         ->send();
-                        
+
                     $this->refreshRecords();
                 });
         }
-        
+
         return $actions;
     }
 
@@ -651,5 +648,32 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
         }
 
         return $data;
+    }
+
+    protected function extractTimeComponent(mixed $value): ?string
+    {
+        if (!$value) {
+            return null;
+        }
+
+        $timezone = Config::get('app.timezone', 'UTC');
+
+        if ($value instanceof CarbonInterface) {
+            return $value->copy()->setTimezone($timezone)->format('H:i:s');
+        }
+
+        if (is_string($value)) {
+            try {
+                return Carbon::parse($value, $timezone)->setTimezone($timezone)->format('H:i:s');
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value)->setTimezone($timezone)->format('H:i:s');
+        }
+
+        return null;
     }
 }

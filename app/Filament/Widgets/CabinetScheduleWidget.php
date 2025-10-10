@@ -44,7 +44,7 @@ class CabinetScheduleWidget extends FullCalendarWidget
     {
         return $this->cabinetId;
     }
-    
+
     protected function mutateFormDataBeforeFill(array $data): array
     {
         if (array_key_exists('start_time', $data)) {
@@ -249,12 +249,12 @@ class CabinetScheduleWidget extends FullCalendarWidget
         $todayEndLocal = now()->endOfDay();
         $todayStart = $todayStartLocal->copy()->setTimezone('UTC');
         $todayEnd = $todayEndLocal->copy()->setTimezone('UTC');
-        
+
         $todayQuery = DoctorShift::query()
             ->where('cabinet_id', $cabinetId)
             ->whereBetween('start_time', [$todayStart, $todayEnd])
             ->with(['doctor']);
-            
+
         // Применяем ту же фильтрацию по ролям для смен сегодня
         if ($user->isDoctor()) {
             $todayQuery->where('doctor_id', $user->doctor_id);
@@ -264,7 +264,7 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 $todayQuery->whereRaw('1=0'); // Пустой результат
             }
         }
-        
+
         // Объединяем результаты
         $allShifts = $query->get()->merge($todayQuery->get())->unique('id');
 
@@ -453,9 +453,8 @@ class CabinetScheduleWidget extends FullCalendarWidget
                     }
 
                     if ($hasBreak) {
-                        $calendarConfig = $this->config();
-                        $workdayStart = $calendarConfig['slotMinTime'] ?? null;
-                        $workdayEnd = $calendarConfig['slotMaxTime'] ?? null;
+                        $workdayStart = $this->extractTimeComponent($data['start_time']);
+                        $workdayEnd = $this->extractTimeComponent($data['end_time']);
 
                         /** @var MassShiftCreator $creator */
                         $creator = app(MassShiftCreator::class);
@@ -504,9 +503,9 @@ class CabinetScheduleWidget extends FullCalendarWidget
                     $this->refreshRecords();
                 }),
 
-           \Saade\FilamentFullCalendar\Actions\DeleteAction::make()
-               ->mountUsing($this->buildMountCallback())
-               ->action(function () {
+            \Saade\FilamentFullCalendar\Actions\DeleteAction::make()
+                ->mountUsing($this->buildMountCallback())
+                ->action(function () {
                     $this->record->delete();
 
                     Notification::make()
@@ -518,10 +517,10 @@ class CabinetScheduleWidget extends FullCalendarWidget
                     $this->refreshRecords();
                 }),
 
-           \Filament\Actions\Action::make('duplicate')
-               ->label('Дублировать')
-               ->icon('heroicon-o-document-duplicate')
-               ->color('info')
+            \Filament\Actions\Action::make('duplicate')
+                ->label('Дублировать')
+                ->icon('heroicon-o-document-duplicate')
+                ->color('info')
                 ->mountUsing($this->buildMountCallback())
                 ->action(function () {
                     $originalShift = $this->record;
@@ -587,9 +586,8 @@ class CabinetScheduleWidget extends FullCalendarWidget
 
                     /** @var MassShiftCreator $creator */
                     $creator = app(MassShiftCreator::class);
-                    $calendarConfig = $this->config();
-                    $workdayStart = $calendarConfig['slotMinTime'] ?? null;
-                    $workdayEnd = $calendarConfig['slotMaxTime'] ?? null;
+                    $workdayStart = $this->extractTimeComponent($data['start_time']);
+                    $workdayEnd = $this->extractTimeComponent($data['end_time']);
 
                     try {
                         $created = $creator->createSeries([
@@ -694,5 +692,32 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 'end_time' => $formEnd,
             ]);
         };
+    }
+
+    protected function extractTimeComponent(mixed $value): ?string
+    {
+        if (!$value) {
+            return null;
+        }
+
+        $timezone = Config::get('app.timezone', 'UTC');
+
+        if ($value instanceof CarbonInterface) {
+            return $value->copy()->setTimezone($timezone)->format('H:i:s');
+        }
+
+        if (is_string($value)) {
+            try {
+                return Carbon::parse($value, $timezone)->setTimezone($timezone)->format('H:i:s');
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value)->setTimezone($timezone)->format('H:i:s');
+        }
+
+        return null;
     }
 }

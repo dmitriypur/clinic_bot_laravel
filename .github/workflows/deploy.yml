@@ -52,6 +52,11 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         port: ${{ secrets.PORT }}
         script: |
+          set -euo pipefail
+
+          BRANCH="${{ github.ref_name }}"
+          echo "Deploying branch: ${BRANCH}"
+
           # Переходим в директорию приложения
           cd /var/www/medical-center
           
@@ -62,8 +67,8 @@ jobs:
           php artisan down --retry=60
           
           # Обновляем код из git
-          git fetch origin
-          git reset --hard origin/main
+          git fetch origin "${BRANCH}"
+          git reset --hard "origin/${BRANCH}"
           
           # Устанавливаем зависимости
           composer install --no-dev --optimize-autoloader --no-interaction

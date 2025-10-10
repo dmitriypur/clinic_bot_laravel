@@ -20,6 +20,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Filament\Tables\Actions\ExportAction;
@@ -331,10 +332,15 @@ class BidResource extends Resource
                         // Обновляем связанные поля при изменении времени
                         $appointmentDatetime = $state;
                         if ($appointmentDatetime) {
-                            $carbon = \Carbon\Carbon::parse($appointmentDatetime);
-                            
+                            $timezone = config('app.timezone', 'UTC');
+                            $carbon = $appointmentDatetime instanceof Carbon
+                                ? $appointmentDatetime->copy()->setTimezone($timezone)
+                                : Carbon::parse($appointmentDatetime, $timezone);
+
+                            $appointmentDatetimeUtc = $carbon->copy()->setTimezone('UTC')->format('Y-m-d H:i:s');
+
                             // Находим кабинет по времени приема
-                            $application = \App\Models\Application::where('appointment_datetime', $carbon->format('Y-m-d H:i:s'))->first();
+                            $application = \App\Models\Application::where('appointment_datetime', $appointmentDatetimeUtc)->first();
                             if ($application) {
                                 $set('city_id', $application->city_id);
                                 $set('clinic_id', $application->clinic_id);

@@ -8,6 +8,7 @@ use App\Filament\Resources\ApplicationResource\RelationManagers;
 use App\Filament\Widgets\AppointmentCalendarWidget;
 use App\Models\Application;
 use App\Models\Clinic;
+use Carbon\Carbon;
 use Filament\Forms;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
@@ -27,8 +28,6 @@ use App\Models\ApplicationStatus;
 use Filament\Tables\Actions\ExportAction;
 use Filament\Actions\Exports\Enums\ExportFormat;
 use App\Filament\Exports\ApplicationExporter;
-
-
 class ApplicationResource extends Resource
 {
     protected static ?string $model = Application::class;
@@ -248,13 +247,24 @@ class ApplicationResource extends Resource
                             return function (string $attribute, $value, \Closure $fail) {
                                 if (!$value) return;
                                 
-                                $cabinetId = request()->input('cabinet_id');
+                                $cabinetId = data_get(request()->all(), 'data.cabinet_id') ?? request()->input('cabinet_id');
                                 if (!$cabinetId) return;
+
+                                try {
+                                    $timezone = config('app.timezone', 'UTC');
+                                    $carbon = $value instanceof Carbon
+                                        ? $value->copy()->setTimezone($timezone)
+                                        : Carbon::parse($value, $timezone);
+
+                                    $slotUtc = $carbon->copy()->setTimezone('UTC')->format('Y-m-d H:i:s');
+                                } catch (\Throwable $exception) {
+                                    return;
+                                }
                                 
                                 // Проверяем, не занят ли слот (исключаем текущую запись при редактировании)
                                 $query = Application::query()
                                     ->where('cabinet_id', $cabinetId)
-                                    ->where('appointment_datetime', $value);
+                                    ->where('appointment_datetime', $slotUtc);
                                 
                                 // Если это редактирование, исключаем текущую запись
                                 if (request()->route('record')) {

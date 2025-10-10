@@ -35,6 +35,16 @@ class ShiftService
                 throw ValidationException::withMessages(['end_time' => 'Время конца должно быть позже начала']);
             }
 
+            // Удаляем мягко удаленные дубликаты, если они мешают уникальному индексу
+            DoctorShift::withTrashed()
+                ->where('doctor_id', $data['doctor_id'])
+                ->where('cabinet_id', $data['cabinet_id'])
+                ->where('start_time', $starts)
+                ->where('end_time', $ends)
+                ->whereNotNull('deleted_at')
+                ->get()
+                ->each->forceDelete();
+
             // 1) Проверка: врач не должен иметь пересечения в любом кабинете
             $conflictDoctor = DoctorShift::where('doctor_id', $data['doctor_id'])
                 ->where(function($q) use ($starts, $ends) {
@@ -96,6 +106,15 @@ class ShiftService
             if ($ends->lte($starts)) {
                 throw ValidationException::withMessages(['end_time' => 'Время конца должно быть позже начала']);
             }
+
+            DoctorShift::withTrashed()
+                ->where('doctor_id', $data['doctor_id'])
+                ->where('cabinet_id', $data['cabinet_id'])
+                ->where('start_time', $starts)
+                ->where('end_time', $ends)
+                ->whereNotNull('deleted_at')
+                ->get()
+                ->each->forceDelete();
 
             // 1) Проверка: врач не должен иметь пересечения в любом кабинете (исключая текущую смену)
             $conflictDoctor = DoctorShift::where('doctor_id', $data['doctor_id'])

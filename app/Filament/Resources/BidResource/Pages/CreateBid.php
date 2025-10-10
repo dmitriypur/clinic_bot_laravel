@@ -168,7 +168,7 @@ class CreateBid extends CreateRecord
             // Добавляем значения по умолчанию
             $data['source'] = 'admin';
             $data['send_to_1c'] = false;
-            
+
             // Устанавливаем статус "Новая" по умолчанию, если не выбран
             if (empty($data['status_id'])) {
                 $newStatus = \App\Models\ApplicationStatus::where('slug', 'new')->first();

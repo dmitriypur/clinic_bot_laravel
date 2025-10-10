@@ -3,17 +3,23 @@
 namespace App\Filament\Widgets;
 
 use App\Models\DoctorShift;
-use App\Models\Doctor;
-use App\Models\Cabinet;
-use Filament\Widgets\Widget;
 use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Grid;
 use Filament\Forms\Get;
-use Filament\Forms\Set;
 use Filament\Notifications\Notification;
+use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\TimePicker;
+use App\Services\MassShiftCreator;
+use App\Services\ShiftService;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Collection;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
+use Filament\Forms\Form;
+use Filament\Actions\Action;
 
 /**
  * Виджет календаря расписания для конкретного кабинета
@@ -37,6 +43,19 @@ class CabinetScheduleWidget extends FullCalendarWidget
     public function getCabinetId(): ?int
     {
         return $this->cabinetId;
+    }
+    
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        if (array_key_exists('start_time', $data)) {
+            $data['start_time'] = $this->normalizeEventTime($data['start_time'], true);
+        }
+
+        if (array_key_exists('end_time', $data)) {
+            $data['end_time'] = $this->normalizeEventTime($data['end_time'], true);
+        }
+
+        return $data;
     }
 
     /**
@@ -216,17 +235,20 @@ class CabinetScheduleWidget extends FullCalendarWidget
         }
 
         $user = auth()->user();
+        $rangeStart = Carbon::parse($fetchInfo['start'])->setTimezone('UTC');
+        $rangeEnd = Carbon::parse($fetchInfo['end'])->setTimezone('UTC');
 
         // Базовый запрос смен для кабинета в указанном диапазоне дат
         $query = DoctorShift::query()
             ->where('cabinet_id', $cabinetId)
-            ->whereBetween('start_time', [$fetchInfo['start'], $fetchInfo['end']])
+            ->whereBetween('start_time', [$rangeStart, $rangeEnd])
             ->with(['doctor']);
 
         // Дополнительно загружаем смены для текущего дня, если они не попадают в диапазон
-        $today = now()->format('Y-m-d');
-        $todayStart = $today . ' 00:00:00';
-        $todayEnd = $today . ' 23:59:59';
+        $todayStartLocal = now()->startOfDay();
+        $todayEndLocal = now()->endOfDay();
+        $todayStart = $todayStartLocal->copy()->setTimezone('UTC');
+        $todayEnd = $todayEndLocal->copy()->setTimezone('UTC');
         
         $todayQuery = DoctorShift::query()
             ->where('cabinet_id', $cabinetId)
@@ -262,8 +284,9 @@ class CabinetScheduleWidget extends FullCalendarWidget
         // Преобразуем смены в формат FullCalendar
         return $allShifts
             ->map(function (DoctorShift $shift) {
-                $shiftStart = \Carbon\Carbon::parse($shift->start_time);
-                $shiftEnd = \Carbon\Carbon::parse($shift->end_time);
+                $appTimezone = Config::get('app.timezone', 'UTC');
+                $shiftStart = Carbon::parse($shift->getRawOriginal('start_time'), 'UTC')->setTimezone($appTimezone);
+                $shiftEnd = Carbon::parse($shift->getRawOriginal('end_time'), 'UTC')->setTimezone($appTimezone);
 
                 // Проверяем, прошла ли дата
                 $isPast = $shiftStart->isPast();
@@ -271,8 +294,8 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 return [
                     'id' => $shift->id,
                     'title' => $shift->doctor->full_name ?? 'Врач не назначен',
-                    'start' => $shift->start_time,
-                    'end' => $shift->end_time,
+                    'start' => $shiftStart->toIso8601String(),
+                    'end' => $shiftEnd->toIso8601String(),
                     'backgroundColor' => $this->getShiftColor($shift),
                     'borderColor' => $this->getShiftColor($shift),
                     'classNames' => $isPast ? ['past-shift'] : ['active-shift'],
@@ -338,6 +361,25 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 ->required()
                 ->seconds(false)
                 ->minutesStep(15),
+
+            Toggle::make('has_break')
+                ->label('Есть перерыв')
+                ->inline(false)
+                ->live(),
+
+            TimePicker::make('break_start_time')
+                ->label('Начало перерыва')
+                ->seconds(false)
+                ->minutesStep(5)
+                ->visible(fn (Get $get) => (bool) $get('has_break'))
+                ->required(fn (Get $get) => (bool) $get('has_break')),
+
+            TimePicker::make('break_end_time')
+                ->label('Конец перерыва')
+                ->seconds(false)
+                ->minutesStep(5)
+                ->visible(fn (Get $get) => (bool) $get('has_break'))
+                ->required(fn (Get $get) => (bool) $get('has_break')),
         ];
     }
 
@@ -351,7 +393,8 @@ class CabinetScheduleWidget extends FullCalendarWidget
     protected function getShiftColor(DoctorShift $shift): string
     {
         // Проверяем, прошла ли дата смены
-        $shiftStart = \Carbon\Carbon::parse($shift->start_time);
+        $appTimezone = Config::get('app.timezone', 'UTC');
+        $shiftStart = Carbon::parse($shift->getRawOriginal('start_time'), 'UTC')->setTimezone($appTimezone);
         $now = now();
 
         if ($shiftStart->format('Y-m-d') < $now->format('Y-m-d')) {
@@ -393,15 +436,64 @@ class CabinetScheduleWidget extends FullCalendarWidget
 
         return [
             \Saade\FilamentFullCalendar\Actions\EditAction::make()
-                ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {
-                    $form->fill([
-                        'doctor_id' => $this->record->doctor_id,
-                        'start_time' => $arguments['event']['start'] ?? $this->record->start_time,
-                        'end_time' => $arguments['event']['end'] ?? $this->record->end_time,
-                    ]);
-                })
+                ->mountUsing($this->buildMountCallback())
                 ->action(function (array $data) {
-                    $this->record->update($data);
+                    /** @var ShiftService $shiftService */
+                    $shiftService = app(ShiftService::class);
+                    $hasBreak = (bool) ($data['has_break'] ?? false);
+                    $start = $data['start_time'];
+                    $end = $data['end_time'];
+
+                    if ($start instanceof CarbonInterface) {
+                        $start = $start->toDateTimeString();
+                    }
+
+                    if ($end instanceof CarbonInterface) {
+                        $end = $end->toDateTimeString();
+                    }
+
+                    if ($hasBreak) {
+                        $calendarConfig = $this->config();
+                        $workdayStart = $calendarConfig['slotMinTime'] ?? null;
+                        $workdayEnd = $calendarConfig['slotMaxTime'] ?? null;
+
+                        /** @var MassShiftCreator $creator */
+                        $creator = app(MassShiftCreator::class);
+
+                        DB::transaction(function () use ($creator, $data, $start, $end, $workdayStart, $workdayEnd) {
+                            $this->record->delete();
+
+                            $creator->createSeries([
+                                'doctor_id' => $data['doctor_id'],
+                                'cabinet_id' => $this->record->cabinet_id,
+                                'start_time' => $start,
+                                'end_time' => $end,
+                                'slot_duration' => $data['slot_duration'] ?? null,
+                                'has_break' => true,
+                                'break_start_time' => $data['break_start_time'] ?? null,
+                                'break_end_time' => $data['break_end_time'] ?? null,
+                                'workday_start' => $workdayStart,
+                                'workday_end' => $workdayEnd,
+                            ]);
+                        });
+
+                        Notification::make()
+                            ->title('Смена обновлена')
+                            ->body('Перерыв добавлен, расписание обновлено')
+                            ->success()
+                            ->send();
+
+                        $this->refreshRecords();
+
+                        return;
+                    }
+
+                    $updatedShift = $shiftService->update($this->record, [
+                        'doctor_id' => $data['doctor_id'],
+                        'cabinet_id' => $this->record->cabinet_id,
+                        'start_time' => $start,
+                        'end_time' => $end,
+                    ]);
 
                     Notification::make()
                         ->title('Смена обновлена')
@@ -412,8 +504,9 @@ class CabinetScheduleWidget extends FullCalendarWidget
                     $this->refreshRecords();
                 }),
 
-            \Saade\FilamentFullCalendar\Actions\DeleteAction::make()
-                ->action(function () {
+           \Saade\FilamentFullCalendar\Actions\DeleteAction::make()
+               ->mountUsing($this->buildMountCallback())
+               ->action(function () {
                     $this->record->delete();
 
                     Notification::make()
@@ -425,10 +518,11 @@ class CabinetScheduleWidget extends FullCalendarWidget
                     $this->refreshRecords();
                 }),
 
-            \Filament\Actions\Action::make('duplicate')
-                ->label('Дублировать')
-                ->icon('heroicon-o-document-duplicate')
-                ->color('info')
+           \Filament\Actions\Action::make('duplicate')
+               ->label('Дублировать')
+               ->icon('heroicon-o-document-duplicate')
+               ->color('info')
+                ->mountUsing($this->buildMountCallback())
                 ->action(function () {
                     $originalShift = $this->record;
 
@@ -454,6 +548,12 @@ class CabinetScheduleWidget extends FullCalendarWidget
         ];
     }
 
+    protected function viewAction(): Action
+    {
+        return parent::viewAction()
+            ->mountUsing($this->buildMountCallback());
+    }
+
     protected function headerActions(): array
     {
         $user = auth()->user();
@@ -471,7 +571,7 @@ class CabinetScheduleWidget extends FullCalendarWidget
                         'end_time' => $arguments['end'] ?? null,
                     ]);
                 })
-                                ->action(function (array $data) {
+                ->action(function (array $data) {
                     $cabinetId = $this->getCabinetIdFromContext();
 
                     if (!$cabinetId) {
@@ -485,11 +585,55 @@ class CabinetScheduleWidget extends FullCalendarWidget
 
                     $data['cabinet_id'] = $cabinetId;
 
-                    DoctorShift::create($data);
+                    /** @var MassShiftCreator $creator */
+                    $creator = app(MassShiftCreator::class);
+                    $calendarConfig = $this->config();
+                    $workdayStart = $calendarConfig['slotMinTime'] ?? null;
+                    $workdayEnd = $calendarConfig['slotMaxTime'] ?? null;
+
+                    try {
+                        $created = $creator->createSeries([
+                            'doctor_id' => $data['doctor_id'],
+                            'cabinet_id' => $cabinetId,
+                            'start_time' => $data['start_time'],
+                            'end_time' => $data['end_time'],
+                            'slot_duration' => $data['slot_duration'] ?? null,
+                            'has_break' => (bool) ($data['has_break'] ?? false),
+                            'break_start_time' => $data['break_start_time'] ?? null,
+                            'break_end_time' => $data['break_end_time'] ?? null,
+                            'workday_start' => $workdayStart,
+                            'workday_end' => $workdayEnd,
+                        ]);
+                    } catch (ValidationException $exception) {
+                        $messages = collect($exception->errors())
+                            ->flatten()
+                            ->implode("\n");
+
+                        Notification::make()
+                            ->title('Не удалось создать смены')
+                            ->body($messages ?: 'Проверьте введенные данные и попробуйте снова.')
+                            ->danger()
+                            ->send();
+
+                        return;
+                    } catch (\Throwable $throwable) {
+                        Notification::make()
+                            ->title('Не удалось создать смены')
+                            ->body('Произошла непредвиденная ошибка. ' . $throwable->getMessage())
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
+                    $createdCount = $created instanceof Collection ? $created->count() : (is_array($created) ? count($created) : 1);
+                    $title = $createdCount > 1
+                        ? "Создано смен: {$createdCount}"
+                        : 'Смена создана';
 
                     Notification::make()
-                        ->title('Смена создана')
-                        ->body('Смена врача успешно добавлена в расписание')
+                        ->title($title)
+                        ->body('Смены врача успешно добавлены в расписание')
                         ->success()
                         ->send();
 
@@ -498,5 +642,57 @@ class CabinetScheduleWidget extends FullCalendarWidget
         ];
     }
 
+    protected function normalizeEventTime(mixed $value, bool $fromDatabase = false): ?Carbon
+    {
+        if (!$value) {
+            return null;
+        }
 
+        $appTimezone = Config::get('app.timezone', 'UTC');
+
+        if ($value instanceof CarbonInterface) {
+            $carbon = $value->copy();
+            if ($fromDatabase) {
+                $carbon = Carbon::parse($carbon->toDateTimeString(), 'UTC');
+            }
+
+            return $carbon->setTimezone($appTimezone);
+        }
+
+        if (is_string($value)) {
+            $carbon = $fromDatabase
+                ? Carbon::parse($value, 'UTC')
+                : Carbon::parse($value);
+
+            return $carbon->setTimezone($appTimezone);
+        }
+
+        return null;
+    }
+
+    protected function buildMountCallback(): \Closure
+    {
+        return function (?Form $form, array $arguments) {
+            if (!$form) {
+                return;
+            }
+
+            $startFromArguments = $arguments['event']['start'] ?? null;
+            $endFromArguments = $arguments['event']['end'] ?? null;
+
+            $formStart = $startFromArguments
+                ? $this->normalizeEventTime($startFromArguments)
+                : $this->normalizeEventTime($this->record->getRawOriginal('start_time'), true);
+
+            $formEnd = $endFromArguments
+                ? $this->normalizeEventTime($endFromArguments)
+                : $this->normalizeEventTime($this->record->getRawOriginal('end_time'), true);
+
+            $form->fill([
+                'doctor_id' => $this->record->doctor_id,
+                'start_time' => $formStart,
+                'end_time' => $formEnd,
+            ]);
+        };
+    }
 }

@@ -54,6 +54,11 @@ class ClinicResource extends Resource
                 TextInput::make('name')
                     ->label('Название')
                     ->required(),
+                Select::make('cities')
+                    ->label('Города')
+                    ->relationship('cities', 'name')
+                    ->preload()
+                    ->searchable(),
                 Select::make('status')
                     ->label('Статус')
                     ->options([

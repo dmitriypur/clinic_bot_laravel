@@ -26,14 +26,15 @@ class CalendarEventService
     public function generateEvents(array $fetchInfo, array $filters, User $user): array
     {
         $events = [];
-        
+
+        $appTimezone = config('app.timezone', 'UTC');
+        $rangeStart = Carbon::parse($fetchInfo['start'], $appTimezone)->setTimezone('UTC');
+        $rangeEnd = Carbon::parse($fetchInfo['end'], $appTimezone)->setTimezone('UTC');
+
         // Получаем смены с применением фильтров и оптимизаций
         $shiftsQuery = DoctorShift::query()
             ->with(['doctor', 'cabinet.branch.clinic', 'cabinet.branch.city'])
-            ->optimizedDateRange(
-                Carbon::parse($fetchInfo['start']), 
-                Carbon::parse($fetchInfo['end'])
-            );
+            ->optimizedDateRange($rangeStart, $rangeEnd);
             
         $this->filterService->applyShiftFilters($shiftsQuery, $filters, $user);
         $shifts = $shiftsQuery->get();
@@ -53,7 +54,6 @@ class CalendarEventService
     private function generateShiftEvents(DoctorShift $shift, User $user): array
     {
         $events = [];
-        $slotDuration = $shift->getEffectiveSlotDuration();
         $slots = $shift->getTimeSlots();
         
         foreach ($slots as $slot) {
@@ -71,15 +71,11 @@ class CalendarEventService
      */
     private function isSlotOccupied(int $cabinetId, Carbon $slotStart, User $user): bool
     {
-        // Для MySQL: используем время слота как есть, так как в базе хранится локальное время
-        // Для SQLite: конвертируем UTC в локальное время
-        $slotStartForQuery = config('database.default') === 'mysql' 
-            ? $slotStart->format('Y-m-d H:i:s')
-            : $slotStart->setTimezone(config('app.timezone', 'UTC'));
+        $slotStartUtc = $slotStart->copy()->setTimezone('UTC')->format('Y-m-d H:i:s');
         
         $application = Application::query()
             ->where('cabinet_id', $cabinetId)
-            ->where('appointment_datetime', $slotStartForQuery)
+            ->where('appointment_datetime', $slotStartUtc)
             ->first();
             
         if (!$application) {
@@ -101,16 +97,12 @@ class CalendarEventService
      */
     private function getSlotApplication(int $cabinetId, Carbon $slotStart, User $user): ?Application
     {
-        // Для MySQL: используем время слота как есть, так как в базе хранится локальное время
-        // Для SQLite: конвертируем UTC в локальное время
-        $slotStartForQuery = config('database.default') === 'mysql' 
-            ? $slotStart->format('Y-m-d H:i:s')
-            : $slotStart->setTimezone(config('app.timezone', 'UTC'));
+        $slotStartUtc = $slotStart->copy()->setTimezone('UTC')->format('Y-m-d H:i:s');
         
         $query = Application::query()
             ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
             ->where('cabinet_id', $cabinetId)
-            ->where('appointment_datetime', $slotStartForQuery);
+            ->where('appointment_datetime', $slotStartUtc);
             
         // Сначала ищем заявку без фильтрации по ролям
         $application = $query->first();
@@ -118,7 +110,7 @@ class CalendarEventService
         \Log::info('Поиск заявки в слоте', [
             'cabinet_id' => $cabinetId,
             'slot_start_utc' => $slotStart,
-            'slot_start_for_query' => $slotStartForQuery,
+            'slot_start_for_query' => $slotStartUtc,
             'database_type' => config('database.default'),
             'user_id' => $user->id,
             'user_role' => $user->getRoleNames()->first(),
@@ -145,11 +137,23 @@ class CalendarEventService
     private function createEventData(DoctorShift $shift, array $slot, bool $isOccupied, ?Application $application): array
     {
         $config = config('calendar');
-        $slotStart = Carbon::parse($slot['start']);
-        $slotEnd = Carbon::parse($slot['end']);
+        $appTimezone = config('app.timezone', 'UTC');
+
+        $slotStart = $slot['start'] instanceof Carbon
+            ? $slot['start']->copy()
+            : Carbon::parse($slot['start'], $appTimezone);
+
+        $slotEnd = $slot['end'] instanceof Carbon
+            ? $slot['end']->copy()
+            : Carbon::parse($slot['end'], $appTimezone);
+
+        $slotStartApp = $slotStart->copy()->setTimezone($appTimezone);
+        $slotEndApp = $slotEnd->copy()->setTimezone($appTimezone);
+        $slotStartUtc = $slotStartApp->copy()->setTimezone('UTC');
+        $slotEndUtc = $slotEndApp->copy()->setTimezone('UTC');
         
         // Проверяем, прошло ли время
-        $isPast = $slotStart->isPast();
+        $isPast = $slotStartApp->isPast();
         
         
         // Определяем цвета в зависимости от времени, занятости и статуса приема
@@ -203,10 +207,10 @@ class CalendarEventService
                       "Врач: " . ($shift->doctor->full_name ?? "Не назначен");
         
         $eventData = [
-            'id' => 'slot_' . $shift->id . '_' . $slot['start']->format('Y-m-d_H-i') . ($application ? '_app_' . $application->id : ''),
+            'id' => 'slot_' . $shift->id . '_' . $slotStartApp->format('Y-m-d_H-i') . ($application ? '_app_' . $application->id : ''),
             'title' => $title,
-            'start' => $slot['start'],
-            'end' => $slot['end'],
+            'start' => $slotStartApp->toIso8601String(),
+            'end' => $slotEndApp->toIso8601String(),
             'backgroundColor' => $backgroundColor,
             'borderColor' => $backgroundColor,
             'classNames' => $isPast ? ['past-appointment'] : ['active-appointment'],
@@ -222,8 +226,10 @@ class CalendarEventService
                 'city_id' => $shift->cabinet->branch->city_id ?? null,
                 'is_occupied' => $isOccupied,
                 'is_past' => $isPast,
-                'slot_start' => $slot['start'],
-                'slot_end' => $slot['end'],
+                'slot_start' => $slotStartApp->toIso8601String(),
+                'slot_end' => $slotEndApp->toIso8601String(),
+                'slot_start_utc' => $slotStartUtc->toIso8601String(),
+                'slot_end_utc' => $slotEndUtc->toIso8601String(),
                 'application_id' => $application ? $application->id : null,
                 'application_status' => $application ? $application->appointment_status : null,
                 'application_data' => $application ? [

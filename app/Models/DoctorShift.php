@@ -10,6 +10,7 @@ use App\Models\Cabinet;
 use App\Models\Doctor;
 use App\Traits\HasCalendarOptimizations;
 use Illuminate\Support\Facades\Cache;
+use Carbon\Carbon;
 
 /**
  * Модель смены врача
@@ -138,9 +139,10 @@ class DoctorShift extends Model
     {
         $slots = [];
         $slotDuration = $this->getEffectiveSlotDuration();
+        $appTimezone = config('app.timezone', 'UTC');
         
-        $current = $this->start_time->copy();
-        $end = $this->end_time;
+        $current = Carbon::parse($this->getRawOriginal('start_time'), 'UTC')->setTimezone($appTimezone);
+        $end = Carbon::parse($this->getRawOriginal('end_time'), 'UTC')->setTimezone($appTimezone);
         
         while ($current->lt($end)) {
             $slotStart = $current->copy();

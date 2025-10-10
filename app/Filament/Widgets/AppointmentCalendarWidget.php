@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Application;
+use App\Models\ApplicationStatus;
 use App\Models\DoctorShift;
 use App\Models\Cabinet;
 use App\Models\Doctor;
@@ -19,6 +20,7 @@ use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Notifications\Notification;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 
 /**
  * Виджет календаря записи пациентов
@@ -344,7 +346,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                         'branch_id' => $this->record->branch_id,
                         'cabinet_id' => $this->record->cabinet_id,
                         'doctor_id' => $this->record->doctor_id,
-                        'appointment_datetime' => $arguments['event']['start'] ?? $this->record->appointment_datetime,
+                        'appointment_datetime' => $this->normalizeEventTime($arguments['event']['start'] ?? $this->record->appointment_datetime, isset($arguments['event']['start'])),
                         'full_name' => $this->record->full_name,
                         'phone' => $this->record->phone,
                         'full_name_parent' => $this->record->full_name_parent,
@@ -463,10 +465,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         }
 
         // Сохраняем данные слота в свойстве виджета для передачи в форму
-        $slotStart = $extendedProps['slot_start'];
-        if (is_string($slotStart)) {
-            $slotStart = \Carbon\Carbon::parse($slotStart); // Преобразуем строку в объект Carbon
-        }
+        $slotStart = $this->normalizeEventTime($extendedProps['slot_start'] ?? null);
         
         // Заполняем массив данными для формы создания заявки
         $this->slotData = [
@@ -536,16 +535,17 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         } else {
             // Fallback: ищем заявку по времени (старый способ)
             
-            $slotStart = $extendedProps['slot_start'];
-            if (is_string($slotStart)) {
-                $slotStart = \Carbon\Carbon::parse($slotStart);
+            $slotStart = $this->normalizeEventTime($extendedProps['slot_start'] ?? null);
+            $slotStartForQuery = $this->convertToUtcDateTime($slotStart);
+
+            if (!$slotStartForQuery) {
+                Notification::make()
+                    ->title('Ошибка')
+                    ->body('Не удалось определить время записи')
+                    ->danger()
+                    ->send();
+                return;
             }
-            
-            // Для MySQL: используем время слота как есть, так как в базе хранится локальное время
-            // Для SQLite: конвертируем UTC в локальное время
-            $slotStartForQuery = config('database.default') === 'mysql' 
-                ? $slotStart->format('Y-m-d H:i:s')
-                : $slotStart->setTimezone(config('app.timezone', 'UTC'));
             
             $applicationQuery = Application::query()
                 ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
@@ -588,7 +588,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             'cabinet_name' => $application->cabinet->name,
             'doctor_id' => $application->doctor_id,
             'doctor_name' => $application->doctor->full_name,
-            'appointment_datetime' => $application->appointment_datetime,
+            'appointment_datetime' => $this->normalizeEventTime($application->appointment_datetime),
             'full_name' => $application->full_name,
             'phone' => $application->phone,
             'full_name_parent' => $application->full_name_parent,
@@ -738,7 +738,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                 'branch_id' => $this->slotData['branch_id'] ?? null,
                                 'cabinet_id' => $this->slotData['cabinet_id'] ?? null,
                                 'doctor_id' => $this->slotData['doctor_id'] ?? null,
-                                'appointment_datetime' => $this->slotData['appointment_datetime'] ?? null,
+                                'appointment_datetime' => $this->normalizeEventTime($this->slotData['appointment_datetime'] ?? null),
                                 'full_name' => $this->slotData['full_name'] ?? '',
                                 'phone' => $this->slotData['phone'] ?? '',
                                 'full_name_parent' => $this->slotData['full_name_parent'] ?? '',
@@ -1165,7 +1165,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                             'branch_id' => $this->slotData['branch_id'] ?? null,
                             'cabinet_id' => $this->slotData['cabinet_id'] ?? null,
                             'doctor_id' => $this->slotData['doctor_id'] ?? null,
-                            'appointment_datetime' => $this->slotData['appointment_datetime'] ?? null,
+                            'appointment_datetime' => $this->normalizeEventTime($this->slotData['appointment_datetime'] ?? null),
                         ]);
                     }
                 })
@@ -1184,6 +1184,24 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     
                     // Объединяем данные формы с данными из слота
                     $applicationData = array_merge($this->slotData ?? [], $data);
+
+                    $applicationData['source'] = $applicationData['source'] ?? 'admin';
+                    $applicationData['send_to_1c'] = $applicationData['send_to_1c'] ?? false;
+
+                    if (empty($applicationData['status_id'])) {
+                        $status = ApplicationStatus::where('slug', 'appointment_scheduled')->first()
+                            ?? ApplicationStatus::where('slug', 'appointment')->first()
+                            ?? ApplicationStatus::where('slug', 'scheduled')->first()
+                            ?? ApplicationStatus::where('slug', 'new')->first();
+
+                        if ($status) {
+                            $applicationData['status_id'] = $status->id;
+                        }
+                    }
+
+                    if (empty($applicationData['appointment_status'])) {
+                        $applicationData['appointment_status'] = Application::STATUS_SCHEDULED;
+                    }
                     
                     
                     // Проверяем права доступа для партнеров
@@ -1651,5 +1669,43 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         
         // Очищаем ключ со списком ключей
         \Illuminate\Support\Facades\Cache::forget('calendar_cache_keys');
+    }
+
+    protected function convertToUtcDateTime(mixed $value): ?string
+    {
+        if (!$value) {
+            return null;
+        }
+
+        $timezone = config('app.timezone', 'UTC');
+
+        if ($value instanceof CarbonInterface) {
+            return $value->copy()->setTimezone('UTC')->toDateTimeString();
+        }
+
+        try {
+            return Carbon::parse($value, $timezone)->setTimezone('UTC')->toDateTimeString();
+        } catch (\Throwable $exception) {
+            return null;
+        }
+    }
+
+    protected function normalizeEventTime(mixed $value): ?Carbon
+    {
+        if (!$value) {
+            return null;
+        }
+
+        $timezone = config('app.timezone', 'UTC');
+
+        if ($value instanceof CarbonInterface) {
+            return $value->copy()->setTimezone($timezone);
+        }
+
+        try {
+            return Carbon::parse($value)->setTimezone($timezone);
+        } catch (\Throwable $exception) {
+            return null;
+        }
     }
 }

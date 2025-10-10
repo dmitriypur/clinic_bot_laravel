@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use App\Traits\HasCalendarOptimizations;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Carbon;
 
 class Application extends Model
 {
@@ -51,13 +53,40 @@ class Application extends Model
         'branch_id' => 'integer',
         'doctor_id' => 'integer',
         'cabinet_id' => 'integer',
-        'appointment_datetime' => 'datetime',
         'tg_user_id' => 'integer',
         'tg_chat_id' => 'integer',
         'send_to_1c' => 'boolean',
         'appointment_status' => 'string',
         'status_id' => 'integer',
     ];
+
+    protected function appointmentDatetime(): Attribute
+    {
+        return Attribute::make(
+            get: function ($value) {
+                if (!$value) {
+                    return null;
+                }
+
+                $timezone = config('app.timezone', 'UTC');
+
+                return Carbon::parse($value, 'UTC')->setTimezone($timezone);
+            },
+            set: function ($value) {
+                if (empty($value)) {
+                    return null;
+                }
+
+                $timezone = config('app.timezone', 'UTC');
+
+                $date = $value instanceof Carbon
+                    ? $value->copy()
+                    : Carbon::parse($value, $timezone);
+
+                return $date->setTimezone('UTC');
+            }
+        );
+    }
 
     /**
      * Boot the model and register event listeners

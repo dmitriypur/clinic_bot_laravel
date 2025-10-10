@@ -173,7 +173,7 @@ class EditBid extends EditRecord
     {
         try {
             $data = $this->form->getState();
-            
+
             // Если статус "Новая" или "Отменен" - очищаем appointment_datetime
             $status = ApplicationStatus::find($data['status_id']);
             if ($status && in_array($status->slug, ['new', 'bid_cancelled'])) {

@@ -3,8 +3,6 @@
 namespace App\Filament\Resources\ApplicationResource\Pages;
 
 use App\Filament\Resources\ApplicationResource;
-use App\Models\Application;
-use Filament\Actions;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateApplication extends CreateRecord
@@ -23,7 +21,7 @@ class CreateApplication extends CreateRecord
         if (!isset($data['source'])) {
             $data['source'] = null;
         }
-        
+
         return $data;
     }
 }

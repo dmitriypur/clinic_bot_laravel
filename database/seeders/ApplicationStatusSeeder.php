@@ -17,6 +17,7 @@ class ApplicationStatusSeeder extends Seeder
             [
                 'name' => 'Новая',
                 'slug' => 'new',
+                'type' => 'bid',
                 'color' => 'blue',
                 'sort_order' => 1,
                 'is_active' => true,
@@ -24,6 +25,7 @@ class ApplicationStatusSeeder extends Seeder
             [
                 'name' => 'Записан',
                 'slug' => 'scheduled',
+                'type' => 'bid',
                 'color' => 'green',
                 'sort_order' => 2,
                 'is_active' => true,
@@ -31,6 +33,7 @@ class ApplicationStatusSeeder extends Seeder
             [
                 'name' => 'Отменен',
                 'slug' => 'cancelled',
+                'type' => 'bid',
                 'color' => 'red',
                 'sort_order' => 3,
                 'is_active' => true,

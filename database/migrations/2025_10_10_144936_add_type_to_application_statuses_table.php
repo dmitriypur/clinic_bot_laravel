@@ -12,9 +12,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('application_statuses', function (Blueprint $table) {
-            $table->string('type', 30)->default('bid');
-        });
+        if (! Schema::hasColumn('application_statuses', 'type')) {
+            Schema::table('application_statuses', function (Blueprint $table) {
+                $table->string('type', 30)->default('bid');
+            });
+        }
 
         DB::table('application_statuses')
             ->whereNull('type')
@@ -27,8 +29,10 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('application_statuses', function (Blueprint $table) {
-            $table->dropColumn('type');
-        });
+        if (Schema::hasColumn('application_statuses', 'type')) {
+            Schema::table('application_statuses', function (Blueprint $table) {
+                $table->dropColumn('type');
+            });
+        }
     }
 };

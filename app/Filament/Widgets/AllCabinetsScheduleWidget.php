@@ -91,7 +91,7 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
                 'center' => 'title',
                 'right' => 'dayGridMonth,timeGridWeek,timeGridDay,listWeek',
             ],
-            'initialView' => 'timeGridWeek',
+            'initialView' => 'dayGridMonth',
             'navLinks' => true,
             'editable' => !$isDoctor,
             'selectable' => !$isDoctor,
@@ -125,114 +125,114 @@ class AllCabinetsScheduleWidget extends FullCalendarWidget
 
         if ($user && !$user->isDoctor()) {
             return <<<'JS'
-function(arg) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'fc-shift-wrapper';
-    wrapper.style.display = 'flex';
-    wrapper.style.alignItems = 'center';
-    wrapper.style.justifyContent = 'space-between';
-    wrapper.style.gap = '8px';
-    wrapper.style.width = '100%';
+            function(arg) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'fc-shift-wrapper';
+                wrapper.style.display = 'flex';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.justifyContent = 'space-between';
+                wrapper.style.gap = '8px';
+                wrapper.style.width = '100%';
 
-    const colorIndicator = document.createElement('span');
-    colorIndicator.className = 'fc-shift-color';
-    colorIndicator.style.width = '6px';
-    colorIndicator.style.height = '100%';
-    colorIndicator.style.borderRadius = '9999px';
-    colorIndicator.style.background = arg.backgroundColor || arg.event.backgroundColor || '#3B82F6';
-    colorIndicator.style.flex = '0 0 auto';
+                const colorIndicator = document.createElement('span');
+                colorIndicator.className = 'fc-shift-color';
+                colorIndicator.style.width = '6px';
+                colorIndicator.style.height = '6px';
+                colorIndicator.style.borderRadius = '9999px';
+                colorIndicator.style.background = arg.backgroundColor || arg.event.backgroundColor || '#3B82F6';
+                colorIndicator.style.flex = '0 0 auto';
 
-    const title = document.createElement('div');
-    title.className = 'fc-shift-title';
-    title.textContent = arg.event.title || '';
-    title.style.flex = '1 1 auto';
-    title.style.minWidth = '0';
-    title.style.overflow = 'hidden';
-    title.style.textOverflow = 'ellipsis';
-    title.style.whiteSpace = 'nowrap';
+                const title = document.createElement('div');
+                title.className = 'fc-shift-title';
+                title.textContent = arg.event.title || '';
+                title.style.flex = '1 1 auto';
+                title.style.minWidth = '0';
+                title.style.overflow = 'hidden';
+                title.style.textOverflow = 'ellipsis';
+                title.style.whiteSpace = 'nowrap';
 
-    const actions = document.createElement('div');
-    actions.className = 'fc-shift-actions';
-    actions.dataset.eventId = arg.event.id;
-    actions.style.display = 'flex';
-    actions.style.gap = '4px';
-    actions.style.opacity = '0';
-    actions.style.pointerEvents = 'none';
-    actions.style.transition = 'opacity 0.18s ease-in-out';
+                const actions = document.createElement('div');
+                actions.className = 'fc-shift-actions';
+                actions.dataset.eventId = arg.event.id;
+                actions.style.display = 'flex';
+                actions.style.gap = '4px';
+                actions.style.opacity = '0';
+                actions.style.pointerEvents = 'none';
+                actions.style.transition = 'opacity 0.18s ease-in-out';
 
-    const createButton = (label, action, svg, styles = {}) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'fc-shift-action';
-        button.dataset.action = action;
-        button.setAttribute('aria-label', label);
-        button.innerHTML = svg;
-        button.style.width = '26px';
-        button.style.height = '26px';
-        button.style.borderRadius = '9999px';
-        button.style.border = '1px solid rgba(15, 23, 42, 0.08)';
-        button.style.background = 'rgba(255, 255, 255, 0.95)';
-        button.style.display = 'grid';
-        button.style.placeItems = 'center';
-        button.style.cursor = 'pointer';
-        button.style.transition = 'background-color 0.2s ease, transform 0.2s ease';
-        Object.entries(styles).forEach(([key, value]) => {
-            button.style[key] = value;
-        });
-        button.addEventListener('mouseenter', () => {
-            button.style.transform = 'scale(1.05)';
-        });
-        button.addEventListener('mouseleave', () => {
-            button.style.transform = 'scale(1)';
-        });
-        return button;
-    };
+                const createButton = (label, action, svg, styles = {}) => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'fc-shift-action';
+                    button.dataset.action = action;
+                    button.setAttribute('aria-label', label);
+                    button.innerHTML = svg;
+                    button.style.width = '26px';
+                    button.style.height = '26px';
+                    button.style.borderRadius = '9999px';
+                    button.style.border = '1px solid rgba(15, 23, 42, 0.08)';
+                    button.style.background = 'rgba(255, 255, 255, 0.95)';
+                    button.style.display = 'grid';
+                    button.style.placeItems = 'center';
+                    button.style.cursor = 'pointer';
+                    button.style.transition = 'background-color 0.2s ease, transform 0.2s ease';
+                    Object.entries(styles).forEach(([key, value]) => {
+                        button.style[key] = value;
+                    });
+                    button.addEventListener('mouseenter', () => {
+                        button.style.transform = 'scale(1.05)';
+                    });
+                    button.addEventListener('mouseleave', () => {
+                        button.style.transform = 'scale(1)';
+                    });
+                    return button;
+                };
 
-    const editButton = createButton(
-        'Редактировать смену',
-        'edit',
-        `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-        <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-        </svg>
-        `,
-        {
-            background: 'rgba(238, 255, 233, 0.95)',
-            padding:'5px',
-            color: '#17af26ff',
-        }
-    );
+                const editButton = createButton(
+                    'Редактировать смену',
+                    'edit',
+                    `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                    </svg>
+                    `,
+                    {
+                        background: 'rgba(238, 255, 233, 0.95)',
+                        padding:'5px',
+                        color: '#17af26ff',
+                    }
+                );
 
-    const deleteButton = createButton(
-        'Удалить смену',
-        'delete',
-        `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-        <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-        </svg>
-        `,
-        {
-            background: 'rgba(255, 234, 234, 0.95)',
-            padding:'5px',
-            color: '#b91c1c',
-        }
-    );
+                const deleteButton = createButton(
+                    'Удалить смену',
+                    'delete',
+                    `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                    </svg>
+                    `,
+                    {
+                        background: 'rgba(255, 234, 234, 0.95)',
+                        padding:'5px',
+                        color: '#b91c1c',
+                    }
+                );
 
-    deleteButton.addEventListener('mouseenter', () => {
-        deleteButton.style.background = '#fee2e2';
-    });
-    deleteButton.addEventListener('mouseleave', () => {
-        deleteButton.style.background = 'rgba(254, 226, 226, 0.95)';
-    });
+                deleteButton.addEventListener('mouseenter', () => {
+                    deleteButton.style.background = '#fee2e2';
+                });
+                deleteButton.addEventListener('mouseleave', () => {
+                    deleteButton.style.background = 'rgba(254, 226, 226, 0.95)';
+                });
 
-    actions.appendChild(editButton);
-    actions.appendChild(deleteButton);
+                actions.appendChild(editButton);
+                actions.appendChild(deleteButton);
 
-    wrapper.appendChild(colorIndicator);
-    wrapper.appendChild(title);
-    wrapper.appendChild(actions);
+                wrapper.appendChild(colorIndicator);
+                wrapper.appendChild(title);
+                wrapper.appendChild(actions);
 
-    return { domNodes: [wrapper] };
-}
-JS;
+                return { domNodes: [wrapper] };
+            }
+            JS;
         }
 
         return 'null';

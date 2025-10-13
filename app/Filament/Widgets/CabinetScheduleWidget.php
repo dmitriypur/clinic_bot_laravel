@@ -330,7 +330,7 @@ class CabinetScheduleWidget extends FullCalendarWidget
                 'center' => 'title',          // Заголовок с текущей датой
                 'right' => 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'  // Переключатели видов
             ],
-            'initialView' => 'timeGridWeek',  // Начальный вид - неделя по времени
+            'initialView' => 'dayGridMonth',  // Начальный вид - неделя по времени
             'navLinks' => true,               // Кликабельные даты
             'editable' => !$isDoctor,         // Врач не может редактировать
             'selectable' => !$isDoctor,       // Врач не может выбирать время

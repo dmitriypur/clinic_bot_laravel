@@ -32,7 +32,9 @@ class ApplicationController extends Controller
         $validated = $request->validate([
             'city_id' => 'required|exists:cities,id',
             'clinic_id' => 'nullable|exists:clinics,id',
+            'branch_id' => 'nullable|exists:branches,id',
             'doctor_id' => 'nullable|exists:doctors,id',
+            'cabinet_id' => 'nullable|exists:cabinets,id',
             'full_name_parent' => 'nullable|string|max:255',
             'full_name' => 'required|string|max:255',
             'birth_date' => 'nullable|string|max:15',
@@ -41,6 +43,7 @@ class ApplicationController extends Controller
             'tg_user_id' => 'nullable|integer',
             'tg_chat_id' => 'nullable|integer',
             'send_to_1c' => 'boolean',
+            'appointment_datetime' => 'nullable|date_format:Y-m-d H:i',
         ]);
 
         // Генерируем ID как в Python версии (BigInteger)
@@ -54,7 +57,7 @@ class ApplicationController extends Controller
         // TODO: Отправка в 1C через очередь
         // TODO: Отправка уведомлений через вебхуки
 
-        return new ApplicationResource($application->load(['city', 'clinic', 'doctor']));
+        return new ApplicationResource($application->load(['city', 'clinic', 'branch', 'cabinet', 'doctor']));
     }
 
     /**
@@ -62,7 +65,7 @@ class ApplicationController extends Controller
      */
     public function show(Application $application)
     {
-        return new ApplicationResource($application->load(['city', 'clinic', 'doctor']));
+        return new ApplicationResource($application->load(['city', 'clinic', 'branch', 'cabinet', 'doctor']));
     }
 
     /**
@@ -73,18 +76,21 @@ class ApplicationController extends Controller
         $validated = $request->validate([
             'city_id' => 'sometimes|exists:cities,id',
             'clinic_id' => 'nullable|exists:clinics,id',
+            'branch_id' => 'nullable|exists:branches,id',
             'doctor_id' => 'nullable|exists:doctors,id',
+            'cabinet_id' => 'nullable|exists:cabinets,id',
             'full_name_parent' => 'nullable|string|max:255',
             'full_name' => 'sometimes|string|max:255',
             'birth_date' => 'nullable|string|max:15',
             'phone' => 'sometimes|string|max:25',
             'promo_code' => 'nullable|string|max:100',
             'send_to_1c' => 'boolean',
+            'appointment_datetime' => 'nullable|date_format:Y-m-d H:i',
         ]);
 
         $application->update($validated);
 
-        return new ApplicationResource($application->load(['city', 'clinic', 'doctor']));
+        return new ApplicationResource($application->load(['city', 'clinic', 'branch', 'cabinet', 'doctor']));
     }
 
     /**

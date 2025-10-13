@@ -27,8 +27,6 @@ class ClinicController extends Controller
             ], 404);
         }
 
-        dd($cities);
-
         return ClinicResource::collection($cities);
     }
 
@@ -36,4 +34,28 @@ class ClinicController extends Controller
     {
         return ClinicResource::collection($city->clinics);
     }
+
+    public function branches(Request $request, Clinic $clinic)
+    {
+        $cityId = $request->input('city_id');
+
+        $branchesQuery = $clinic->branches()->where('status', 1);
+        if ($cityId) {
+            $branchesQuery->where('city_id', $cityId);
+        }
+
+        $branches = $branchesQuery->orderBy('name')->get()->map(function ($branch) {
+            return [
+                'id' => $branch->id,
+                'name' => $branch->name,
+                'address' => $branch->address,
+                'phone' => $branch->phone,
+            ];
+        });
+
+        return response()->json([
+            'data' => $branches,
+        ]);
+    }
+
 }

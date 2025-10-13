@@ -19,6 +19,8 @@
         "vue": "^3.5.20"
     },
     "dependencies": {
-        "@inertiajs/vue3": "^2.1.2"
+        "@inertiajs/vue3": "^2.1.2",
+        "@vuepic/vue-datepicker": "^11.0.2",
+        "date-fns": "^4.1.0"
     }
 }

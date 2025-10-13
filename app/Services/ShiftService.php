@@ -8,7 +8,7 @@ use Carbon\Carbon;
 
 /**
  * Сервис для управления сменами врачей
- * 
+ *
  * Предоставляет бизнес-логику для создания, обновления и удаления смен врачей.
  * Включает проверки на пересечения времени и конфликты расписания.
  * Использует транзакции для обеспечения целостности данных.
@@ -18,7 +18,7 @@ class ShiftService
     /**
      * Создание новой смены врача с проверкой пересечений
      * Выполняет проверки на конфликты времени и создает смену в транзакции
-     * 
+     *
      * @param array $data Данные смены (doctor_id, cabinet_id, start_time, end_time, slot_duration)
      * @return DoctorShift Созданная смена
      * @throws ValidationException При обнаружении конфликтов времени
@@ -49,10 +49,10 @@ class ShiftService
             $conflictDoctor = DoctorShift::where('doctor_id', $data['doctor_id'])
                 ->where(function($q) use ($starts, $ends) {
                     $q->whereBetween('start_time', [$starts, $ends])  // Смена начинается в диапазоне
-                      ->orWhereBetween('end_time', [$starts, $ends])  // Смена заканчивается в диапазоне
-                      ->orWhere(function($qq) use ($starts, $ends) {  // Смена полностью покрывает диапазон
-                          $qq->where('start_time', '<=', $starts)->where('end_time', '>=', $ends);
-                      });
+                    ->orWhereBetween('end_time', [$starts, $ends])  // Смена заканчивается в диапазоне
+                    ->orWhere(function($qq) use ($starts, $ends) {  // Смена полностью покрывает диапазон
+                        $qq->where('start_time', '<=', $starts)->where('end_time', '>=', $ends);
+                    });
                 })
                 ->exists();
 
@@ -64,10 +64,10 @@ class ShiftService
             $conflictCabinet = DoctorShift::where('cabinet_id', $data['cabinet_id'])
                 ->where(function($q) use ($starts, $ends) {
                     $q->whereBetween('start_time', [$starts, $ends])  // Смена начинается в диапазоне
-                      ->orWhereBetween('end_time', [$starts, $ends])  // Смена заканчивается в диапазоне
-                      ->orWhere(function($qq) use ($starts, $ends) {  // Смена полностью покрывает диапазон
-                          $qq->where('start_time', '<=', $starts)->where('end_time', '>=', $ends);
-                      });
+                    ->orWhereBetween('end_time', [$starts, $ends])  // Смена заканчивается в диапазоне
+                    ->orWhere(function($qq) use ($starts, $ends) {  // Смена полностью покрывает диапазон
+                        $qq->where('start_time', '<=', $starts)->where('end_time', '>=', $ends);
+                    });
                 })
                 ->exists();
 
@@ -89,7 +89,7 @@ class ShiftService
     /**
      * Обновление существующей смены с проверкой пересечений
      * Выполняет те же проверки, что и create, но исключает текущую смену из проверок
-     * 
+     *
      * @param DoctorShift $shift Смена для обновления
      * @param array $data Новые данные смены
      * @return DoctorShift Обновленная смена
@@ -121,10 +121,10 @@ class ShiftService
                 ->where('id', '!=', $shift->id)  // Исключаем текущую смену
                 ->where(function($q) use ($starts, $ends) {
                     $q->whereBetween('start_time', [$starts, $ends])  // Смена начинается в диапазоне
-                      ->orWhereBetween('end_time', [$starts, $ends])  // Смена заканчивается в диапазоне
-                      ->orWhere(function($qq) use ($starts, $ends) {  // Смена полностью покрывает диапазон
-                          $qq->where('start_time', '<=', $starts)->where('end_time', '>=', $ends);
-                      });
+                    ->orWhereBetween('end_time', [$starts, $ends])  // Смена заканчивается в диапазоне
+                    ->orWhere(function($qq) use ($starts, $ends) {  // Смена полностью покрывает диапазон
+                        $qq->where('start_time', '<=', $starts)->where('end_time', '>=', $ends);
+                    });
                 })
                 ->exists();
 
@@ -137,10 +137,10 @@ class ShiftService
                 ->where('id', '!=', $shift->id)  // Исключаем текущую смену
                 ->where(function($q) use ($starts, $ends) {
                     $q->whereBetween('start_time', [$starts, $ends])  // Смена начинается в диапазоне
-                      ->orWhereBetween('end_time', [$starts, $ends])  // Смена заканчивается в диапазоне
-                      ->orWhere(function($qq) use ($starts, $ends) {  // Смена полностью покрывает диапазон
-                          $qq->where('start_time', '<=', $starts)->where('end_time', '>=', $ends);
-                      });
+                    ->orWhereBetween('end_time', [$starts, $ends])  // Смена заканчивается в диапазоне
+                    ->orWhere(function($qq) use ($starts, $ends) {  // Смена полностью покрывает диапазон
+                        $qq->where('start_time', '<=', $starts)->where('end_time', '>=', $ends);
+                    });
                 })
                 ->exists();
 
@@ -164,7 +164,7 @@ class ShiftService
     /**
      * Удаление смены врача
      * Выполняет мягкое удаление (soft delete) для сохранения истории
-     * 
+     *
      * @param DoctorShift $shift Смена для удаления
      */
     public function delete(DoctorShift $shift): void

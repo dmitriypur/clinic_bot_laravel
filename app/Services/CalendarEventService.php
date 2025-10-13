@@ -12,9 +12,9 @@ use Illuminate\Support\Collection;
 class CalendarEventService
 {
     use HasCalendarOptimizations;
-    
+
     protected CalendarFilterService $filterService;
-    
+
     public function __construct(CalendarFilterService $filterService)
     {
         $this->filterService = $filterService;
@@ -35,7 +35,7 @@ class CalendarEventService
         $shiftsQuery = DoctorShift::query()
             ->with(['doctor', 'cabinet.branch.clinic', 'cabinet.branch.city'])
             ->optimizedDateRange($rangeStart, $rangeEnd);
-            
+
         $this->filterService->applyShiftFilters($shiftsQuery, $filters, $user);
         $shifts = $shiftsQuery->get();
 
@@ -55,14 +55,14 @@ class CalendarEventService
     {
         $events = [];
         $slots = $shift->getTimeSlots();
-        
+
         foreach ($slots as $slot) {
             $isOccupied = $this->isSlotOccupied($shift->cabinet_id, $slot['start'], $user);
             $application = $this->getSlotApplication($shift->cabinet_id, $slot['start'], $user);
-            
+
             $events[] = $this->createEventData($shift, $slot, $isOccupied, $application);
         }
-        
+
         return $events;
     }
 
@@ -72,23 +72,23 @@ class CalendarEventService
     private function isSlotOccupied(int $cabinetId, Carbon $slotStart, User $user): bool
     {
         $slotStartUtc = $slotStart->copy()->setTimezone('UTC')->format('Y-m-d H:i:s');
-        
+
         $application = Application::query()
             ->where('cabinet_id', $cabinetId)
             ->where('appointment_datetime', $slotStartUtc)
             ->first();
-            
+
         if (!$application) {
             return false;
         }
-        
+
         // Проверяем права доступа
         if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
             return false; // Партнер не видит заявки из других клиник
         } elseif ($user->isDoctor() && $application->doctor_id !== $user->doctor_id) {
             return false; // Врач не видит заявки других врачей
         }
-        
+
         return true;
     }
 
@@ -98,15 +98,15 @@ class CalendarEventService
     private function getSlotApplication(int $cabinetId, Carbon $slotStart, User $user): ?Application
     {
         $slotStartUtc = $slotStart->copy()->setTimezone('UTC')->format('Y-m-d H:i:s');
-        
+
         $query = Application::query()
             ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
             ->where('cabinet_id', $cabinetId)
             ->where('appointment_datetime', $slotStartUtc);
-            
+
         // Сначала ищем заявку без фильтрации по ролям
         $application = $query->first();
-        
+
         \Log::info('Поиск заявки в слоте', [
             'cabinet_id' => $cabinetId,
             'slot_start_utc' => $slotStart,
@@ -118,7 +118,7 @@ class CalendarEventService
             'sql_query' => $query->toSql(),
             'sql_bindings' => $query->getBindings()
         ]);
-        
+
         if ($application) {
             // Проверяем права доступа после нахождения заявки
             if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
@@ -127,7 +127,7 @@ class CalendarEventService
                 return null; // Врач не имеет доступа к заявке другого врача
             }
         }
-        
+
         return $application;
     }
 
@@ -151,11 +151,11 @@ class CalendarEventService
         $slotEndApp = $slotEnd->copy()->setTimezone($appTimezone);
         $slotStartUtc = $slotStartApp->copy()->setTimezone('UTC');
         $slotEndUtc = $slotEndApp->copy()->setTimezone('UTC');
-        
+
         // Проверяем, прошло ли время
         $isPast = $slotStartApp->isPast();
-        
-        
+
+
         // Определяем цвета в зависимости от времени, занятости и статуса приема
         if ($isPast) {
             // Для прошедших слотов используем серые цвета
@@ -179,9 +179,9 @@ class CalendarEventService
                 $backgroundColor = $config['colors']['free_slot']; // Цвет для свободных слотов
             }
         }
-        
+
         $title = $isOccupied ? ($application ? $application->full_name : 'Занят') : 'Свободен';
-        
+
         // Отладочная информация для занятых слотов
         if ($isOccupied && $application) {
             \Log::info('Создаем событие для занятого слота', [
@@ -199,13 +199,13 @@ class CalendarEventService
                 'shift_id' => $shift->id
             ]);
         }
-        
+
         // Создаем текст подсказки
         $tooltipText = $shift->cabinet->name . "\n" .
-                      "Филиал: " . ($shift->cabinet->branch->name ?? "Не указан") . "\n" .
-                      "Клиника: " . ($shift->cabinet->branch->clinic->name ?? "Не указана") . "\n" .
-                      "Врач: " . ($shift->doctor->full_name ?? "Не назначен");
-        
+            "Филиал: " . ($shift->cabinet->branch->name ?? "Не указан") . "\n" .
+            "Клиника: " . ($shift->cabinet->branch->clinic->name ?? "Не указана") . "\n" .
+            "Врач: " . ($shift->doctor->full_name ?? "Не назначен");
+
         $eventData = [
             'id' => 'slot_' . $shift->id . '_' . $slotStartApp->format('Y-m-d_H-i') . ($application ? '_app_' . $application->id : ''),
             'title' => $title,
@@ -243,32 +243,32 @@ class CalendarEventService
                 ] : null,
             ]
         ];
-        
+
         // Отладочная информация для занятых слотов
         if ($isOccupied && $application) {
-                    \Log::info('Создано событие с extendedProps', [
-            'event_id' => $eventData['id'],
-            'application_id' => $eventData['extendedProps']['application_id'],
-            'cabinet_id' => $eventData['extendedProps']['cabinet_id'],
-            'slot_start' => $eventData['extendedProps']['slot_start']
-        ]);
-        
-        // Дополнительное логирование для отладки
-        \Log::info('Полные данные события', [
-            'event_data' => $eventData
-        ]);
-        
-        // Дополнительное логирование для отладки application_id
-        if ($application) {
-            \Log::info('Отладка application_id в событии', [
-                'application_id_from_db' => $application->id,
-                'application_id_in_event' => $eventData['extendedProps']['application_id'],
+            \Log::info('Создано событие с extendedProps', [
                 'event_id' => $eventData['id'],
-                'slot_start' => $slot['start']->format('Y-m-d H:i:s')
+                'application_id' => $eventData['extendedProps']['application_id'],
+                'cabinet_id' => $eventData['extendedProps']['cabinet_id'],
+                'slot_start' => $eventData['extendedProps']['slot_start']
             ]);
+
+            // Дополнительное логирование для отладки
+            \Log::info('Полные данные события', [
+                'event_data' => $eventData
+            ]);
+
+            // Дополнительное логирование для отладки application_id
+            if ($application) {
+                \Log::info('Отладка application_id в событии', [
+                    'application_id_from_db' => $application->id,
+                    'application_id_in_event' => $eventData['extendedProps']['application_id'],
+                    'event_id' => $eventData['id'],
+                    'slot_start' => $slot['start']->format('Y-m-d H:i:s')
+                ]);
+            }
         }
-        }
-        
+
         return $eventData;
     }
 
@@ -280,7 +280,7 @@ class CalendarEventService
         $totalSlots = count($events);
         $occupiedSlots = collect($events)->where('extendedProps.is_occupied', true)->count();
         $freeSlots = $totalSlots - $occupiedSlots;
-        
+
         return [
             'total' => $totalSlots,
             'occupied' => $occupiedSlots,

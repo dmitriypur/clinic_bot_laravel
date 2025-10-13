@@ -9,7 +9,7 @@ use Carbon\Carbon;
 
 /**
  * Сервис для работы со слотами времени
- * 
+ *
  * Обеспечивает единообразную работу с временными слотами для записи пациентов
  * на разных уровнях: смена врача, филиал, клиника
  */
@@ -17,7 +17,7 @@ class SlotService
 {
     /**
      * Получить длительность слота для филиала
-     * 
+     *
      * @param Branch $branch
      * @return int Длительность в минутах
      */
@@ -28,7 +28,7 @@ class SlotService
 
     /**
      * Получить длительность слота для клиники
-     * 
+     *
      * @param Clinic $clinic
      * @return int Длительность в минутах
      */
@@ -39,7 +39,7 @@ class SlotService
 
     /**
      * Получить длительность слота для смены врача
-     * 
+     *
      * @param DoctorShift $shift
      * @return int Длительность в минутах
      */
@@ -50,7 +50,7 @@ class SlotService
 
     /**
      * Разбить временной диапазон на слоты
-     * 
+     *
      * @param Carbon $startTime Время начала
      * @param Carbon $endTime Время окончания
      * @param int $slotDuration Длительность слота в минутах
@@ -60,11 +60,11 @@ class SlotService
     {
         $slots = [];
         $current = $startTime->copy();
-        
+
         while ($current->addMinutes($slotDuration)->lte($endTime)) {
             $slotStart = $current->copy()->subMinutes($slotDuration);
             $slotEnd = $current->copy();
-            
+
             $slots[] = [
                 'start' => $slotStart,
                 'end' => $slotEnd,
@@ -74,13 +74,13 @@ class SlotService
                 'end_formatted' => $slotEnd->format('H:i'),
             ];
         }
-        
+
         return $slots;
     }
 
     /**
      * Получить слоты для смены врача
-     * 
+     *
      * @param DoctorShift $shift
      * @return array Массив слотов
      */
@@ -91,7 +91,7 @@ class SlotService
 
     /**
      * Проверить, доступен ли слот времени
-     * 
+     *
      * @param Carbon $startTime Время начала слота
      * @param Carbon $endTime Время окончания слота
      * @param DoctorShift $shift Смена врача
@@ -107,20 +107,20 @@ class SlotService
         // Проверяем, что длительность слота соответствует настройкам
         $slotDuration = $endTime->diffInMinutes($startTime);
         $expectedDuration = $this->getShiftSlotDuration($shift);
-        
+
         if ($slotDuration !== $expectedDuration) {
             return false;
         }
 
         // TODO: Здесь можно добавить проверку на занятость слота
         // (например, проверить, нет ли уже записей на это время)
-        
+
         return true;
     }
 
     /**
      * Получить доступные слоты для филиала на определенную дату
-     * 
+     *
      * @param Branch $branch
      * @param Carbon $date
      * @return array Массив доступных слотов
@@ -129,18 +129,18 @@ class SlotService
     {
         $slots = [];
         $slotDuration = $this->getBranchSlotDuration($branch);
-        
+
         // Получаем все смены врачей в филиале на указанную дату
         $shifts = DoctorShift::whereHas('cabinet', function($query) use ($branch) {
             $query->where('branch_id', $branch->id);
         })
-        ->whereDate('start_time', $date)
-        ->with(['doctor', 'cabinet'])
-        ->get();
+            ->whereDate('start_time', $date)
+            ->with(['doctor', 'cabinet'])
+            ->get();
 
         foreach ($shifts as $shift) {
             $shiftSlots = $this->getShiftTimeSlots($shift);
-            
+
             foreach ($shiftSlots as $slot) {
                 if ($this->isSlotAvailable($slot['start'], $slot['end'], $shift)) {
                     $slots[] = array_merge($slot, [
@@ -157,7 +157,7 @@ class SlotService
 
     /**
      * Получить стандартные варианты длительности слотов
-     * 
+     *
      * @return array
      */
     public function getStandardSlotDurations(): array

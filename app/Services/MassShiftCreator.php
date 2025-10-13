@@ -23,7 +23,7 @@ class MassShiftCreator
     /**
      * Создает одну или несколько смен в зависимости от диапазона и параметров перерыва.
      *
-     * @param array $data входные данные формы (doctor_id, cabinet_id, start_time, end_time, slot_duration, has_break, break_start_time, break_end_time, workday_start, workday_end)
+     * @param array $data входные данные формы (doctor_id, cabinet_id, start_time, end_time, slot_duration, has_break, break_start_time, break_end_time, workday_start, workday_end, excluded_weekdays)
      * @return Collection созданные смены
      *
      * @throws ValidationException
@@ -58,11 +58,22 @@ class MassShiftCreator
         $defaultDailyStart = $workdayStartTemplate ?? $start->copy();
         $defaultDailyEnd = $workdayEndTemplate ?? $end->copy();
 
-        return DB::transaction(function () use ($data, $start, $end, $breakBounds, $defaultDailyStart, $defaultDailyEnd, $workdayStartTemplate, $workdayEndTemplate) {
+        $excludedWeekdays = collect($data['excluded_weekdays'] ?? [])
+            ->map(fn ($value) => (int) $value)
+            ->filter(fn (int $day) => $day >= 1 && $day <= 7)
+            ->unique()
+            ->values()
+            ->all();
+
+        return DB::transaction(function () use ($data, $start, $end, $breakBounds, $defaultDailyStart, $defaultDailyEnd, $workdayStartTemplate, $workdayEndTemplate, $excludedWeekdays) {
             $createdShifts = collect();
             $period = CarbonPeriod::create($start->copy()->startOfDay(), $end->copy()->startOfDay());
 
             foreach ($period as $day) {
+                if (!empty($excludedWeekdays) && in_array($day->isoWeekday(), $excludedWeekdays, true)) {
+                    continue;
+                }
+
                 $segmentStart = $day->isSameDay($start)
                     ? $start->copy()
                     : $this->applyTemplateToDay($day, $workdayStartTemplate, $defaultDailyStart);

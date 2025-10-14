@@ -8,9 +8,6 @@ use App\Models\Cabinet;
 use App\Models\Doctor;
 use App\Models\Branch;
 use App\Models\Clinic;
-use App\Services\CalendarFilterService;
-use App\Services\CalendarEventService;
-use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\TextInput;
@@ -31,19 +28,8 @@ use Carbon\Carbon;
  * - Интегрируется с формами BidResource
  * - Разграничивает права доступа по ролям пользователей
  */
-class BidCalendarWidget extends FullCalendarWidget
+class BidCalendarWidget extends BaseAppointmentCalendarWidget
 {
-    /**
-     * Модель данных для работы с заявками
-     */
-    public \Illuminate\Database\Eloquent\Model | string | null $model = Application::class;
-    
-    /**
-     * Временное хранилище данных выбранного слота
-     * Используется для передачи информации между событиями календаря и формами
-     */
-    public array $slotData = [];
-    
     /**
      * Данные формы для фильтрации календаря
      * Получаются из родительского компонента (страницы формы)
@@ -56,28 +42,6 @@ class BidCalendarWidget extends FullCalendarWidget
     protected $listeners = ['refetchEvents', 'formDataUpdated', 'slotSelected', 'updateApplicationFromSlot'];
     
     /**
-     * Сервисы для работы с фильтрами и событиями
-     */
-    protected ?CalendarFilterService $filterService = null;
-    protected ?CalendarEventService $eventService = null;
-    
-    public function getFilterService(): CalendarFilterService
-    {
-        if ($this->filterService === null) {
-            $this->filterService = app(CalendarFilterService::class);
-        }
-        return $this->filterService;
-    }
-    
-    protected function getEventService(): CalendarEventService
-    {
-        if ($this->eventService === null) {
-            $this->eventService = app(CalendarEventService::class);
-        }
-        return $this->eventService;
-    }
-
-    /**
      * Конфигурация календаря FullCalendar
      * 
      * Настройки отображения и поведения календаря:
@@ -89,42 +53,7 @@ class BidCalendarWidget extends FullCalendarWidget
      */
     public function config(): array
     {
-        $user = auth()->user();
-        $isDoctor = $user && $user->isDoctor();
-        
-        return [
-            'firstDay' => 1, // Понедельник - первый день недели
-            'headerToolbar' => [
-                'left' => 'prev,next today', // Кнопки навигации и "Сегодня"
-                'center' => 'title', // Заголовок с текущим периодом
-                'right' => 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' // Переключатели видов
-            ],
-            'initialView' => 'timeGridWeek', // По умолчанию показываем неделю
-            'navLinks' => true, // Клик по дате переключает на день
-            'editable' => false, // Отключаем стандартное редактирование событий
-            'selectable' => false, // Отключаем выбор временных промежутков
-            'selectMirror' => false, // Отключаем отображение выбранного времени
-            'dayMaxEvents' => true, // Показывать "еще" если событий много
-            'weekends' => true, // Показывать выходные дни
-            'locale' => 'ru', // Русская локализация
-            'buttonText' => [
-                'today' => 'Сегодня',
-                'month' => 'Месяц',
-                'week' => 'Неделя',
-                'day' => 'День',
-                'list' => 'Список'
-            ],
-            'allDaySlot' => false, // Не показывать слот "Весь день"
-            'slotMinTime' => '08:00:00', // Начало рабочего дня
-            'slotMaxTime' => '20:00:00', // Конец рабочего дня
-            'slotDuration' => '00:15:00', // Длительность слота 15 минут
-            'snapDuration' => '00:05:00', // Привязка к 5-минутным интервалам
-            'slotLabelFormat' => [ // Формат отображения времени в слотах
-                'hour' => '2-digit',
-                'minute' => '2-digit',
-                'hour12' => false, // 24-часовой формат
-            ],
-        ];
+        return $this->makeAppointmentCalendarConfig();
     }
 
     /**
@@ -232,40 +161,9 @@ class BidCalendarWidget extends FullCalendarWidget
      */
     public function fetchEvents(array $fetchInfo): array
     {
-        $user = auth()->user();
-        
-        // Если пользователь не аутентифицирован, возвращаем пустой массив
-        if (!$user) {
-            return [];
-        }
-        
-        // Если нет данных формы для фильтрации, показываем все доступные слоты
-        // Проверяем наличие хотя бы одного поля для фильтрации
-        $hasFilterData = !empty($this->formData['city_id']) || 
-                        !empty($this->formData['clinic_id']) || 
-                        !empty($this->formData['branch_id']) || 
-                        !empty($this->formData['doctor_id']) || 
-                        !empty($this->formData['cabinet_id']);
-        
-        // Если нет фильтров - показываем все слоты (не возвращаем пустой массив)
-        
-        // Добавляем уникальный идентификатор для принудительного обновления
-        $fetchInfo['_timestamp'] = time();
-        $fetchInfo['_random'] = uniqid();
-        $fetchInfo['_cache_buster'] = md5(time() . rand());
-        
-        // Добавляем заголовки для предотвращения кэширования
-        header('Cache-Control: no-cache, no-store, must-revalidate');
-        header('Pragma: no-cache');
-        header('Expires: 0');
-        
-        // Создаем фильтры на основе данных формы
         $filters = $this->createFiltersFromFormData();
-        
-        // Используем сервис для генерации событий
-        $events = $this->getEventService()->generateEvents($fetchInfo, $filters, $user);
-        
-        return $events;
+
+        return $this->generateCalendarEvents($fetchInfo, $filters);
     }
 
     /**

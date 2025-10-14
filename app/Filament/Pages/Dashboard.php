@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Filament\Widgets\AllCabinetsScheduleWidget;
 use App\Filament\Widgets\AppointmentCalendarWidget;
+use App\Models\SystemSetting;
 use Filament\Pages\Page;
 
 class Dashboard extends Page
@@ -19,6 +20,11 @@ class Dashboard extends Page
     protected static ?int $navigationSort = 1;
     
     /**
+     * Флаг включения календаря заявок
+     */
+    public bool $isCalendarEnabled = true;
+    
+    /**
      * Активный таб по умолчанию
      */
     public ?string $activeTab = 'appointments';
@@ -28,10 +34,15 @@ class Dashboard extends Page
      */
     public function getWidgets(): array
     {
-        return [
-            AppointmentCalendarWidget::class,
+        $widgets = [
             AllCabinetsScheduleWidget::class,
         ];
+
+        if (SystemSetting::getValue('dashboard_calendar_enabled', true)) {
+            array_unshift($widgets, AppointmentCalendarWidget::class);
+        }
+
+        return $widgets;
     }
 
     /**
@@ -39,10 +50,29 @@ class Dashboard extends Page
      */
     public function mount(): void
     {
-        // Устанавливаем активный таб по умолчанию
-        if (!$this->activeTab) {
+        $this->isCalendarEnabled = SystemSetting::getValue('dashboard_calendar_enabled', true);
+
+        if (!$this->isCalendarEnabled) {
+            $this->activeTab = 'schedule';
+        } elseif (!$this->activeTab) {
             $this->activeTab = 'appointments';
         }
+    }
+
+    public function updatedIsCalendarEnabled($value): void
+    {
+        $enabled = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        $enabled = $enabled ?? false;
+
+        SystemSetting::setValue('dashboard_calendar_enabled', $enabled);
+
+        if (!$enabled) {
+            $this->activeTab = 'schedule';
+        } elseif ($this->activeTab !== 'appointments') {
+            $this->activeTab = 'appointments';
+        }
+
+        $this->isCalendarEnabled = $enabled;
     }
 
 }

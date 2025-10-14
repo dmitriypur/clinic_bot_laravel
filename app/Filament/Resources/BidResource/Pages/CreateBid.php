@@ -5,10 +5,10 @@ namespace App\Filament\Resources\BidResource\Pages;
 use App\Filament\Resources\BidResource;
 use App\Filament\Widgets\BidCalendarWidget;
 use App\Models\Application;
+use App\Models\SystemSetting;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
-use Filament\Support\Facades\FilamentView;
 use Illuminate\Contracts\View\View;
 
 class CreateBid extends CreateRecord
@@ -27,8 +27,10 @@ class CreateBid extends CreateRecord
     {
         parent::mount();
         
-        // Отправляем начальные данные формы в календарь
-        $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
+        if ($this->isCalendarEnabled()) {
+            // Отправляем начальные данные формы в календарь
+            $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
+        }
     }
 
     /**
@@ -37,6 +39,10 @@ class CreateBid extends CreateRecord
      */
     protected function getFooterWidgets(): array
     {
+        if (! $this->isCalendarEnabled()) {
+            return [];
+        }
+
         return [
             BidCalendarWidget::make([
                 'formData' => $this->getFormDataForCalendar(),
@@ -66,7 +72,7 @@ class CreateBid extends CreateRecord
     public function updated($property): void
     {
         // Обновляем календарь при изменении полей фильтрации
-        if (in_array($property, ['data.city_id', 'data.clinic_id', 'data.branch_id', 'data.doctor_id', 'data.cabinet_id'])) {
+        if ($this->isCalendarEnabled() && in_array($property, ['data.city_id', 'data.clinic_id', 'data.branch_id', 'data.doctor_id', 'data.cabinet_id'])) {
             $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
         }
         
@@ -81,6 +87,10 @@ class CreateBid extends CreateRecord
      */
     public function slotSelected($slotData): void
     {
+        if (! $this->isCalendarEnabled()) {
+            return;
+        }
+
         // Получаем текущие данные формы
         $currentData = $this->form->getState();
         
@@ -110,6 +120,10 @@ class CreateBid extends CreateRecord
      */
     public function updateApplicationFromSlot($slotData): void
     {
+        if (! $this->isCalendarEnabled()) {
+            return;
+        }
+
         try {
             // Получаем текущие данные формы
             $currentData = $this->form->getState();
@@ -154,6 +168,10 @@ class CreateBid extends CreateRecord
      */
     public function getFooter(): ?View
     {
+        if (! $this->isCalendarEnabled()) {
+            return null;
+        }
+
         return view('filament.pages.bid-calendar-integration');
     }
 
@@ -187,7 +205,9 @@ class CreateBid extends CreateRecord
             if ($another) {
                 // Если создаем еще одну заявку - очищаем форму
                 $this->form->fill();
-                $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
+                if ($this->isCalendarEnabled()) {
+                    $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
+                }
             } else {
                 // Перенаправляем на страницу редактирования
                 $this->redirect(static::getResource()::getUrl('edit', ['record' => $application]));
@@ -206,5 +226,13 @@ class CreateBid extends CreateRecord
                 ->danger()
                 ->send();
         }
+    }
+
+    /**
+     * Проверяет, включен ли календарь заявок.
+     */
+    protected function isCalendarEnabled(): bool
+    {
+        return SystemSetting::getValue('dashboard_calendar_enabled', true) === true;
     }
 }

@@ -19,7 +19,7 @@ class CalendarFilterService
         if (!empty($filters['date_from'])) {
             $query->where('start_time', '>=', Carbon::parse($filters['date_from']));
         }
-
+        
         if (!empty($filters['date_to'])) {
             $query->where('start_time', '<=', Carbon::parse($filters['date_to']));
         }
@@ -37,14 +37,14 @@ class CalendarFilterService
                 $q->whereIn('clinic_id', $filters['clinic_ids']);
             });
         }
-
+        
         // Фильтры по филиалам
         if (!empty($filters['branch_ids'])) {
             $query->whereHas('cabinet', function($q) use ($filters) {
                 $q->whereIn('branch_id', $filters['branch_ids']);
             });
         }
-
+        
         // Фильтры по врачам
         if (!empty($filters['doctor_ids'])) {
             $query->whereIn('doctor_id', $filters['doctor_ids']);
@@ -65,7 +65,7 @@ class CalendarFilterService
         if (!empty($filters['date_from'])) {
             $query->where('appointment_datetime', '>=', Carbon::parse($filters['date_from']));
         }
-
+        
         if (!empty($filters['date_to'])) {
             $query->where('appointment_datetime', '<=', Carbon::parse($filters['date_to']));
         }
@@ -74,17 +74,17 @@ class CalendarFilterService
         if (!empty($filters['clinic_ids'])) {
             $query->whereIn('clinic_id', $filters['clinic_ids']);
         }
-
+        
         // Фильтры по филиалам
         if (!empty($filters['branch_ids'])) {
             $query->whereIn('branch_id', $filters['branch_ids']);
         }
-
+        
         // Фильтры по врачам
         if (!empty($filters['doctor_ids'])) {
             $query->whereIn('doctor_id', $filters['doctor_ids']);
         }
-
+        
         // Фильтры по статусам
         if (!empty($filters['status_ids'])) {
             $query->whereIn('status_id', $filters['status_ids']);
@@ -112,7 +112,7 @@ class CalendarFilterService
         }
         // super_admin видит все без ограничений
     }
-
+    
     /**
      * Применяет фильтрацию по ролям пользователя для заявок
      */
@@ -134,7 +134,7 @@ class CalendarFilterService
     public function getAvailableClinics(User $user): array
     {
         $query = \App\Models\Clinic::query();
-
+        
         if ($user->isPartner()) {
             $query->where('id', $user->clinic_id);
         } elseif ($user->isDoctor()) {
@@ -144,7 +144,7 @@ class CalendarFilterService
             });
         }
         // super_admin видит все клиники
-
+        
         return $query->pluck('name', 'id')->toArray();
     }
 
@@ -154,7 +154,7 @@ class CalendarFilterService
     public function getAvailableBranches(User $user, ?array $clinicIds = null): array
     {
         $query = \App\Models\Branch::query();
-
+        
         if ($user->isPartner()) {
             $query->where('clinic_id', $user->clinic_id);
         } elseif ($user->isDoctor()) {
@@ -168,7 +168,7 @@ class CalendarFilterService
             // Если не указаны клиники и пользователь не партнер/врач, возвращаем пустой массив
             return [];
         }
-
+        
         return $query->pluck('name', 'id')->toArray();
     }
 
@@ -178,7 +178,7 @@ class CalendarFilterService
     public function getAvailableDoctors(User $user, ?array $branchIds = null): array
     {
         $query = \App\Models\Doctor::query();
-
+        
         if ($user->isDoctor()) {
             $query->where('id', $user->doctor_id);
         } elseif (!empty($branchIds)) {
@@ -189,14 +189,14 @@ class CalendarFilterService
             // Если не указаны филиалы и пользователь не врач, возвращаем пустой массив
             return [];
         }
-
+        
         $doctors = $query->get();
         $result = [];
-
+        
         foreach ($doctors as $doctor) {
             $result[$doctor->id] = $doctor->full_name;
         }
-
+        
         return $result;
     }
 
@@ -206,7 +206,7 @@ class CalendarFilterService
     public function getAvailableDoctorsForShifts(User $user): array
     {
         $query = \App\Models\Doctor::query();
-
+        
         if ($user->isPartner()) {
             // Партнер видит врачей своих клиник
             $query->whereHas('branches', function($q) use ($user) {
@@ -217,14 +217,14 @@ class CalendarFilterService
             $query->where('id', $user->doctor_id);
         }
         // super_admin видит всех врачей
-
+        
         $doctors = $query->get();
         $result = [];
-
+        
         foreach ($doctors as $doctor) {
             $result[$doctor->id] = $doctor->full_name;
         }
-
+        
         return $result;
     }
 
@@ -234,16 +234,16 @@ class CalendarFilterService
     public function validateFilters(array $filters): array
     {
         $errors = [];
-
+        
         if (!empty($filters['date_from']) && !empty($filters['date_to'])) {
             $dateFrom = Carbon::parse($filters['date_from']);
             $dateTo = Carbon::parse($filters['date_to']);
-
+            
             if ($dateFrom->gt($dateTo)) {
                 $errors[] = 'Дата начала не может быть позже даты окончания';
             }
         }
-
+        
         return $errors;
     }
 
@@ -253,16 +253,16 @@ class CalendarFilterService
     public function validateShiftFilters(array $filters): array
     {
         $errors = [];
-
+        
         if (!empty($filters['date_from']) && !empty($filters['date_to'])) {
             $dateFrom = Carbon::parse($filters['date_from']);
             $dateTo = Carbon::parse($filters['date_to']);
-
+            
             if ($dateFrom->gt($dateTo)) {
                 $errors[] = 'Дата начала не может быть позже даты окончания';
             }
         }
-
+        
         return $errors;
     }
 }

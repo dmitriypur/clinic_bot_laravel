@@ -4,21 +4,22 @@ namespace App\Filament\Resources\ApplicationResource\Pages;
 
 use App\Filament\Resources\ApplicationResource;
 use App\Filament\Widgets\AppointmentCalendarWidget;
-use App\Models\SystemSetting;
+use App\Support\CalendarSettings;
 use Filament\Actions;
 use Filament\Resources\Pages\ListRecords;
+use Illuminate\Support\Facades\Auth;
 
 class ListApplications extends ListRecords
 {
     protected static string $resource = ApplicationResource::class;
-    
+
     /**
      * Кастомный view для отображения табов
      */
     protected static string $view = 'filament.resources.application-resource.pages.list-applications';
-    
+
     public bool $isCalendarEnabled = true;
-    
+
     /**
      * Активный таб по умолчанию
      */
@@ -36,7 +37,7 @@ class ListApplications extends ListRecords
      */
     public function getWidgets(): array
     {
-        if (SystemSetting::getValue('dashboard_calendar_enabled', true)) {
+        if (CalendarSettings::isEnabledForUser(Auth::user())) {
             return [
                 AppointmentCalendarWidget::class,
             ];
@@ -51,7 +52,7 @@ class ListApplications extends ListRecords
     public function mount(): void
     {
         parent::mount();
-        $this->isCalendarEnabled = SystemSetting::getValue('dashboard_calendar_enabled', true);
+        $this->isCalendarEnabled = CalendarSettings::isEnabledForUser(Auth::user());
 
         if (!$this->isCalendarEnabled) {
             $this->activeTab = 'list';

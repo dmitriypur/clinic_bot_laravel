@@ -6,11 +6,12 @@ use App\Filament\Resources\BidResource;
 use App\Filament\Widgets\BidCalendarWidget;
 use App\Models\Application;
 use App\Models\ApplicationStatus;
-use App\Models\SystemSetting;
+use App\Support\CalendarSettings;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Auth;
 
 class EditBid extends EditRecord
 {
@@ -27,7 +28,7 @@ class EditBid extends EditRecord
     public function mount(string|int $record): void
     {
         parent::mount($record);
-        
+
         if ($this->isCalendarEnabled()) {
             // Отправляем начальные данные формы в календарь
             $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
@@ -64,7 +65,7 @@ class EditBid extends EditRecord
     protected function getFormDataForCalendar(): array
     {
         $data = $this->form->getState();
-        
+
         return [
             'city_id' => $data['city_id'] ?? null,
             'clinic_id' => $data['clinic_id'] ?? null,
@@ -83,7 +84,7 @@ class EditBid extends EditRecord
         if ($this->isCalendarEnabled() && in_array($property, ['data.city_id', 'data.clinic_id', 'data.branch_id', 'data.doctor_id', 'data.cabinet_id'])) {
             $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
         }
-        
+
         // При изменении статуса обновляем виджеты
         if ($property === 'data.status_id') {
             $this->dispatch('$refresh');
@@ -101,7 +102,7 @@ class EditBid extends EditRecord
 
         // Получаем текущие данные формы
         $currentData = $this->form->getState();
-        
+
         // Обновляем только поля связанные с календарем, сохраняя уже заполненные данные
         $this->form->fill([
             'city_id' => $slotData['city_id'] ?? $currentData['city_id'] ?? null,
@@ -147,26 +148,26 @@ class EditBid extends EditRecord
         try {
             // Получаем текущие данные формы
             $currentData = $this->form->getState();
-            
+
             // Объединяем данные формы с данными слота
             $applicationData = array_merge($currentData, $slotData);
-            
+
             // Устанавливаем статус "Запись на прием"
             $appointmentStatus = \App\Models\ApplicationStatus::where('slug', 'appointment')->first();
             if ($appointmentStatus) {
                 $applicationData['status_id'] = $appointmentStatus->id;
             }
-            
+
             // Обновляем форму с новыми данными
             $this->form->fill($applicationData);
-            
+
             // Показываем уведомление об успехе
             Notification::make()
                 ->title('Время выбрано')
                 ->body('Время приема выбрано из календаря. Статус изменен на "Запись на прием"')
                 ->success()
                 ->send();
-            
+
         } catch (\Exception $e) {
             // Логируем ошибку
             \Log::error('Ошибка обновления заявки данными слота в EditBid: ' . $e->getMessage(), [
@@ -174,7 +175,7 @@ class EditBid extends EditRecord
                 'currentRecord' => $this->record->id,
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             // Показываем уведомление об ошибке
             Notification::make()
                 ->title('Ошибка обновления')
@@ -197,10 +198,10 @@ class EditBid extends EditRecord
             if ($status && in_array($status->slug, ['new', 'bid_cancelled'])) {
                 $data['appointment_datetime'] = null;
             }
-            
+
             // Обновляем заявку
             $this->record->update($data);
-            
+
             if ($shouldSendSavedNotification) {
                 // Показываем уведомление об успешном сохранении
                 \Filament\Notifications\Notification::make()
@@ -209,7 +210,7 @@ class EditBid extends EditRecord
                     ->success()
                     ->send();
             }
-            
+
             if ($shouldRedirect) {
                 // Перенаправляем на список заявок
                 $this->redirect(static::getResource()::getUrl('index'));
@@ -221,7 +222,7 @@ class EditBid extends EditRecord
                 'record_id' => $this->record->id,
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             // Показываем уведомление об ошибке с деталями
             \Filament\Notifications\Notification::make()
                 ->title('Ошибка сохранения заявки')
@@ -236,6 +237,6 @@ class EditBid extends EditRecord
      */
     protected function isCalendarEnabled(): bool
     {
-        return SystemSetting::getValue('dashboard_calendar_enabled', true) === true;
+        return CalendarSettings::isEnabledForUser(Auth::user());
     }
 }

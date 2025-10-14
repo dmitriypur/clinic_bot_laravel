@@ -5,11 +5,12 @@ namespace App\Filament\Resources\BidResource\Pages;
 use App\Filament\Resources\BidResource;
 use App\Filament\Widgets\BidCalendarWidget;
 use App\Models\Application;
-use App\Models\SystemSetting;
+use App\Support\CalendarSettings;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Auth;
 
 class CreateBid extends CreateRecord
 {
@@ -26,7 +27,7 @@ class CreateBid extends CreateRecord
     public function mount(): void
     {
         parent::mount();
-        
+
         if ($this->isCalendarEnabled()) {
             // Отправляем начальные данные формы в календарь
             $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
@@ -56,7 +57,7 @@ class CreateBid extends CreateRecord
     protected function getFormDataForCalendar(): array
     {
         $data = $this->form->getState();
-        
+
         return [
             'city_id' => $data['city_id'] ?? null,
             'clinic_id' => $data['clinic_id'] ?? null,
@@ -75,7 +76,7 @@ class CreateBid extends CreateRecord
         if ($this->isCalendarEnabled() && in_array($property, ['data.city_id', 'data.clinic_id', 'data.branch_id', 'data.doctor_id', 'data.cabinet_id'])) {
             $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
         }
-        
+
         // При изменении статуса обновляем виджеты
         if ($property === 'data.status_id') {
             $this->dispatch('$refresh');
@@ -93,7 +94,7 @@ class CreateBid extends CreateRecord
 
         // Получаем текущие данные формы
         $currentData = $this->form->getState();
-        
+
         // Обновляем только поля связанные с календарем, сохраняя уже заполненные данные
         $this->form->fill([
             'city_id' => $slotData['city_id'] ?? $currentData['city_id'] ?? null,
@@ -127,33 +128,33 @@ class CreateBid extends CreateRecord
         try {
             // Получаем текущие данные формы
             $currentData = $this->form->getState();
-            
+
             // Объединяем данные формы с данными слота
             $applicationData = array_merge($currentData, $slotData);
-            
+
             // Устанавливаем статус "Запись на прием"
             $appointmentStatus = \App\Models\ApplicationStatus::where('slug', 'appointment')->first();
             if ($appointmentStatus) {
                 $applicationData['status_id'] = $appointmentStatus->id;
             }
-            
+
             // Обновляем форму с новыми данными
             $this->form->fill($applicationData);
-            
+
             // Показываем уведомление об успехе
             Notification::make()
                 ->title('Время выбрано')
                 ->body('Время приема выбрано из календаря. Статус изменен на "Запись на прием"')
                 ->success()
                 ->send();
-            
+
         } catch (\Exception $e) {
             // Логируем ошибку
             \Log::error('Ошибка обновления заявки данными слота: ' . $e->getMessage(), [
                 'slotData' => $slotData,
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             // Показываем уведомление об ошибке
             Notification::make()
                 ->title('Ошибка обновления')
@@ -182,7 +183,7 @@ class CreateBid extends CreateRecord
     {
         try {
             $data = $this->form->getState();
-            
+
             // Добавляем значения по умолчанию
             $data['source'] = 'admin';
             $data['send_to_1c'] = false;
@@ -192,16 +193,16 @@ class CreateBid extends CreateRecord
                 $newStatus = \App\Models\ApplicationStatus::where('slug', 'new')->first();
                 $data['status_id'] = $newStatus ? $newStatus->id : null;
             }
-            
+
             // Если статус "Новая" или "Отказался" - очищаем appointment_datetime
             $status = \App\Models\ApplicationStatus::find($data['status_id']);
             if ($status && in_array($status->slug, ['new', 'bid_cancelled'])) {
                 $data['appointment_datetime'] = null;
             }
-            
+
             // Создаем новую заявку
             $application = Application::create($data);
-            
+
             if ($another) {
                 // Если создаем еще одну заявку - очищаем форму
                 $this->form->fill();
@@ -218,7 +219,7 @@ class CreateBid extends CreateRecord
                 'data' => $data,
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             // Показываем уведомление об ошибке с деталями
             \Filament\Notifications\Notification::make()
                 ->title('Ошибка создания заявки')
@@ -233,6 +234,6 @@ class CreateBid extends CreateRecord
      */
     protected function isCalendarEnabled(): bool
     {
-        return SystemSetting::getValue('dashboard_calendar_enabled', true) === true;
+        return CalendarSettings::isEnabledForUser(Auth::user());
     }
 }

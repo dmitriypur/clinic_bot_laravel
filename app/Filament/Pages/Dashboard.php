@@ -4,26 +4,27 @@ namespace App\Filament\Pages;
 
 use App\Filament\Widgets\AllCabinetsScheduleWidget;
 use App\Filament\Widgets\AppointmentCalendarWidget;
-use App\Models\SystemSetting;
+use App\Support\CalendarSettings;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Auth;
 
 class Dashboard extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-home';
-    
+
     protected static string $view = 'filament.pages.dashboard';
-    
+
     protected static ?string $title = 'Дашборд';
-    
+
     protected static ?string $navigationLabel = 'Дашборд';
-    
+
     protected static ?int $navigationSort = 1;
-    
+
     /**
      * Флаг включения календаря заявок
      */
     public bool $isCalendarEnabled = true;
-    
+
     /**
      * Активный таб по умолчанию
      */
@@ -38,7 +39,7 @@ class Dashboard extends Page
             AllCabinetsScheduleWidget::class,
         ];
 
-        if (SystemSetting::getValue('dashboard_calendar_enabled', true)) {
+        if (CalendarSettings::isEnabledForUser(Auth::user())) {
             array_unshift($widgets, AppointmentCalendarWidget::class);
         }
 
@@ -50,7 +51,7 @@ class Dashboard extends Page
      */
     public function mount(): void
     {
-        $this->isCalendarEnabled = SystemSetting::getValue('dashboard_calendar_enabled', true);
+        $this->isCalendarEnabled = CalendarSettings::isEnabledForUser(Auth::user());
 
         if (!$this->isCalendarEnabled) {
             $this->activeTab = 'schedule';
@@ -61,10 +62,18 @@ class Dashboard extends Page
 
     public function updatedIsCalendarEnabled($value): void
     {
+        $user = Auth::user();
+
+        if ($user && $user->isDoctor()) {
+            $this->isCalendarEnabled = true;
+            $this->activeTab = $this->activeTab ?? 'appointments';
+            return;
+        }
+
         $enabled = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         $enabled = $enabled ?? false;
 
-        SystemSetting::setValue('dashboard_calendar_enabled', $enabled);
+        CalendarSettings::setEnabledForUser($user, $enabled);
 
         if (!$enabled) {
             $this->activeTab = 'schedule';

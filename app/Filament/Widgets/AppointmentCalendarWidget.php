@@ -21,17 +21,20 @@ use Filament\Forms\Set;
 use Filament\Notifications\Notification;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Виджет календаря записи пациентов
- * 
+ *
  * Основной функционал:
  * - Отображает календарь смен врачей с временными слотами
  * - Показывает занятые и свободные слоты разными цветами
  * - Позволяет создавать новые заявки в свободных слотах
  * - Позволяет просматривать и редактировать существующие заявки
  * - Разграничивает права доступа по ролям пользователей
- * 
+ *
  * Роли и их возможности:
  * - super_admin: полный доступ ко всем заявкам и сменам
  * - partner: доступ только к заявкам своей клиники
@@ -43,13 +46,13 @@ class AppointmentCalendarWidget extends FullCalendarWidget
      * Модель данных для работы с заявками
      */
     public \Illuminate\Database\Eloquent\Model | string | null $model = Application::class;
-    
+
     /**
      * Временное хранилище данных выбранного слота
      * Используется для передачи информации между событиями календаря и формами
      */
     public array $slotData = [];
-    
+
     /**
      * Фильтры для календаря заявок
      * Сохраняют состояние фильтрации по клиникам, филиалам, врачам и датам
@@ -61,18 +64,18 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         'date_from' => null,
         'date_to' => null,
     ];
-    
+
     /**
      * Слушатели событий для обновления календаря
      */
     protected $listeners = ['refetchEvents', 'filtersUpdated'];
-    
+
     /**
      * Сервисы для работы с фильтрами и событиями
      */
     protected ?CalendarFilterService $filterService = null;
     protected ?CalendarEventService $eventService = null;
-    
+
     public function getFilterService(): CalendarFilterService
     {
         if ($this->filterService === null) {
@@ -80,7 +83,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         }
         return $this->filterService;
     }
-    
+
     protected function getEventService(): CalendarEventService
     {
         if ($this->eventService === null) {
@@ -91,7 +94,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
 
     /**
      * Конфигурация календаря FullCalendar
-     * 
+     *
      * Настройки отображения и поведения календаря:
      * - Интерфейс на русском языке
      * - Рабочие часы с 8:00 до 20:00
@@ -103,7 +106,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     {
         $user = auth()->user();
         $isDoctor = $user && $user->isDoctor();
-        
+
         return [
             'firstDay' => 1, // Понедельник - первый день недели
             'headerToolbar' => [
@@ -152,40 +155,40 @@ class AppointmentCalendarWidget extends FullCalendarWidget
 
     /**
      * Получить события для календаря
-     * 
+     *
      * Основная логика:
      * 1. Получаем смены врачей в запрошенном диапазоне дат
      * 2. Фильтруем по правам доступа пользователя
      * 3. Для каждой смены генерируем временные слоты
      * 4. Проверяем занятость каждого слота
      * 5. Формируем события для календаря с цветовой индикацией
-     * 
+     *
      * @param array $fetchInfo Массив с датами начала и конца периода
      * @return array Массив событий для календаря
      */
     public function fetchEvents(array $fetchInfo): array
     {
         $user = auth()->user();
-        
+
         // Если пользователь не аутентифицирован, возвращаем пустой массив
         if (!$user) {
             return [];
         }
-        
+
         // Добавляем уникальный идентификатор для принудительного обновления
         $fetchInfo['_timestamp'] = time();
         $fetchInfo['_random'] = uniqid();
         $fetchInfo['_cache_buster'] = md5(time() . rand());
-        
+
         // Добавляем заголовки для предотвращения кэширования
         header('Cache-Control: no-cache, no-store, must-revalidate');
         header('Pragma: no-cache');
         header('Expires: 0');
-        
+
         // Используем сервис для генерации событий
         $events = $this->getEventService()->generateEvents($fetchInfo, $this->filters, $user);
-        
-        
+
+
         return $events;
     }
 
@@ -200,14 +203,14 @@ class AppointmentCalendarWidget extends FullCalendarWidget
 
     /**
      * Схема формы для создания и редактирования заявок
-     * 
+     *
      * Определяет структуру формы с полями:
      * - Выбор города, клиники, филиала, кабинета (каскадная зависимость)
      * - Выбор врача (зависит от кабинета)
      * - Дата и время приема
      * - Данные пациента (ФИО, телефон, дата рождения)
      * - Промокод
-     * 
+     *
      * @return array Массив компонентов формы
      */
     public function getFormSchema(): array
@@ -225,7 +228,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                         ->disabled() // Отключено для редактирования (заполняется автоматически)
                         ->dehydrated(false) // Не сохраняется в форме (только для отображения)
                         ->afterStateUpdated(fn (Set $set) => $set('clinic_id', null)), // Сброс зависимых полей
-                    
+
                     Select::make('clinic_id')
                         ->label('Клиника')
                         ->searchable() // Поиск по названию клиники
@@ -241,7 +244,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                         ->disabled() // Отключено для редактирования
                         ->dehydrated(false) // Не сохраняется в форме
                         ->afterStateUpdated(fn (Set $set) => $set('branch_id', null)), // Сброс филиала при изменении клиники
-                    
+
                     Select::make('branch_id')
                         ->label('Филиал')
                         ->searchable() // Поиск по названию филиала
@@ -255,7 +258,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                         ->disabled() // Отключено для редактирования
                         ->dehydrated(false) // Не сохраняется в форме
                         ->afterStateUpdated(fn (Set $set) => $set('cabinet_id', null)), // Сброс кабинета при изменении филиала
-                    
+
                     Select::make('cabinet_id')
                         ->label('Кабинет')
                         ->searchable() // Поиск по названию кабинета
@@ -269,7 +272,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                         ->disabled() // Отключено для редактирования
                         ->dehydrated(false) // Не сохраняется в форме
                         ->afterStateUpdated(fn (Set $set) => $set('doctor_id', null)), // Сброс врача при изменении кабинета
-                    
+
                     Select::make('doctor_id')
                         ->label('Врач')
                         ->disabled() // Отключено для редактирования
@@ -283,7 +286,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                             if (!$cabinet || !$cabinet->branch) return [];
                             return $cabinet->branch->doctors->pluck('full_name', 'id')->toArray();
                         }),
-                    
+
                     DateTimePicker::make('appointment_datetime')
                         ->label('Дата и время приема')
                         ->seconds(false) // Не показывать секунды
@@ -294,26 +297,26 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                         ->dehydrated(false), // Не сохраняется в форме
 
                 ]),
-            
+
             // Вторая сетка с данными пациента
             Grid::make(2)
                 ->schema([
                     TextInput::make('full_name_parent')
                         ->label('ФИО родителя'), // ФИО родителя/опекуна
-                    
+
                     TextInput::make('full_name')
                         ->label('ФИО ребенка')
                         ->required(), // Обязательное поле
-                    
+
                     TextInput::make('birth_date')
                         ->label('Дата рождения')
                         ->type('date'), // Поле выбора даты
-                    
+
                     TextInput::make('phone')
                         ->label('Телефон')
                         ->tel() // Тип поля для телефона
                         ->required(), // Обязательное поле
-                    
+
                     TextInput::make('promo_code')
                         ->label('Промокод'), // Необязательное поле для скидок
                 ]),
@@ -322,21 +325,21 @@ class AppointmentCalendarWidget extends FullCalendarWidget
 
     /**
      * Модальные действия для событий календаря
-     * 
+     *
      * Определяет стандартные действия (редактирование, удаление) для событий.
      * Врачи не имеют доступа к этим действиям - для них возвращается пустой массив.
-     * 
+     *
      * @return array Массив действий или пустой массив для врачей
      */
     protected function modalActions(): array
     {
         $user = auth()->user();
-        
+
         // Врач может только просматривать - возвращаем пустой массив, чтобы не было стандартных действий
         if ($user->isDoctor()) {
             return [];
         }
-        
+
         return [
             \Saade\FilamentFullCalendar\Actions\EditAction::make()
                 ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {
@@ -356,7 +359,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 })
                 ->action(function (array $data) {
                     $user = auth()->user();
-                    
+
                     // Проверяем права доступа
                     if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
                         Notification::make()
@@ -366,22 +369,22 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                             ->send();
                         return;
                     }
-                    
+
                     $this->record->update($data);
-                    
+
                     Notification::make()
                         ->title('Заявка обновлена')
                         ->body('Заявка успешно обновлена')
                         ->success()
                         ->send();
-                        
+
                     $this->refreshRecords();
                 }),
-                
+
             \Saade\FilamentFullCalendar\Actions\DeleteAction::make()
                 ->action(function () {
                     $user = auth()->user();
-                    
+
                     // Проверяем права доступа
                     if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
                         Notification::make()
@@ -391,15 +394,15 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                             ->send();
                         return;
                     }
-                    
+
                     $this->record->delete();
-                    
+
                     Notification::make()
                         ->title('Заявка удалена')
                         ->body('Заявка удалена из календаря')
                         ->success()
                         ->send();
-                        
+
                     $this->refreshRecords();
                 }),
         ];
@@ -407,14 +410,14 @@ class AppointmentCalendarWidget extends FullCalendarWidget
 
     /**
      * Обработка клика по событию в календаре
-     * 
+     *
      * Основная логика:
      * 1. Определяет тип слота (занятый или свободный)
      * 2. Для занятых слотов - открывает форму просмотра/редактирования
      * 3. Для свободных слотов - открывает форму создания новой заявки
      * 4. Проверяет права доступа пользователя
      * 5. Проверяет, не прошла ли запись
-     * 
+     *
      * @param array $data Данные события календаря
      */
     public function onEventClick(array $data): void
@@ -422,7 +425,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         $user = auth()->user();
         $event = $data;
         $extendedProps = $event['extendedProps'] ?? [];
-        
+
         // Проверяем, не прошла ли запись
         if (isset($extendedProps['is_past']) && $extendedProps['is_past']) {
             Notification::make()
@@ -432,7 +435,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 ->send();
             return;
         }
-        
+
         // Если слот занят - открываем форму просмотра/редактирования
         if (isset($extendedProps['is_occupied']) && $extendedProps['is_occupied']) {
             $this->onOccupiedSlotClick($extendedProps);
@@ -466,7 +469,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
 
         // Сохраняем данные слота в свойстве виджета для передачи в форму
         $slotStart = $this->normalizeEventTime($extendedProps['slot_start'] ?? null);
-        
+
         // Заполняем массив данными для формы создания заявки
         $this->slotData = [
             'city_id' => $shift->cabinet->branch->city_id,
@@ -488,25 +491,25 @@ class AppointmentCalendarWidget extends FullCalendarWidget
 
     /**
      * Обработка клика по занятому слоту
-     * 
+     *
      * Находит заявку по кабинету и времени, заполняет данные формы
      * и открывает модальное окно для просмотра/редактирования.
      * Учитывает права доступа пользователя при поиске заявки.
-     * 
+     *
      * @param array $data Данные слота с информацией о кабинете и времени
      */
     public function onOccupiedSlotClick(array $data): void
     {
         $user = auth()->user();
         $extendedProps = $data;
-        
+
         // Проверяем, есть ли данные заявки в событии
         if (isset($extendedProps['application_id']) && $extendedProps['application_id']) {
-            
+
             // Используем данные из события, но загружаем полную модель для редактирования
             $application = Application::with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
                 ->find($extendedProps['application_id']);
-                
+
             if (!$application) {
                 Notification::make()
                     ->title('Ошибка')
@@ -515,7 +518,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     ->send();
                 return;
             }
-            
+
             // Проверяем права доступа
             if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
                 Notification::make()
@@ -534,7 +537,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
             }
         } else {
             // Fallback: ищем заявку по времени (старый способ)
-            
+
             $slotStart = $this->normalizeEventTime($extendedProps['slot_start'] ?? null);
             $slotStartForQuery = $this->convertToUtcDateTime($slotStart);
 
@@ -546,15 +549,15 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     ->send();
                 return;
             }
-            
+
             $applicationQuery = Application::query()
                 ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
                 ->where('cabinet_id', $extendedProps['cabinet_id'])
                 ->where('appointment_datetime', $slotStartForQuery);
-            
+
             // Сначала ищем заявку без фильтрации по ролям
             $application = $applicationQuery->first();
-            
+
             if ($application) {
                 // Проверяем права доступа после нахождения заявки
                 if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
@@ -563,7 +566,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     $application = null;
                 }
             }
-            
+
 
             if (!$application) {
                 Notification::make()
@@ -599,7 +602,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
 
         // Устанавливаем запись для действий
         $this->record = $application;
-        
+
         // Открываем модальное окно для просмотра/редактирования заявки
         $this->mountAction('viewAppointment');
     }
@@ -608,19 +611,19 @@ class AppointmentCalendarWidget extends FullCalendarWidget
 
     /**
      * Действия в заголовке виджета
-     * 
+     *
      * Определяет кнопки действий в заголовке календаря:
      * - Для врачей: только кнопка просмотра информации о записи
      * - Для партнеров и админов: кнопки создания, просмотра и редактирования заявок
-     * 
+     *
      * Каждое действие имеет свою форму и логику обработки данных.
-     * 
+     *
      * @return array Массив действий для заголовка
      */
     protected function headerActions(): array
     {
         $user = auth()->user();
-        
+
         // Врач не может создавать заявки, но может просматривать
         if ($user->isDoctor()) {
             return [
@@ -639,7 +642,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     ->options(function () {
                                         return \App\Models\City::pluck('name', 'id')->toArray();
                                     }),
-                                
+
                                 Select::make('clinic_id')
                                     ->label('Клиника')
                                     ->disabled()
@@ -651,7 +654,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                             $q->select('clinic_id')->from('branches')->where('city_id', $cityId);
                                         })->pluck('name', 'id')->toArray();
                                     }),
-                                
+
                                 Select::make('branch_id')
                                     ->label('Филиал')
                                     ->disabled()
@@ -661,7 +664,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                         if (!$clinicId) return [];
                                         return \App\Models\Branch::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
                                     }),
-                                
+
                                 Select::make('cabinet_id')
                                     ->label('Кабинет')
                                     ->disabled()
@@ -671,7 +674,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                         if (!$branchId) return [];
                                         return \App\Models\Cabinet::where('branch_id', $branchId)->pluck('name', 'id')->toArray();
                                     }),
-                                
+
                                 Select::make('doctor_id')
                                     ->label('Врач')
                                     ->disabled()
@@ -683,7 +686,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                         if (!$cabinet || !$cabinet->branch) return [];
                                         return $cabinet->branch->doctors->pluck('full_name', 'id')->toArray();
                                     }),
-                                
+
                                 DateTimePicker::make('appointment_datetime')
                                     ->label('Дата и время приема')
                                     ->disabled()
@@ -691,36 +694,36 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     ->seconds(false)
                                     ->minutesStep(5),
                             ]),
-                        
+
                         Grid::make(2)
                             ->schema([
                                 TextInput::make('full_name_parent')
                                     ->label('ФИО родителя')
                                     ->disabled()
                                     ->dehydrated(false),
-                                
+
                                 TextInput::make('full_name')
                                     ->label('ФИО ребенка')
                                     ->disabled()
                                     ->dehydrated(false),
-                                
+
                                 TextInput::make('birth_date')
                                     ->label('Дата рождения')
                                     ->type('date')
                                     ->disabled()
                                     ->dehydrated(false),
-                                
+
                                 TextInput::make('phone')
                                     ->label('Телефон')
                                     ->tel()
                                     ->disabled()
                                     ->dehydrated(false),
-                                
+
                                 TextInput::make('promo_code')
                                     ->label('Промокод')
                                     ->disabled()
                                     ->dehydrated(false),
-                                
+
                                 TextInput::make('appointment_status')
                                     ->label('Статус приема')
                                     ->disabled()
@@ -774,7 +777,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                         ->send();
                                 }
                             }),
-                        
+
                         // Кнопка "Завершить прием"
                         \Filament\Actions\Action::make('completeAppointment')
                             ->label('Завершить прием')
@@ -800,7 +803,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                         ->send();
                                 }
                             }),
-                        
+
                         // Кнопка "Редактировать"
                         \Filament\Actions\Action::make('edit_application')
                             ->label('Редактировать')
@@ -822,7 +825,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                                 $set('cabinet_id', null);
                                                 $set('doctor_id', null);
                                             }),
-                                        
+
                                         Select::make('clinic_id')
                                             ->label('Клиника')
                                             ->options(function (Get $get) {
@@ -838,7 +841,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                                 $set('cabinet_id', null);
                                                 $set('doctor_id', null);
                                             }),
-                                        
+
                                         Select::make('branch_id')
                                             ->label('Филиал')
                                             ->options(function (Get $get) {
@@ -851,7 +854,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                                 $set('cabinet_id', null);
                                                 $set('doctor_id', null);
                                             }),
-                                        
+
                                         Select::make('cabinet_id')
                                             ->label('Кабинет')
                                             ->options(function (Get $get) {
@@ -863,7 +866,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                             ->afterStateUpdated(function (\Filament\Forms\Set $set) {
                                                 $set('doctor_id', null);
                                             }),
-                                        
+
                                         Select::make('doctor_id')
                                             ->label('Врач')
                                             ->options(function (Get $get) {
@@ -875,35 +878,35 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                                     return [$doctor->id => $doctor->full_name];
                                                 })->toArray();
                                             }),
-                                        
+
                                         DateTimePicker::make('appointment_datetime')
                                             ->label('Дата и время приема')
                                             ->displayFormat('d.m.Y H:i')
                                             ->native(false)
                                             ->seconds(false),
                                     ]),
-                                
+
                                 Grid::make(2)
                                     ->schema([
                                         TextInput::make('full_name')
                                             ->label('ФИО пациента')
                                             ->required()
                                             ->maxLength(255),
-                                        
+
                                         TextInput::make('phone')
                                             ->label('Телефон')
                                             ->tel()
                                             ->required()
                                             ->maxLength(20),
-                                        
+
                                         TextInput::make('full_name_parent')
                                             ->label('ФИО родителя/представителя')
                                             ->maxLength(255),
-                                        
+
                                         TextInput::make('birth_date')
                                             ->label('Дата рождения')
                                             ->maxLength(50),
-                                        
+
                                         TextInput::make('promo_code')
                                             ->label('Промо-код')
                                             ->maxLength(50),
@@ -928,7 +931,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                             })
                             ->action(function (array $data) {
                                 $user = auth()->user();
-                                
+
                                 // Проверяем права доступа
                                 if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
                                     Notification::make()
@@ -938,19 +941,19 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                         ->send();
                                     return;
                                 }
-                                
+
                                 $this->record->update($data);
-                                
+
                                 Notification::make()
                                     ->title('Заявка обновлена')
                                     ->body('Заявка успешно обновлена')
                                     ->success()
                                     ->send();
-                                    
+
                                 $this->refreshRecords();
                                 $this->mountedAction = null;
                             }),
-                        
+
                         // Кнопка "Удалить"
                         \Filament\Actions\Action::make('delete_application')
                             ->label('Удалить')
@@ -963,22 +966,22 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                             ->action(function () {
                                 if ($this->record) {
                                     $this->record->delete();
-                                    
+
                                     Notification::make()
                                         ->title('Заявка удалена')
                                         ->body('Заявка удалена из календаря')
                                         ->success()
                                         ->send();
-                                    
+
                                     $this->refreshRecords();
                                     $this->mountedAction = null;
                                 }
                             }),
-                        
+
                     ]),
             ];
         }
-        
+
         return [
             \Filament\Actions\Action::make('filters')
                 ->label('Фильтры')
@@ -991,12 +994,12 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                 ->label('Дата с')
                                 ->displayFormat('d.m.Y')
                                 ->native(false),
-                                
+
                             \Filament\Forms\Components\DatePicker::make('date_to')
                                 ->label('Дата по')
                                 ->displayFormat('d.m.Y')
                                 ->native(false),
-                                
+
                             \Filament\Forms\Components\Select::make('clinic_ids')
                                 ->label('Клиники')
                                 ->multiple()
@@ -1008,7 +1011,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     $set('doctor_ids', []);
                                 }),
                         ]),
-                        
+
                     \Filament\Forms\Components\Grid::make(2)
                         ->schema([
                             \Filament\Forms\Components\Select::make('branch_ids')
@@ -1021,7 +1024,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     return $this->getFilterService()->getAvailableBranches(auth()->user(), $clinicIds);
                                 })
                                 ->afterStateUpdated(fn (\Filament\Forms\Set $set) => $set('doctor_ids', [])),
-                                
+
                             \Filament\Forms\Components\Select::make('doctor_ids')
                                 ->label('Врачи')
                                 ->multiple()
@@ -1039,7 +1042,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 ->action(function (array $data) {
                     $this->filters = $data;
                     $this->refreshRecords();
-                    
+
                     \Filament\Notifications\Notification::make()
                         ->title('Фильтры применены')
                         ->success()
@@ -1058,14 +1061,14 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                 'date_to' => null,
                             ];
                             $this->refreshRecords();
-                            
+
                             \Filament\Notifications\Notification::make()
                                 ->title('Фильтры очищены')
                                 ->success()
                                 ->send();
                         }),
                 ]),
-                
+
             \Filament\Actions\Action::make('createAppointment')
                 ->label('Создать заявку')
                 ->icon('heroicon-o-plus')
@@ -1079,7 +1082,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                 ->options(function () {
                                     return \App\Models\City::pluck('name', 'id')->toArray();
                                 }),
-                            
+
                             Select::make('clinic_id')
                                 ->label('Клиника')
                                 ->disabled()
@@ -1091,7 +1094,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                         $q->select('clinic_id')->from('branches')->where('city_id', $cityId);
                                     })->pluck('name', 'id')->toArray();
                                 }),
-                            
+
                             Select::make('branch_id')
                                 ->label('Филиал')
                                 ->disabled()
@@ -1101,7 +1104,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     if (!$clinicId) return [];
                                     return \App\Models\Branch::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
                                 }),
-                            
+
                             Select::make('cabinet_id')
                                 ->label('Кабинет')
                                 ->disabled()
@@ -1111,7 +1114,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     if (!$branchId) return [];
                                     return \App\Models\Cabinet::where('branch_id', $branchId)->pluck('name', 'id')->toArray();
                                 }),
-                            
+
                             Select::make('doctor_id')
                                 ->label('Врач')
                                 ->disabled()
@@ -1123,7 +1126,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     if (!$cabinet || !$cabinet->branch) return [];
                                     return $cabinet->branch->doctors->pluck('full_name', 'id')->toArray();
                                 }),
-                            
+
                             DateTimePicker::make('appointment_datetime')
                                 ->label('Дата и время приема')
                                 ->disabled()
@@ -1132,25 +1135,25 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                 ->minutesStep(5)
                                 ->displayFormat('d.m.Y H:i'),
                         ]),
-                    
+
                     Grid::make(2)
                         ->schema([
                             TextInput::make('full_name_parent')
                                 ->label('ФИО родителя'),
-                            
+
                             TextInput::make('full_name')
                                 ->label('ФИО ребенка')
                                 ->required(),
-                            
+
                             TextInput::make('birth_date')
                                 ->label('Дата рождения')
                                 ->type('date'),
-                            
+
                             TextInput::make('phone')
                                 ->label('Телефон')
                                 ->tel()
                                 ->required(),
-                            
+
                             TextInput::make('promo_code')
                                 ->label('Промокод'),
                         ]),
@@ -1171,19 +1174,72 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                 })
                 ->action(function (array $data) {
                     $user = auth()->user();
-                    
-                    // Проверяем обязательные поля
-                    if (empty($data['full_name']) || empty($data['phone'])) {
-                        Notification::make()
-                            ->title('Ошибка валидации')
-                            ->body('Пожалуйста, заполните ФИО ребенка и телефон')
-                            ->danger()
-                            ->send();
-                        return;
+
+                    $validated = Validator::make(
+                        $data,
+                        [
+                            'full_name_parent' => ['nullable', 'string', 'max:255'],
+                            'full_name' => ['required', 'string', 'max:255'],
+                            'birth_date' => ['nullable', 'date'],
+                            'phone' => ['required', 'string', 'max:25'],
+                            'promo_code' => ['nullable', 'string', 'max:100'],
+                        ],
+                        [
+                            'full_name.required' => 'Пожалуйста, заполните ФИО ребенка.',
+                            'phone.required' => 'Пожалуйста, заполните телефон.',
+                        ],
+                    )->validate();
+
+                    $validated['full_name'] = trim($validated['full_name'] ?? '');
+
+                    if ($validated['full_name'] === '') {
+                        throw ValidationException::withMessages([
+                            'full_name' => 'Пожалуйста, заполните ФИО ребенка.',
+                        ]);
                     }
-                    
+
+                    if (array_key_exists('full_name_parent', $validated)) {
+                        $validated['full_name_parent'] = trim($validated['full_name_parent'] ?? '');
+                        if ($validated['full_name_parent'] === '') {
+                            $validated['full_name_parent'] = null;
+                        }
+                    }
+
+                    $validated['phone'] = trim($validated['phone'] ?? '');
+
+                    if ($validated['phone'] === '') {
+                        throw ValidationException::withMessages([
+                            'phone' => 'Пожалуйста, заполните телефон.',
+                        ]);
+                    }
+
+                    if (!empty($validated['birth_date'])) {
+                        try {
+                            $validated['birth_date'] = Carbon::parse($validated['birth_date'])->format('Y-m-d');
+                        } catch (\Throwable $exception) {
+                            // Оставляем исходное значение, если не удалось разобрать дату
+                        }
+                    }
+
+                    $slotContext = Arr::only($this->slotData ?? [], [
+                        'city_id',
+                        'clinic_id',
+                        'branch_id',
+                        'cabinet_id',
+                        'doctor_id',
+                        'appointment_datetime',
+                        'status_id',
+                        'appointment_status',
+                        'source',
+                        'send_to_1c',
+                    ]);
+
                     // Объединяем данные формы с данными из слота
-                    $applicationData = array_merge($this->slotData ?? [], $data);
+                    $applicationData = array_merge($slotContext, $validated);
+
+                    if (!empty($applicationData['appointment_datetime']) && ! $applicationData['appointment_datetime'] instanceof CarbonInterface) {
+                        $applicationData['appointment_datetime'] = $this->normalizeEventTime($applicationData['appointment_datetime']);
+                    }
 
                     $applicationData['source'] = $applicationData['source'] ?? 'admin';
                     $applicationData['send_to_1c'] = $applicationData['send_to_1c'] ?? false;
@@ -1202,8 +1258,8 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                     if (empty($applicationData['appointment_status'])) {
                         $applicationData['appointment_status'] = Application::STATUS_SCHEDULED;
                     }
-                    
-                    
+
+
                     // Проверяем права доступа для партнеров
                     if ($user->isPartner()) {
                         // Проверяем, что создаваемая заявка относится к клинике партнера
@@ -1216,7 +1272,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                             return;
                         }
                     }
-                    
+
                     try {
                         $application = Application::create($applicationData);
                     } catch (\Exception $e) {
@@ -1224,7 +1280,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                             'error' => $e->getMessage(),
                             'data' => $applicationData
                         ]);
-                        
+
                         Notification::make()
                             ->title('Ошибка')
                             ->body('Не удалось создать заявку: ' . $e->getMessage())
@@ -1232,16 +1288,16 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                             ->send();
                         return;
                     }
-                    
+
                     Notification::make()
                         ->title('Заявка создана')
                         ->body('Заявка успешно добавлена в календарь')
                         ->success()
                         ->send();
-                        
+
                     $this->refreshRecords();
                 }),
-                
+
             \Filament\Actions\Action::make('viewAppointment')
                 ->label('Информация о записи')
                 ->icon('heroicon-o-eye')
@@ -1258,7 +1314,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                 ->options(function () {
                                     return \App\Models\City::pluck('name', 'id')->toArray();
                                 }),
-                            
+
                             Select::make('clinic_id')
                                 ->label('Клиника')
                                 ->disabled()
@@ -1270,7 +1326,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                         $q->select('clinic_id')->from('branches')->where('city_id', $cityId);
                                     })->pluck('name', 'id')->toArray();
                                 }),
-                            
+
                             Select::make('branch_id')
                                 ->label('Филиал')
                                 ->disabled()
@@ -1280,7 +1336,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     if (!$clinicId) return [];
                                     return \App\Models\Branch::where('clinic_id', $clinicId)->pluck('name', 'id')->toArray();
                                 }),
-                            
+
                             Select::make('cabinet_id')
                                 ->label('Кабинет')
                                 ->disabled()
@@ -1290,7 +1346,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     if (!$branchId) return [];
                                     return \App\Models\Cabinet::where('branch_id', $branchId)->pluck('name', 'id')->toArray();
                                 }),
-                            
+
                             Select::make('doctor_id')
                                 ->label('Врач')
                                 ->disabled()
@@ -1302,7 +1358,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     if (!$cabinet || !$cabinet->branch) return [];
                                     return $cabinet->branch->doctors->pluck('full_name', 'id')->toArray();
                                 }),
-                            
+
                             DateTimePicker::make('appointment_datetime')
                                 ->label('Дата и время приема')
                                 ->disabled()
@@ -1310,44 +1366,44 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                 ->seconds(false)
                                 ->minutesStep(15),
                         ]),
-                    
+
                     Grid::make(2)
                         ->schema([
                             TextInput::make('full_name_parent')
                                 ->label('ФИО родителя')
                                 ->disabled()
                                 ->dehydrated(false),
-                            
+
                             TextInput::make('full_name')
                                 ->label('ФИО ребенка')
                                 ->disabled()
                                 ->dehydrated(false),
-                            
+
                             TextInput::make('birth_date')
                                 ->label('Дата рождения')
                                 ->type('date')
                                 ->disabled()
                                 ->dehydrated(false),
-                            
+
                             TextInput::make('phone')
                                 ->label('Телефон')
                                 ->tel()
                                 ->disabled()
                                 ->dehydrated(false),
-                            
+
                             TextInput::make('promo_code')
                                 ->label('Промокод')
                                 ->disabled()
                                 ->dehydrated(false),
                         ]),
-                    
+
                     // Поле статуса приема
                     TextInput::make('appointment_status')
                         ->label('Статус приема')
                         ->disabled()
                         ->dehydrated(false)
                         ->formatStateUsing(fn($state) => $this->record ? $this->record->getStatusLabel() : 'Неизвестно'),
-                    
+
                     // Сообщение для завершенных приемов
                     \Filament\Forms\Components\Placeholder::make('completed_message')
                         ->label('')
@@ -1358,7 +1414,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                         ]),
                 ])
                 ->mountUsing(function (\Filament\Forms\Form $form) {
-                    
+
                     // Заполняем форму данными из слота
                     if (!empty($this->slotData)) {
                         // Для просмотра заполняем все поля
@@ -1393,7 +1449,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     ->body('Прием пациента успешно начат')
                                     ->success()
                                     ->send();
-                                
+
                                 // Обновляем календарь
                                 $this->refreshRecords();
                                 $this->mountedAction = null;
@@ -1405,7 +1461,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     ->send();
                             }
                         }),
-                    
+
                     // Кнопка "Завершить прием"
                     \Filament\Actions\Action::make('completeAppointment')
                         ->label('Завершить прием')
@@ -1421,7 +1477,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     ->body('Прием пациента успешно завершен')
                                     ->success()
                                     ->send();
-                                
+
                                 // Обновляем календарь
                                 $this->refreshRecords();
                                 $this->mountedAction = null;
@@ -1433,7 +1489,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     ->send();
                             }
                         }),
-                    
+
                     // Кнопка "Редактировать"
                     \Filament\Actions\Action::make('edit_application')
                         ->label('Редактировать')
@@ -1455,7 +1511,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                             $set('cabinet_id', null);
                                             $set('doctor_id', null);
                                         }),
-                                    
+
                                     Select::make('clinic_id')
                                         ->label('Клиника')
                                         ->options(function (Get $get) {
@@ -1471,7 +1527,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                             $set('cabinet_id', null);
                                             $set('doctor_id', null);
                                         }),
-                                    
+
                                     Select::make('branch_id')
                                         ->label('Филиал')
                                         ->options(function (Get $get) {
@@ -1484,7 +1540,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                             $set('cabinet_id', null);
                                             $set('doctor_id', null);
                                         }),
-                                    
+
                                     Select::make('cabinet_id')
                                         ->label('Кабинет')
                                         ->options(function (Get $get) {
@@ -1496,7 +1552,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                         ->afterStateUpdated(function (\Filament\Forms\Set $set) {
                                             $set('doctor_id', null);
                                         }),
-                                    
+
                                     Select::make('doctor_id')
                                         ->label('Врач')
                                         ->options(function (Get $get) {
@@ -1508,35 +1564,35 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                                 return [$doctor->id => $doctor->full_name];
                                             })->toArray();
                                         }),
-                                    
+
                                     DateTimePicker::make('appointment_datetime')
                                         ->label('Дата и время приема')
                                         ->displayFormat('d.m.Y H:i')
                                         ->native(false)
                                         ->seconds(false),
                                 ]),
-                            
+
                             Grid::make(2)
                                 ->schema([
                                     TextInput::make('full_name')
                                         ->label('ФИО пациента')
                                         ->required()
                                         ->maxLength(255),
-                                    
+
                                     TextInput::make('phone')
                                         ->label('Телефон')
                                         ->tel()
                                         ->required()
                                         ->maxLength(20),
-                                    
+
                                     TextInput::make('full_name_parent')
                                         ->label('ФИО родителя/представителя')
                                         ->maxLength(255),
-                                    
+
                                     TextInput::make('birth_date')
                                         ->label('Дата рождения')
                                         ->maxLength(50),
-                                    
+
                                     TextInput::make('promo_code')
                                         ->label('Промо-код')
                                         ->maxLength(50),
@@ -1561,7 +1617,7 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                         })
                         ->action(function (array $data) {
                             $user = auth()->user();
-                            
+
                             // Проверяем права доступа
                             if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
                                 Notification::make()
@@ -1571,19 +1627,19 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                                     ->send();
                                 return;
                             }
-                            
+
                             $this->record->update($data);
-                            
+
                             Notification::make()
                                 ->title('Заявка обновлена')
                                 ->body('Заявка успешно обновлена')
                                 ->success()
                                 ->send();
-                                
+
                             $this->refreshRecords();
                             $this->mountedAction = null;
                         }),
-                    
+
                     // Кнопка "Удалить"
                     \Filament\Actions\Action::make('delete_application')
                         ->label('Удалить')
@@ -1596,26 +1652,26 @@ class AppointmentCalendarWidget extends FullCalendarWidget
                         ->action(function () {
                             if ($this->record) {
                                 $this->record->delete();
-                                
+
                                 Notification::make()
                                     ->title('Заявка удалена')
                                     ->body('Заявка удалена из календаря')
                                     ->success()
                                     ->send();
-                                
+
                                 $this->refreshRecords();
                                 $this->mountedAction = null;
                             }
                         }),
-                    
+
                 ]),
         ];
     }
-    
+
 
     /**
      * Обработчик события обновления календаря
-     * 
+     *
      * Вызывается при необходимости принудительного обновления событий календаря.
      * Например, после создания, редактирования или удаления заявки.
      * Использует Livewire dispatch для обновления компонента.
@@ -1625,8 +1681,8 @@ class AppointmentCalendarWidget extends FullCalendarWidget
         // Принудительно обновляем события календаря
         $this->dispatch('$refresh');
     }
-    
-    
+
+
     /**
      * Принудительное обновление календаря
      */
@@ -1634,11 +1690,11 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     {
         // Очищаем кэш календаря
         $this->clearCalendarCache();
-        
+
         // Принудительно обновляем события календаря
         $this->dispatch('$refresh');
     }
-    
+
     /**
      * Принудительное обновление календаря с очисткой кэша браузера
      */
@@ -1646,15 +1702,15 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     {
         // Очищаем кэш календаря
         $this->clearCalendarCache();
-        
+
         // Принудительно обновляем события календаря
         $this->dispatch('$refresh');
-        
+
         // Отправляем JavaScript для очистки кэша браузера
         $this->dispatch('calendar-clear-cache');
     }
-    
-    
+
+
     /**
      * Очистка кэша календаря
      */
@@ -1662,11 +1718,11 @@ class AppointmentCalendarWidget extends FullCalendarWidget
     {
         // Очищаем все ключи кэша календаря
         $keys = \Illuminate\Support\Facades\Cache::get('calendar_cache_keys', []);
-        
+
         foreach ($keys as $key) {
             \Illuminate\Support\Facades\Cache::forget($key);
         }
-        
+
         // Очищаем ключ со списком ключей
         \Illuminate\Support\Facades\Cache::forget('calendar_cache_keys');
     }

@@ -33,25 +33,57 @@ class Appointment extends Model
         static::updated(function ($appointment) {
             if ($appointment->wasChanged('status') && $appointment->application) {
                 $application = $appointment->application;
-                
+
                 // Синхронизируем статус заявки со статусом приема
                 switch ($appointment->status) {
                     case AppointmentStatus::IN_PROGRESS:
                         $application->appointment_status = Application::STATUS_IN_PROGRESS;
+                        $application->fillStatusFromSlug([
+                            Application::STATUS_SLUG_APPOINTMENT_IN_PROGRESS,
+                            'appointment_in-progress',
+                            'appointment_started',
+                            'appointment-started',
+                            'in_progress',
+                        ], [
+                            'Идет прием',
+                            'Идёт прием',
+                            'Идёт приём',
+                            'Прием в процессе',
+                        ]);
                         break;
                     case AppointmentStatus::COMPLETED:
                         $application->appointment_status = Application::STATUS_COMPLETED;
+                        $application->fillStatusFromSlug([
+                            Application::STATUS_SLUG_APPOINTMENT_COMPLETED,
+                            'appointment-completed',
+                            'appointment_done',
+                            'completed',
+                        ], [
+                            'Прием проведен',
+                            'Приём проведен',
+                            'Приём проведён',
+                            'Прием завершен',
+                        ]);
                         // Автоматически заполняем время завершения приема
                         if (!$appointment->completed_at) {
                             $appointment->completed_at = now();
                             $appointment->saveQuietly();
                         }
                         break;
-                    case AppointmentStatus::SCHEDULED:
+                    default:
                         $application->appointment_status = Application::STATUS_SCHEDULED;
+                        $application->fillStatusFromSlug([
+                            Application::STATUS_SLUG_APPOINTMENT_SCHEDULED,
+                            'appointment-scheduled',
+                            'scheduled',
+                        ], [
+                            'Запланирован',
+                            'Запись создана',
+                            'Назначен прием',
+                        ]);
                         break;
                 }
-                
+
                 // Сохраняем без вызова событий, чтобы избежать рекурсии
                 $application->saveQuietly();
             }

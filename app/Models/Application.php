@@ -9,11 +9,12 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use App\Traits\HasCalendarOptimizations;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Arr;
 
 class Application extends Model
 {
     use HasCalendarOptimizations;
-    
+
     public $incrementing = true;
     protected $keyType = 'integer';
 
@@ -21,6 +22,11 @@ class Application extends Model
     const STATUS_SCHEDULED = 'scheduled';
     const STATUS_IN_PROGRESS = 'in_progress';
     const STATUS_COMPLETED = 'completed';
+
+    // Slug-и статусов (новая система статусов заявок)
+    public const STATUS_SLUG_APPOINTMENT_SCHEDULED = 'appointment_scheduled';
+    public const STATUS_SLUG_APPOINTMENT_IN_PROGRESS = 'appointment_in_progress';
+    public const STATUS_SLUG_APPOINTMENT_COMPLETED = 'appointment_completed';
 
     // Константы источников создания заявки
     const SOURCE_TELEGRAM = 'telegram';
@@ -103,7 +109,7 @@ class Application extends Model
         // Очищаем кэш календаря при обновлении заявки
         static::updated(function ($application) {
             static::clearCalendarCache();
-            
+
             // Автоматически меняем статус на "Создана" при назначении статуса "Запись на прием"
             // if ($application->wasChanged('status_id')) {
             //     $newStatus = $application->status;
@@ -130,11 +136,11 @@ class Application extends Model
     {
         // Очищаем все ключи кэша календаря
         $keys = Cache::get('calendar_cache_keys', []);
-        
+
         foreach ($keys as $key) {
             Cache::forget($key);
         }
-        
+
         // Очищаем ключ со списком ключей
         Cache::forget('calendar_cache_keys');
     }
@@ -209,9 +215,24 @@ class Application extends Model
                 'status' => \App\Enums\AppointmentStatus::IN_PROGRESS,
                 'started_at' => now(),
             ]);
-            
+
             if ($appointment) {
                 $this->appointment_status = self::STATUS_IN_PROGRESS;
+                $this->fillStatusFromSlug(
+                    [
+                        self::STATUS_SLUG_APPOINTMENT_IN_PROGRESS,
+                        'appointment_in-progress',
+                        'appointment_started',
+                        'appointment-started',
+                        'in_progress',
+                    ],
+                    [
+                        'Идет прием',
+                        'Идёт прием',
+                        'Идёт приём',
+                        'Прием в процессе',
+                    ]
+                );
                 return $this->save();
             }
         }
@@ -226,9 +247,23 @@ class Application extends Model
         if ($this->isInProgress() && $this->appointment) {
             // Завершаем прием
             $appointmentCompleted = $this->appointment->complete();
-            
+
             if ($appointmentCompleted) {
                 $this->appointment_status = self::STATUS_COMPLETED;
+                $this->fillStatusFromSlug(
+                    [
+                        self::STATUS_SLUG_APPOINTMENT_COMPLETED,
+                        'appointment-completed',
+                        'appointment_done',
+                        'completed',
+                    ],
+                    [
+                        'Прием проведен',
+                        'Приём проведен',
+                        'Приём проведён',
+                        'Прием завершен',
+                    ]
+                );
                 return $this->save();
             }
         }
@@ -312,6 +347,70 @@ class Application extends Model
             return $this->save();
         }
         return false;
+    }
+
+    /**
+     * Устанавливает идентификатор статуса без сохранения записи.
+     */
+    public function fillStatusFromSlug(string | array | null $slug, ?array $fallbackNames = null): void
+    {
+        $slugs = array_filter(Arr::wrap($slug));
+
+        foreach ($slugs as $candidate) {
+            if ($statusId = self::resolveStatusIdBySlug($candidate)) {
+                $this->status_id = $statusId;
+                return;
+            }
+        }
+
+        if (empty($fallbackNames)) {
+            return;
+        }
+
+        foreach ($fallbackNames as $name) {
+            $name = trim((string) $name);
+
+            if ($name === '') {
+                continue;
+            }
+
+            if ($statusId = self::resolveStatusIdByName($name)) {
+                $this->status_id = $statusId;
+                return;
+            }
+        }
+    }
+
+    /**
+     * Возвращает ID статуса по slug с кешированием на время запроса.
+     */
+    protected static function resolveStatusIdBySlug(?string $slug): ?int
+    {
+        static $cache = [];
+
+        if (! $slug) {
+            return null;
+        }
+
+        if (! array_key_exists($slug, $cache)) {
+            $cache[$slug] = ApplicationStatus::getBySlug($slug)?->id;
+        }
+
+        return $cache[$slug];
+    }
+
+    protected static function resolveStatusIdByName(string $name): ?int
+    {
+        static $cache = [];
+
+        if (! array_key_exists($name, $cache)) {
+            $cache[$name] = ApplicationStatus::query()
+                ->where('type', 'appointment')
+                ->where('name', $name)
+                ->value('id');
+        }
+
+        return $cache[$name];
     }
 
     /**

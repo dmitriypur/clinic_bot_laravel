@@ -10,13 +10,17 @@ use App\Models\Application;
 use App\Models\Clinic;
 use Carbon\Carbon;
 use Filament\Forms;
+use Filament\Forms\Components\Actions as FormActions;
+use Filament\Forms\Components\Actions\Action as FormAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
+use Filament\Notifications\Notification;
 use Filament\Tables;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -28,6 +32,7 @@ use App\Models\ApplicationStatus;
 use Filament\Tables\Actions\ExportAction;
 use Filament\Actions\Exports\Enums\ExportFormat;
 use App\Filament\Exports\ApplicationExporter;
+
 class ApplicationResource extends Resource
 {
     protected static ?string $model = Application::class;
@@ -58,7 +63,7 @@ class ApplicationResource extends Resource
         // Показываем только заявки из админки (source = null)
         $query->whereHas('status', function ($query) {
             $query->where('type', 'appointment')
-                  ->orWhere('slug', 'appointment');
+                ->orWhere('slug', 'appointment');
         });
 
 
@@ -87,7 +92,7 @@ class ApplicationResource extends Resource
                     ->reactive()
                     ->options(function (callable $get) {
                         $user = auth()->user();
-                        
+
                         // Если пользователь с ролью partner - показываем только города его клиники
                         if ($user->hasRole('partner')) {
                             $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
@@ -96,7 +101,7 @@ class ApplicationResource extends Resource
                             }
                             return [];
                         }
-                        
+
                         // Для остальных пользователей - все города
                         return \App\Models\City::pluck('name', 'id');
                     })
@@ -114,9 +119,9 @@ class ApplicationResource extends Resource
                         if (!$cityId) {
                             return [];
                         }
-                        
+
                         $user = auth()->user();
-                        
+
                         // Если пользователь с ролью partner - показываем только его клинику
                         if ($user->hasRole('partner')) {
                             $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
@@ -125,7 +130,7 @@ class ApplicationResource extends Resource
                             }
                             return [];
                         }
-                        
+
                         // Для остальных пользователей - клиники выбранного города
                         return \App\Models\Clinic::whereHas('cities', function ($query) use ($cityId) {
                             $query->where('cities.id', $cityId);
@@ -136,20 +141,20 @@ class ApplicationResource extends Resource
                         $set('doctor_id', null);
                     })
                     ->required(),
-                
+
                 Select::make('branch_id')
                     ->label('Филиал')
                     ->reactive()
                     ->options(function (callable $get) {
                         $cityId = $get('city_id');
                         $clinicId = $get('clinic_id');
-                        
+
                         if (!$cityId) {
                             return [];
                         }
-                        
+
                         $user = auth()->user();
-                        
+
                         // Если пользователь с ролью partner - показываем только филиалы его клиники
                         if ($user->hasRole('partner')) {
                             $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
@@ -157,23 +162,23 @@ class ApplicationResource extends Resource
                                 $query = \App\Models\Branch::with('clinic')
                                     ->where('city_id', $cityId)
                                     ->where('clinic_id', $clinic->id);
-                                
+
                                 return $query->get()->mapWithKeys(function ($branch) use ($clinic) {
                                     return [$branch->id => $clinic->name . ' - ' . $branch->name];
                                 });
                             }
                             return [];
                         }
-                        
+
                         // Для остальных пользователей - все филиалы
                         $query = \App\Models\Branch::with('clinic')->where('city_id', $cityId);
-                        
+
                         if ($clinicId) {
                             // Если выбрана клиника - показываем только её филиалы в выбранном городе
                             $query->where('clinic_id', $clinicId);
                         }
                         // Если клиника не выбрана - показываем все филиалы выбранного города
-                        
+
                         return $query->get()->mapWithKeys(function ($branch) {
                             if ($branch->clinic) {
                                 return [$branch->id => $branch->clinic->name . ' - ' . $branch->name];
@@ -191,9 +196,9 @@ class ApplicationResource extends Resource
                         $cityId = $get('city_id');
                         $clinicId = $get('clinic_id');
                         $branchId = $get('branch_id');
-                        
+
                         $query = \App\Models\Doctor::query();
-                        
+
                         if ($branchId) {
                             // Если выбран филиал - показываем только врачей этого филиала
                             $query->whereHas('branches', function ($q) use ($branchId) {
@@ -215,7 +220,7 @@ class ApplicationResource extends Resource
                             // Если ничего не выбрано - пустой список
                             return [];
                         }
-                        
+
                         return $query->get()->mapWithKeys(function ($doctor) {
                             return [$doctor->id => $doctor->full_name];
                         });
@@ -230,7 +235,7 @@ class ApplicationResource extends Resource
                         if (!$branchId) {
                             return [];
                         }
-                        
+
                         return \App\Models\Cabinet::where('branch_id', $branchId)
                             ->pluck('name', 'id');
                     })
@@ -246,7 +251,7 @@ class ApplicationResource extends Resource
                         function () {
                             return function (string $attribute, $value, \Closure $fail) {
                                 if (!$value) return;
-                                
+
                                 $cabinetId = data_get(request()->all(), 'data.cabinet_id') ?? request()->input('cabinet_id');
                                 if (!$cabinetId) return;
 
@@ -260,19 +265,19 @@ class ApplicationResource extends Resource
                                 } catch (\Throwable $exception) {
                                     return;
                                 }
-                                
+
                                 // Проверяем, не занят ли слот (исключаем текущую запись при редактировании)
                                 $query = Application::query()
                                     ->where('cabinet_id', $cabinetId)
                                     ->where('appointment_datetime', $slotUtc);
-                                
+
                                 // Если это редактирование, исключаем текущую запись
                                 if (request()->route('record')) {
                                     $query->where('id', '!=', request()->route('record'));
                                 }
-                                
+
                                 $isOccupied = $query->exists();
-                                
+
                                 if ($isOccupied) {
                                     $fail('Этот временной слот уже занят.');
                                 }
@@ -291,7 +296,7 @@ class ApplicationResource extends Resource
                 Toggle::make('send_to_1c')
                     ->label('Отправить в 1С')
                     ->hidden(),
-                    
+
                 Select::make('status_id')
                     ->label('Статус заявки')
                     ->relationship('status', 'name', fn ($query) => $query->where('type', 'appointment'))
@@ -299,6 +304,137 @@ class ApplicationResource extends Resource
                     ->searchable()
                     ->preload()
                     ->required(),
+                Forms\Components\Section::make('Информация о приеме')
+                    ->columns(3)
+                    ->hidden(fn (?string $operation): bool => $operation === 'create')
+                    ->schema([
+                        Placeholder::make('appointment_status_display')
+                            ->label('Статус приема')
+                            ->extraAttributes(function (?Application $record): array {
+                                $isCompleted = false;
+
+                                if ($record) {
+                                    $isCompleted = $record->isCompleted() || $record->appointment?->isCompleted();
+                                }
+
+                                return [
+                                    'class' => 'rounded-md px-4 py-3 text-sm font-medium text-white',
+                                    'style' => $isCompleted ? 'background: #5eb75e;' : 'background: #db4c4c;',
+                                ];
+                            })
+                            ->content(fn (?Application $record): string => $record?->getStatusLabel() ?? '—'),
+                        Placeholder::make('appointment_started_at_display')
+                            ->label('Начало приема')
+                            ->content(function (?Application $record): string {
+                                $startedAt = $record?->appointment?->started_at;
+
+                                return $startedAt
+                                    ? $startedAt->copy()->setTimezone(config('app.timezone', 'UTC'))->format('d.m.Y H:i')
+                                    : '—';
+                            }),
+                        Placeholder::make('appointment_completed_at_display')
+                            ->label('Окончание приема')
+                            ->content(function (?Application $record): string {
+                                $completedAt = $record?->appointment?->completed_at;
+
+                                return $completedAt
+                                    ? $completedAt->copy()->setTimezone(config('app.timezone', 'UTC'))->format('d.m.Y H:i')
+                                    : '—';
+                            }),
+                        Placeholder::make('appointment_notes_display')
+                            ->label('Заметки врача')
+                            ->content(fn (?Application $record): string => $record?->appointment?->notes ?? '—')
+                            ->columnSpanFull(),
+                        FormActions::make([
+                            FormAction::make('startAppointment')
+                                ->label('Начать прием')
+                                ->icon('heroicon-o-play')
+                                ->color('success')
+                                ->visible(function (?Application $record): bool {
+                                    if (! $record) {
+                                        return false;
+                                    }
+
+                                    $user = auth()->user();
+
+                                    return $record->isScheduled()
+                                        && $user
+                                        && ($user->isDoctor() || $user->isPartner() || $user->isSuperAdmin());
+                                })
+                                ->requiresConfirmation()
+                                ->action(function (?Application $record, \Filament\Resources\Pages\EditRecord $livewire) {
+                                    if (! $record) {
+                                        return;
+                                    }
+
+                                    if ($record->startAppointment()) {
+                                        $livewireRecord = $livewire->getRecord();
+                                        $livewireRecord->refresh()->load(['appointment', 'status']);
+                                        $livewire->refreshFormData(['status_id']);
+
+                                        Notification::make()
+                                            ->title('Прием начат')
+                                            ->body('Прием пациента успешно начат')
+                                            ->success()
+                                            ->send();
+
+                                        $livewire->dispatch('refetchEvents');
+                                    } else {
+                                        Notification::make()
+                                            ->title('Ошибка')
+                                            ->body('Не удалось начать прием')
+                                            ->danger()
+                                            ->send();
+                                    }
+                                })
+                                ->modal(false),
+                            FormAction::make('completeAppointment')
+                                ->label('Завершить прием')
+                                ->icon('heroicon-o-check-circle')
+                                ->color('warning')
+                                ->visible(function (?Application $record): bool {
+                                    if (! $record) {
+                                        return false;
+                                    }
+
+                                    $user = auth()->user();
+
+                                    return $record->isInProgress()
+                                        && $user
+                                        && ($user->isDoctor() || $user->isPartner() || $user->isSuperAdmin());
+                                })
+                                ->requiresConfirmation()
+                                ->action(function (?Application $record, \Filament\Resources\Pages\EditRecord $livewire) {
+                                    if (! $record) {
+                                        return;
+                                    }
+
+                                    if ($record->completeAppointment()) {
+                                        $livewireRecord = $livewire->getRecord();
+                                        $livewireRecord->refresh()->load(['appointment', 'status']);
+                                        $livewire->refreshFormData(['status_id']);
+
+                                        Notification::make()
+                                            ->title('Прием завершен')
+                                            ->body('Прием пациента успешно завершен')
+                                            ->success()
+                                            ->send();
+
+                                        $livewire->dispatch('refetchEvents');
+                                    } else {
+                                        Notification::make()
+                                            ->title('Ошибка')
+                                            ->body('Не удалось завершить прием')
+                                            ->danger()
+                                            ->send();
+                                    }
+                                })
+                                ->modal(false),
+                        ])
+                            ->key('appointment-actions')
+                            ->fullWidth()
+                            ->visible(fn (?Application $record): bool => ! empty($record)),
+                    ]),
             ]);
     }
 
@@ -330,13 +466,13 @@ class ApplicationResource extends Resource
                     ->label('Дата и время приема')
                     ->dateTime('d.m.Y H:i')
                     ->sortable(),
-                    
+
                 TextColumn::make('status.name')
                     ->label('Статус')
                     ->badge()
                     ->color(fn ($record) => match($record->status?->color) {
                         'blue' => 'primary',
-                        'green' => 'success', 
+                        'green' => 'success',
                         'red' => 'danger',
                         'yellow' => 'warning',
                         'purple' => 'info',

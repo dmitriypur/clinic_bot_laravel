@@ -20,6 +20,24 @@ const formatDateForApi = (date) => {
     return `${year}-${month}-${day}`
 }
 
+const normalizeTelegramId = (value) => {
+    if (value === null || value === undefined) {
+        return null
+    }
+
+    const raw = String(value).trim()
+
+    if (!raw) {
+        return null
+    }
+
+    if (!/^-?\d+$/.test(raw)) {
+        return null
+    }
+
+    return raw
+}
+
 export function useBooking() {
     const now = new Date()
     const state = reactive({
@@ -35,6 +53,8 @@ export function useBooking() {
         selectedDoctor: null,
         fio: '',
         phone: '',
+        tgUserId: null,
+        tgChatId: null,
         cities: [],
         clinics: [],
         branchesByClinic: {},
@@ -373,6 +393,8 @@ export function useBooking() {
             full_name: state.fio,
             phone: state.phone,
             birth_date: state.birthDate,
+            tg_user_id: state.tgUserId,
+            tg_chat_id: state.tgChatId,
         })
 
         alert('Вы успешно записаны!')
@@ -391,6 +413,36 @@ export function useBooking() {
         state.phone = ''
 
         await loadCities()
+    }
+
+    const initTelegramContext = () => {
+        if (typeof window === 'undefined') {
+            return
+        }
+
+        const webApp = window.Telegram?.WebApp ?? null
+        const initData = webApp?.initDataUnsafe ?? {}
+
+        const webAppUserId = normalizeTelegramId(initData?.user?.id)
+        const webAppChatId = normalizeTelegramId(initData?.chat?.id)
+
+        const params = new URLSearchParams(window.location.search || '')
+        const paramUserId = normalizeTelegramId(params.get('tg_user_id'))
+        const paramChatId = normalizeTelegramId(params.get('tg_chat_id'))
+
+        if (!state.tgUserId) {
+            state.tgUserId = webAppUserId ?? paramUserId ?? null
+        }
+
+        if (!state.tgChatId) {
+            const candidateChatId = webAppChatId
+                ?? paramChatId
+                ?? webAppUserId
+                ?? paramUserId
+                ?? null
+
+            state.tgChatId = candidateChatId
+        }
     }
 
     return {
@@ -414,6 +466,7 @@ export function useBooking() {
             setBirthDate,
             onDateChange,
             submit,
+            initTelegramContext,
         },
     }
 }

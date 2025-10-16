@@ -21,6 +21,7 @@ const {
 } = useBooking()
 
 onMounted(() => {
+    actions.initTelegramContext()
     actions.loadCities()
 })
 

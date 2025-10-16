@@ -193,6 +193,11 @@ class EditBid extends EditRecord
         try {
             $data = $this->form->getState();
 
+            if (isset($data['phone'])) {
+                $digitsOnly = preg_replace('/\D+/', '', $data['phone']);
+                $data['phone'] = $digitsOnly ?: null;
+            }
+
             // Если статус "Новая" или "Отменен" - очищаем appointment_datetime
             $status = ApplicationStatus::find($data['status_id']);
             if ($status && in_array($status->slug, ['new', 'bid_cancelled'])) {
@@ -238,5 +243,25 @@ class EditBid extends EditRecord
     protected function isCalendarEnabled(): bool
     {
         return CalendarSettings::isEnabledForUser(Auth::user());
+    }
+
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        if (isset($data['phone'])) {
+            $digitsOnly = preg_replace('/\D+/', '', $data['phone']);
+            $data['phone'] = $digitsOnly ?: null;
+        }
+
+        return $data;
+    }
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        if (isset($data['phone'])) {
+            $digitsOnly = preg_replace('/\D+/', '', $data['phone']);
+            $data['phone'] = $digitsOnly ?: null;
+        }
+
+        return $data;
     }
 }

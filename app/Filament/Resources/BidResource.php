@@ -26,6 +26,7 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Filament\Tables\Actions\ExportAction;
 use Filament\Actions\Exports\Enums\ExportFormat;
 use App\Filament\Exports\ApplicationExporter;
+use Filament\Support\Colors\Color;
 
 class BidResource extends Resource
 {
@@ -59,7 +60,7 @@ class BidResource extends Resource
                 $query->where('type', '!=', 'appointment');
             })->orWhere(function ($query) {
                 $query->whereNull('status_id')
-                      ->whereIn('source', ['frontend', 'telegram']);
+                    ->whereIn('source', ['frontend', 'telegram']);
             });
         });
 
@@ -86,6 +87,7 @@ class BidResource extends Resource
                 TextInput::make('phone')
                     ->label('Телефон')
                     ->tel()
+                    ->dehydrateStateUsing(fn ($state) => $state ? preg_replace('/\D+/', '', $state) : null)
                     ->rules([
                         fn (): \Closure => function (string $attribute, $value, \Closure $fail) {
                             if (request()->isMethod('POST') && !$value) {
@@ -100,7 +102,7 @@ class BidResource extends Resource
                     ->live()
                     ->options(function (callable $get) {
                         $user = auth()->user();
-                        
+
                         // Если пользователь с ролью partner - показываем только города его клиники
                         if ($user->hasRole('partner')) {
                             $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
@@ -109,7 +111,7 @@ class BidResource extends Resource
                             }
                             return [];
                         }
-                        
+
                         // Для остальных пользователей - все города
                         return \App\Models\City::pluck('name', 'id');
                     })
@@ -137,9 +139,9 @@ class BidResource extends Resource
                         if (!$cityId) {
                             return [];
                         }
-                        
+
                         $user = auth()->user();
-                        
+
                         // Если пользователь с ролью partner - показываем только его клинику
                         if ($user->hasRole('partner')) {
                             $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
@@ -148,7 +150,7 @@ class BidResource extends Resource
                             }
                             return [];
                         }
-                        
+
                         // Для остальных пользователей - клиники выбранного города
                         return \App\Models\Clinic::whereHas('cities', function ($query) use ($cityId) {
                             $query->where('cities.id', $cityId);
@@ -170,20 +172,20 @@ class BidResource extends Resource
                             }
                         },
                     ]),
-                
+
                 Select::make('branch_id')
                     ->label('Филиал')
                     ->live()
                     ->options(function (callable $get) {
                         $cityId = $get('city_id');
                         $clinicId = $get('clinic_id');
-                        
+
                         if (!$cityId) {
                             return [];
                         }
-                        
+
                         $user = auth()->user();
-                        
+
                         // Если пользователь с ролью partner - показываем только филиалы его клиники
                         if ($user->hasRole('partner')) {
                             $clinic = Clinic::query()->where('id', $user->clinic_id)->first();
@@ -191,23 +193,23 @@ class BidResource extends Resource
                                 $query = \App\Models\Branch::with('clinic')
                                     ->where('city_id', $cityId)
                                     ->where('clinic_id', $clinic->id);
-                                
+
                                 return $query->get()->mapWithKeys(function ($branch) use ($clinic) {
                                     return [$branch->id => $clinic->name . ' - ' . $branch->name];
                                 });
                             }
                             return [];
                         }
-                        
+
                         // Для остальных пользователей - все филиалы
                         $query = \App\Models\Branch::with('clinic')->where('city_id', $cityId);
-                        
+
                         if ($clinicId) {
                             // Если выбрана клиника - показываем только её филиалы в выбранном городе
                             $query->where('clinic_id', $clinicId);
                         }
                         // Если клиника не выбрана - показываем все филиалы выбранного города
-                        
+
                         return $query->get()->mapWithKeys(function ($branch) {
                             if ($branch->clinic) {
                                 return [$branch->id => $branch->clinic->name . ' - ' . $branch->name];
@@ -237,9 +239,9 @@ class BidResource extends Resource
                         $cityId = $get('city_id');
                         $clinicId = $get('clinic_id');
                         $branchId = $get('branch_id');
-                        
+
                         $query = \App\Models\Doctor::query();
-                        
+
                         if ($branchId) {
                             // Если выбран филиал - показываем только врачей этого филиала
                             $query->whereHas('branches', function ($q) use ($branchId) {
@@ -261,7 +263,7 @@ class BidResource extends Resource
                             // Если ничего не выбрано - пустой список
                             return [];
                         }
-                        
+
                         return $query->get()->mapWithKeys(function ($doctor) {
                             return [$doctor->id => $doctor->full_name];
                         });
@@ -283,7 +285,7 @@ class BidResource extends Resource
                         if (!$branchId) {
                             return [];
                         }
-                        
+
                         return \App\Models\Cabinet::where('branch_id', $branchId)
                             ->pluck('name', 'id');
                     })
@@ -385,16 +387,7 @@ class BidResource extends Resource
                 TextColumn::make('status.name')
                     ->label('Статус')
                     ->badge()
-                    ->color(fn ($record) => match($record->status?->color) {
-                        'blue' => 'primary',
-                        'green' => 'success', 
-                        'red' => 'danger',
-                        'yellow' => 'warning',
-                        'purple' => 'info',
-                        'pink' => 'secondary',
-                        'indigo' => 'info',
-                        default => 'gray'
-                    })
+                    ->color(fn ($record) => $record->status?->getBadgeColor() ?? Color::Gray)
                     ->searchable()
                     ->sortable(),
             ])

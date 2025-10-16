@@ -32,6 +32,7 @@ use App\Models\ApplicationStatus;
 use Filament\Tables\Actions\ExportAction;
 use Filament\Actions\Exports\Enums\ExportFormat;
 use App\Filament\Exports\ApplicationExporter;
+use Filament\Support\Colors\Color;
 
 class ApplicationResource extends Resource
 {
@@ -470,16 +471,7 @@ class ApplicationResource extends Resource
                 TextColumn::make('status.name')
                     ->label('Статус')
                     ->badge()
-                    ->color(fn ($record) => match($record->status?->color) {
-                        'blue' => 'primary',
-                        'green' => 'success',
-                        'red' => 'danger',
-                        'yellow' => 'warning',
-                        'purple' => 'info',
-                        'pink' => 'secondary',
-                        'indigo' => 'info',
-                        default => 'gray'
-                    })
+                    ->color(fn ($record) => $record->status?->getBadgeColor() ?? Color::Gray)
                     ->searchable()
                     ->sortable(),
             ])

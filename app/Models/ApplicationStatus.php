@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Filament\Support\Colors\Color;
 
 class ApplicationStatus extends Model
 {
@@ -30,13 +31,30 @@ class ApplicationStatus extends Model
     }
 
     /**
+     * Возвращает цвет бейджа для компонентов Filament
+     */
+    public function getBadgeColor(): array
+    {
+        return match ($this->color) {
+            'blue' => Color::Blue,
+            'green' => Color::Green,
+            'red' => Color::Red,
+            'yellow' => Color::Amber,
+            'purple' => Color::Purple,
+            'pink' => Color::Pink,
+            'indigo' => Color::Indigo,
+            default => Color::Gray,
+        };
+    }
+
+    /**
      * Получить активные статусы, отсортированные по порядку
      */
     public static function getActiveStatuses()
     {
         return static::where('is_active', true)
-                    ->orderBy('sort_order')
-                    ->get();
+            ->orderBy('sort_order')
+            ->get();
     }
 
     /**

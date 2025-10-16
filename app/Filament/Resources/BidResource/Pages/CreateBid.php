@@ -236,4 +236,14 @@ class CreateBid extends CreateRecord
     {
         return CalendarSettings::isEnabledForUser(Auth::user());
     }
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        if (isset($data['phone'])) {
+            $digitsOnly = preg_replace('/\D+/', '', $data['phone']);
+            $data['phone'] = $digitsOnly ?: null;
+        }
+
+        return $data;
+    }
 }

@@ -127,6 +127,10 @@ class Application extends Model
         static::deleted(function ($application) {
             static::clearCalendarCache();
         });
+
+        static::retrieved(function (self $application) {
+            $application->autoCompleteIfSlotExpired();
+        });
     }
 
     /**
@@ -249,21 +253,7 @@ class Application extends Model
             $appointmentCompleted = $this->appointment->complete();
 
             if ($appointmentCompleted) {
-                $this->appointment_status = self::STATUS_COMPLETED;
-                $this->fillStatusFromSlug(
-                    [
-                        self::STATUS_SLUG_APPOINTMENT_COMPLETED,
-                        'appointment-completed',
-                        'appointment_done',
-                        'completed',
-                    ],
-                    [
-                        'Прием проведен',
-                        'Приём проведен',
-                        'Приём проведён',
-                        'Прием завершен',
-                    ]
-                );
+                $this->applyCompletedStatus();
                 return $this->save();
             }
         }
@@ -411,6 +401,66 @@ class Application extends Model
         }
 
         return $cache[$name];
+    }
+
+    /**
+     * Автоматически завершаем прием, если время слота прошло, а прием не начат.
+     */
+    public function autoCompleteIfSlotExpired(): bool
+    {
+        if (! $this->shouldAutoCompleteBecauseSlotExpired()) {
+            return false;
+        }
+
+        $this->applyCompletedStatus();
+
+        return $this->save();
+    }
+
+    protected function shouldAutoCompleteBecauseSlotExpired(): bool
+    {
+        if (! $this->isScheduled()) {
+            return false;
+        }
+
+        $appointmentDateTime = $this->appointment_datetime;
+
+        if (! $appointmentDateTime instanceof Carbon) {
+            return false;
+        }
+
+        $now = now($appointmentDateTime->getTimezone());
+
+        if (! $now->greaterThan($appointmentDateTime)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Устанавливает статус "Прием завершен" и подбирает соответствующий ID.
+     */
+    protected function applyCompletedStatus(): void
+    {
+        $this->appointment_status = self::STATUS_COMPLETED;
+
+        $this->fillStatusFromSlug(
+            [
+                self::STATUS_SLUG_APPOINTMENT_COMPLETED,
+                'appointment-completed',
+                'appointment_done',
+                'completed',
+            ],
+            [
+                'Прием проведен',
+                'Приём проведен',
+                'Приём проведён',
+                'Прием завершен',
+            ]
+        );
+
+        $this->unsetRelation('status');
     }
 
     /**

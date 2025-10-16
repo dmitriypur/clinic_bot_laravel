@@ -97,6 +97,14 @@ class BidResource extends Resource
                     ]),
                 TextInput::make('promo_code')
                     ->label('Промокод'),
+                TextInput::make('tg_user_id')
+                    ->label('Telegram user ID')
+                    ->numeric()
+                    ->nullable(),
+                TextInput::make('tg_chat_id')
+                    ->label('Telegram chat ID')
+                    ->numeric()
+                    ->nullable(),
                 Select::make('city_id')
                     ->label('Город')
                     ->live()
@@ -298,14 +306,6 @@ class BidResource extends Resource
                         },
                     ]),
 
-                TextInput::make('tg_user_id')
-                    ->label('ID пользователя в Telegram')
-                    ->hidden()
-                    ->numeric(),
-                TextInput::make('tg_chat_id')
-                    ->label('ID чата в Telegram')
-                    ->hidden()
-                    ->numeric(),
                 Toggle::make('send_to_1c')
                     ->label('Отправить в 1С')
                     ->hidden(),
@@ -379,6 +379,14 @@ class BidResource extends Resource
                     }),
                 TextColumn::make('full_name')
                     ->label('Имя ребенка')
+                    ->searchable(),
+                TextColumn::make('tg_user_id')
+                    ->label('Telegram user ID')
+                    ->formatStateUsing(fn ($state) => $state ?: '-')
+                    ->searchable(),
+                TextColumn::make('tg_chat_id')
+                    ->label('Telegram chat ID')
+                    ->formatStateUsing(fn ($state) => $state ?: '-')
                     ->searchable(),
                 TextColumn::make('appointment_datetime')
                     ->label('Дата и время приема')

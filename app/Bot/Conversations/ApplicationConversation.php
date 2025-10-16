@@ -135,7 +135,7 @@ class ApplicationConversation extends Conversation
 
     protected function sendPhoneRequestKeyboard(bool $hasStoredPhone): void
     {
-        $keyboard = Keyboard::create()
+        $keyboardPayload = Keyboard::create()
             ->type(Keyboard::TYPE_KEYBOARD)
             ->resizeKeyboard(true)
             ->oneTimeKeyboard(false)
@@ -151,9 +151,7 @@ class ApplicationConversation extends Conversation
             ? 'Добро пожаловать! 🚀 При необходимости вы можете обновить номер кнопкой ниже или открыть приложение сразу.'
             : 'Добро пожаловать! 🚀 Чтобы автоматически подставить ваш телефон в заявку, нажмите кнопку ниже.';
 
-        $this->bot->reply($text, [
-            'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
-        ]);
+        $this->bot->reply($text, $keyboardPayload);
     }
 
     protected function sendWebAppButton(?string $phone = null): void

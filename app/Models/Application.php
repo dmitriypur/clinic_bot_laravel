@@ -2,8 +2,9 @@
 
 namespace App\Models;
 
-use App\Traits\HasCalendarOptimizations;
 use App\Jobs\SendAppointmentConfirmationNotification;
+use App\Jobs\SendAppointmentReminderNotification;
+use App\Traits\HasCalendarOptimizations;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -115,6 +116,10 @@ class Application extends Model
 
             if ($application->wasChanged('status_id')) {
                 $application->notifyTelegramAboutAppointmentConfirmation();
+            }
+
+            if ($application->wasChanged('appointment_datetime')) {
+                $application->scheduleTelegramReminderNotification();
             }
 
             // Автоматически меняем статус на "Создана" при назначении статуса "Запись на прием"
@@ -395,6 +400,8 @@ class Application extends Model
         }
 
         SendAppointmentConfirmationNotification::dispatch($this->getKey());
+
+        $this->scheduleTelegramReminderNotification();
     }
 
     protected function shouldNotifyTelegramOnStatus(?ApplicationStatus $status): bool
@@ -412,6 +419,51 @@ class Application extends Model
         }
 
         return $status->isAppointmentConfirmed();
+    }
+
+    protected function scheduleTelegramReminderNotification(): void
+    {
+        $this->loadMissing('status');
+
+        if (! $this->status?->isAppointmentConfirmed()) {
+            return;
+        }
+
+        $appointmentDateTime = $this->appointment_datetime;
+
+        if (! $appointmentDateTime instanceof Carbon) {
+            return;
+        }
+
+        if (empty($this->tg_chat_id)) {
+            return;
+        }
+
+        if ($appointmentDateTime->isPast()) {
+            return;
+        }
+
+        $reminderTime = $appointmentDateTime->copy()->subHours(2);
+        $now = Carbon::now($appointmentDateTime->getTimezone());
+
+        $appointmentUtcIso = $appointmentDateTime
+            ->copy()
+            ->setTimezone('UTC')
+            ->toIso8601String();
+
+        if ($reminderTime->lessThanOrEqualTo($now)) {
+            SendAppointmentReminderNotification::dispatch(
+                $this->getKey(),
+                $appointmentUtcIso
+            );
+
+            return;
+        }
+
+        SendAppointmentReminderNotification::dispatch(
+            $this->getKey(),
+            $appointmentUtcIso
+        )->delay($reminderTime);
     }
 
     /**

@@ -2,9 +2,10 @@
 
 namespace App\Models;
 
+use Filament\Support\Colors\Color;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Filament\Support\Colors\Color;
+use Illuminate\Support\Str;
 
 class ApplicationStatus extends Model
 {
@@ -87,5 +88,45 @@ class ApplicationStatus extends Model
     public function isCancelled(): bool
     {
         return $this->slug === 'cancelled';
+    }
+
+    /**
+     * Проверить, является ли статус подтверждением записи на прием.
+     */
+    public function isAppointmentConfirmed(): bool
+    {
+        $slug = Str::of((string) $this->slug)
+            ->trim()
+            ->lower()
+            ->replace('-', '_')
+            ->value();
+
+        $confirmedSlugs = [
+            'appointment_confirmed',
+            'appointment_confirm',
+            'appointment_confirmation',
+            'confirmed',
+            'status_confirmed',
+        ];
+
+        if ($slug && in_array($slug, $confirmedSlugs, true)) {
+            return true;
+        }
+
+        $name = Str::lower((string) $this->name);
+
+        if ($name === '') {
+            return false;
+        }
+
+        $negativeMarkers = ['не подтверж', 'неподтверж', 'not confirm', 'cancel'];
+
+        foreach ($negativeMarkers as $marker) {
+            if (Str::contains($name, $marker)) {
+                return false;
+            }
+        }
+
+        return Str::contains($name, ['подтвержд', 'confirm']);
     }
 }

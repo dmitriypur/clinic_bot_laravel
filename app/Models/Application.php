@@ -2,14 +2,15 @@
 
 namespace App\Models;
 
+use App\Traits\HasCalendarOptimizations;
+use App\Jobs\SendAppointmentConfirmationNotification;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use App\Traits\HasCalendarOptimizations;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class Application extends Model
 {
@@ -27,6 +28,7 @@ class Application extends Model
     public const STATUS_SLUG_APPOINTMENT_SCHEDULED = 'appointment_scheduled';
     public const STATUS_SLUG_APPOINTMENT_IN_PROGRESS = 'appointment_in_progress';
     public const STATUS_SLUG_APPOINTMENT_COMPLETED = 'appointment_completed';
+    public const STATUS_SLUG_APPOINTMENT_CONFIRMED = 'appointment_confirmed';
 
     // Константы источников создания заявки
     const SOURCE_TELEGRAM = 'telegram';
@@ -104,11 +106,16 @@ class Application extends Model
         // Очищаем кэш календаря при создании заявки
         static::created(function ($application) {
             static::clearCalendarCache();
+            $application->notifyTelegramAboutAppointmentConfirmation();
         });
 
         // Очищаем кэш календаря при обновлении заявки
         static::updated(function ($application) {
             static::clearCalendarCache();
+
+            if ($application->wasChanged('status_id')) {
+                $application->notifyTelegramAboutAppointmentConfirmation();
+            }
 
             // Автоматически меняем статус на "Создана" при назначении статуса "Запись на прием"
             // if ($application->wasChanged('status_id')) {
@@ -369,6 +376,42 @@ class Application extends Model
                 return;
             }
         }
+    }
+
+    protected function notifyTelegramAboutAppointmentConfirmation(): void
+    {
+        if (! $this->status_id) {
+            return;
+        }
+
+        $status = $this->status;
+
+        if (! $status || $status->getKey() !== $this->status_id) {
+            $status = ApplicationStatus::find($this->status_id);
+        }
+
+        if (! $this->shouldNotifyTelegramOnStatus($status)) {
+            return;
+        }
+
+        SendAppointmentConfirmationNotification::dispatch($this->getKey());
+    }
+
+    protected function shouldNotifyTelegramOnStatus(?ApplicationStatus $status): bool
+    {
+        if (! $status) {
+            return false;
+        }
+
+        if (empty($this->tg_chat_id)) {
+            return false;
+        }
+
+        if ($status->type && $status->type !== 'appointment') {
+            return false;
+        }
+
+        return $status->isAppointmentConfirmed();
     }
 
     /**

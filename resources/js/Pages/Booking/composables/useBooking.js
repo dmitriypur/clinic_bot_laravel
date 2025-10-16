@@ -425,6 +425,10 @@ export function useBooking() {
     }
 
     const submit = async () => {
+        if (!state.tgChatId && state.tgUserId) {
+            state.tgChatId = state.tgUserId
+        }
+
         await axios.post('/api/v1/applications', {
             city_id: state.cityId,
             clinic_id: state.clinicId,
@@ -510,6 +514,10 @@ export function useBooking() {
                 ?? null
 
             state.tgChatId = candidateChatId
+        }
+
+        if (!state.tgChatId && state.tgUserId) {
+            state.tgChatId = state.tgUserId
         }
 
         if (!state.fio) {

@@ -423,19 +423,23 @@ class Application extends Model
 
     protected function scheduleTelegramReminderNotification(): void
     {
-        $this->loadMissing('status');
+        if (! $this->status_id) {
+            return;
+        }
 
-        if (! $this->status?->isAppointmentConfirmed()) {
+        $status = $this->status;
+
+        if (! $status || $status->getKey() !== $this->status_id) {
+            $status = ApplicationStatus::find($this->status_id);
+        }
+
+        if (! $this->shouldNotifyTelegramOnStatus($status)) {
             return;
         }
 
         $appointmentDateTime = $this->appointment_datetime;
 
         if (! $appointmentDateTime instanceof Carbon) {
-            return;
-        }
-
-        if (empty($this->tg_chat_id)) {
             return;
         }
 

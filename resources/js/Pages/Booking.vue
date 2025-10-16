@@ -135,6 +135,8 @@ const branchName = computed(() => {
                 :branch-name="branchName"
                 v-model:fio="state.fio"
                 v-model:phone="state.phone"
+                :tg-user-id="state.tgUserId"
+                :tg-chat-id="state.tgChatId"
                 @submit="actions.submit"
                 @back="actions.goBack"
             />

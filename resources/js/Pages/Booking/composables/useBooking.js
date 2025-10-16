@@ -38,6 +38,48 @@ const normalizeTelegramId = (value) => {
     return raw
 }
 
+const sanitizeFullName = (value) => {
+    if (!value) {
+        return ''
+    }
+
+    return value
+        .replace(/[^А-Яа-яЁёA-Za-z\s-]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+const parseTelegramInitDataString = (raw) => {
+    if (!raw) {
+        return { user: null, chat: null }
+    }
+
+    const params = new URLSearchParams(raw)
+
+    let user = null
+    let chat = null
+
+    const userRaw = params.get('user')
+    if (userRaw) {
+        try {
+            user = JSON.parse(userRaw)
+        } catch (error) {
+            console.error('Не удалось распарсить данные пользователя Telegram', error)
+        }
+    }
+
+    const chatRaw = params.get('chat')
+    if (chatRaw) {
+        try {
+            chat = JSON.parse(chatRaw)
+        } catch (error) {
+            console.error('Не удалось распарсить данные чата Telegram', error)
+        }
+    }
+
+    return { user, chat }
+}
+
 export function useBooking() {
     const now = new Date()
     const state = reactive({
@@ -422,6 +464,7 @@ export function useBooking() {
 
         const webApp = window.Telegram?.WebApp ?? null
         const initData = webApp?.initDataUnsafe ?? {}
+        const initDataString = webApp?.initData ?? ''
 
         const webAppUserId = normalizeTelegramId(initData?.user?.id)
         const webAppChatId = normalizeTelegramId(initData?.chat?.id)
@@ -429,19 +472,69 @@ export function useBooking() {
         const params = new URLSearchParams(window.location.search || '')
         const paramUserId = normalizeTelegramId(params.get('tg_user_id'))
         const paramChatId = normalizeTelegramId(params.get('tg_chat_id'))
+        const paramPhone = params.get('phone') || params.get('tg_phone') || ''
+
+        const hashString = window.location.hash.startsWith('#')
+            ? window.location.hash.slice(1)
+            : window.location.hash
+
+        const hashParams = new URLSearchParams(hashString)
+        const hashTgData = hashParams.get('tgWebAppData') || ''
+
+        const parsedInitData = parseTelegramInitDataString(initDataString)
+        const parsedHashData = parseTelegramInitDataString(hashTgData)
+
+        const userCandidate = initData?.user
+            ?? parsedInitData.user
+            ?? parsedHashData.user
+            ?? null
+
+        const chatCandidate = initData?.chat
+            ?? parsedInitData.chat
+            ?? parsedHashData.chat
+            ?? null
+
+        const chatIdFromRaw = normalizeTelegramId(chatCandidate?.id)
 
         if (!state.tgUserId) {
-            state.tgUserId = webAppUserId ?? paramUserId ?? null
+            const userIdFromRaw = normalizeTelegramId(userCandidate?.id)
+            state.tgUserId = webAppUserId ?? userIdFromRaw ?? paramUserId ?? null
         }
 
         if (!state.tgChatId) {
             const candidateChatId = webAppChatId
+                ?? chatIdFromRaw
                 ?? paramChatId
                 ?? webAppUserId
                 ?? paramUserId
                 ?? null
 
             state.tgChatId = candidateChatId
+        }
+
+        if (!state.fio) {
+            const firstName = userCandidate?.first_name?.trim() ?? ''
+            const lastName = userCandidate?.last_name?.trim() ?? ''
+            const username = userCandidate?.username?.trim() ?? ''
+
+            const fullNameCandidate = sanitizeFullName(
+                [firstName, lastName].filter(Boolean).join(' ') || username,
+            )
+
+            if (fullNameCandidate) {
+                state.fio = fullNameCandidate
+            }
+        }
+
+        if (!state.phone && paramPhone) {
+            state.phone = paramPhone
+        }
+
+        try {
+            webApp?.ready?.()
+            webApp?.expand?.()
+        } catch (error) {
+            console.warn('Telegram WebApp ready/expand вызвали ошибку', error)
         }
     }
 

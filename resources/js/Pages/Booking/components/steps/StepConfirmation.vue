@@ -9,6 +9,8 @@
             <p v-if="clinicName"><span class="font-medium">Клиника:</span> {{ clinicName }}</p>
             <p v-if="branchName"><span class="font-medium">Филиал:</span> {{ branchName }}</p>
             <p v-if="selectedSlot.cabinet_name"><span class="font-medium">Кабинет:</span> {{ selectedSlot.cabinet_name }}</p>
+            <p v-if="tgUserId"><span class="font-medium">Telegram user ID:</span> {{ tgUserId }}</p>
+            <p v-if="tgChatId"><span class="font-medium">Telegram chat ID:</span> {{ tgChatId }}</p>
         </div>
 
         <form class="space-y-3" @submit.prevent="$emit('submit')">
@@ -73,6 +75,14 @@ const props = defineProps({
     branchName: {
         type: String,
         default: '',
+    },
+    tgUserId: {
+        type: [String, Number],
+        default: null,
+    },
+    tgChatId: {
+        type: [String, Number],
+        default: null,
     },
 })
 

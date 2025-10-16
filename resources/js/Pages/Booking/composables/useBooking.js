@@ -49,6 +49,52 @@ const sanitizeFullName = (value) => {
         .trim()
 }
 
+const formatPhoneForState = (value) => {
+    if (!value) {
+        return ''
+    }
+
+    const digitsOnly = String(value).replace(/\D/g, '')
+
+    if (!digitsOnly) {
+        return ''
+    }
+
+    let digits = digitsOnly
+
+    if (digits.startsWith('8')) {
+        digits = `7${digits.slice(1)}`
+    } else if (!digits.startsWith('7')) {
+        digits = `7${digits}`
+    }
+
+    digits = digits.slice(0, 11)
+
+    let formatted = '+7'
+
+    if (digits.length > 1) {
+        formatted += ` (${digits.slice(1, 4)}`
+    }
+
+    if (digits.length >= 4) {
+        formatted += ')'
+    }
+
+    if (digits.length > 4) {
+        formatted += ` ${digits.slice(4, 7)}`
+    }
+
+    if (digits.length > 7) {
+        formatted += `-${digits.slice(7, 9)}`
+    }
+
+    if (digits.length > 9) {
+        formatted += `-${digits.slice(9, 11)}`
+    }
+
+    return formatted.trim()
+}
+
 const parseTelegramInitDataString = (raw) => {
     if (!raw) {
         return { user: null, chat: null }
@@ -459,6 +505,7 @@ export function useBooking() {
         state.phone = ''
 
         await loadCities()
+        initTelegramContext()
     }
 
     const initTelegramContext = () => {
@@ -535,7 +582,7 @@ export function useBooking() {
         }
 
         if (!state.phone && paramPhone) {
-            state.phone = paramPhone
+            state.phone = formatPhoneForState(paramPhone) || paramPhone
         }
 
         try {

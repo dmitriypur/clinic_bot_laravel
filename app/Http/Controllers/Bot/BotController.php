@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Bot;
 use App\Bot\Conversations\ApplicationConversation;
 use App\Bot\Conversations\ReviewConversation;
 use App\Http\Controllers\Controller;
+use App\Models\TelegramContact;
 use BotMan\BotMan\BotMan;
 use BotMan\BotMan\BotManFactory;
 use BotMan\BotMan\Cache\FileCache;
 use BotMan\BotMan\Drivers\DriverManager;
 use BotMan\BotMan\Storages\Drivers\FileStorage;
 use BotMan\Drivers\Telegram\TelegramDriver;
+use BotMan\BotMan\Messages\Attachments\Contact;
 use Illuminate\Http\Request;
 
 /**
@@ -22,7 +24,7 @@ class BotController extends Controller
     /**
      * Главный метод обработки входящих сообщений от Telegram
      * Вызывается при каждом webhook-запросе от Telegram API
-     * 
+     *
      * @param Request $request - HTTP запрос с данными сообщения от Telegram
      * @return \Illuminate\Http\Response|void
      */
@@ -35,13 +37,13 @@ class BotController extends Controller
 
             // Получаем конфигурацию бота из config/botman.php
             $config = config('botman');
-            
+
             // Настраиваем файловое хранилище для кеша и состояний диалогов
             // FileCache - для временного кеширования данных бота
             $fileCache = new FileCache($config['cache']['config']['path']);
             // FileStorage - для сохранения состояний диалогов пользователей
             $fileStorage = new FileStorage($config['userinfo']['config']['path']);
-            
+
             // Создаем экземпляр BotMan с настроенными хранилищами
             // $request содержит данные webhook от Telegram
             $botman = BotManFactory::create($config, $fileCache, $request, $fileStorage);
@@ -58,7 +60,7 @@ class BotController extends Controller
                 'exception' => $e,
                 'request' => $request->all()
             ]);
-            
+
             // Возвращаем 200 OK чтобы Telegram не повторял запрос
             // Иначе Telegram будет постоянно отправлять тот же webhook
             return response('OK', 200);
@@ -68,42 +70,50 @@ class BotController extends Controller
     /**
      * Настройка обработчиков команд и сообщений бота
      * Определяет как бот будет реагировать на различные команды
-     * 
+     *
      * @param BotMan $botman - экземпляр бота для регистрации обработчиков
      */
     private function setupBotHandlers(BotMan $botman)
     {
 
-        
+
         // Обработчик команды /start с поддержкой deep links
         $botman->hears('/start.*', function (BotMan $bot) {
             $message = $bot->getMessage();
             $text = $message->getText();
-            
 
-            
+
+
             // Разбираем команду на части
             $parts = preg_split('/\s+/', trim($text), 2);
-            
+
             if (count($parts) > 1) {
                 $param = $parts[1];
-                
+
                 // Проверяем начинается ли параметр с 'review_'
                 // Это deep link для системы отзывов: /start review_doctor_uuid
                 if (str_starts_with($param, 'review_')) {
                     // Извлекаем UUID врача из параметра
                     $doctorUuid = str_replace('review_', '', $param);
-                    
 
-                    
+
+
                     // Запускаем диалог оставления отзыва для конкретного врача
                     $bot->startConversation(new ReviewConversation($doctorUuid));
                     return;
                 }
             }
-            
+
             // Запускаем обычный диалог записи к врачу
             $bot->startConversation(new ApplicationConversation());
+        });
+
+        $botman->receivesContact(function (BotMan $bot, Contact $contact) {
+            $this->handleSharedContact($bot, $contact);
+        });
+
+        $botman->hears(ApplicationConversation::BUTTON_SKIP_PHONE, function (BotMan $bot) {
+            $this->handleSkipPhoneSharing($bot);
         });
 
         // Fallback обработчик для всех остальных сообщений
@@ -111,5 +121,124 @@ class BotController extends Controller
         $botman->fallback(function (BotMan $bot) {
             $bot->reply('Используйте /start для начала работы с ботом.');
         });
+    }
+
+    private function handleSharedContact(BotMan $bot, Contact $contact): void
+    {
+        $user = $bot->getUser();
+        $userId = $user?->getId();
+
+        if (!$userId) {
+            return;
+        }
+
+        $message = $bot->getMessage();
+        $chatId = $message->getRecipient() ?: $userId;
+
+        $normalizedPhone = $this->normalizePhone($contact->getPhoneNumber());
+
+        if ($normalizedPhone) {
+            TelegramContact::updateOrCreate(
+                ['tg_user_id' => $userId],
+                [
+                    'tg_chat_id' => $chatId,
+                    'phone' => $normalizedPhone,
+                ]
+            );
+        }
+
+        $bot->reply('Спасибо! Мы сохранили ваш номер и подставим его в заявку.', [
+            'reply_markup' => json_encode(['remove_keyboard' => true], JSON_UNESCAPED_UNICODE),
+        ]);
+
+        $this->sendWebAppButton($bot, $normalizedPhone);
+    }
+
+    private function handleSkipPhoneSharing(BotMan $bot): void
+    {
+        $user = $bot->getUser();
+        $userId = $user?->getId();
+
+        $storedPhone = null;
+
+        if ($userId) {
+            $storedPhone = TelegramContact::query()
+                ->where('tg_user_id', $userId)
+                ->value('phone');
+        }
+
+        $bot->reply('Хорошо, вы сможете ввести телефон вручную в приложении.', [
+            'reply_markup' => json_encode(['remove_keyboard' => true], JSON_UNESCAPED_UNICODE),
+        ]);
+
+        $this->sendWebAppButton($bot, $storedPhone);
+    }
+
+    private function sendWebAppButton(BotMan $bot, ?string $phone = null): void
+    {
+        $url = $this->buildWebAppUrl($bot, $phone);
+
+        $keyboard = [
+            'inline_keyboard' => [[
+                [
+                    'text' => 'Запустить приложение',
+                    'web_app' => ['url' => $url],
+                ],
+            ]],
+        ];
+
+        $bot->reply('Откройте форму записи 👇', [
+            'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
+        ]);
+    }
+
+    private function buildWebAppUrl(BotMan $bot, ?string $phone = null): string
+    {
+        $user = $bot->getUser();
+        $message = $bot->getMessage();
+
+        $baseUrl = rtrim((string) config('services.telegram.web_app_url', 'https://app.fondzrenie.ru'), '/');
+
+        $query = [
+            'tg_user_id' => $user?->getId(),
+            'tg_chat_id' => $message->getRecipient() ?: $user?->getId(),
+        ];
+
+        $sanitizedPhone = $this->sanitizePhoneForQuery($phone);
+        if ($sanitizedPhone) {
+            $query['phone'] = $sanitizedPhone;
+        }
+
+        return $baseUrl . '?' . http_build_query($query);
+    }
+
+    private function normalizePhone(?string $phone): ?string
+    {
+        if (!$phone) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D+/', '', $phone);
+
+        if (!$digits) {
+            return null;
+        }
+
+        if (strlen($digits) === 11 && str_starts_with($digits, '8')) {
+            $digits = '7' . substr($digits, 1);
+        }
+
+        return '+' . $digits;
+    }
+
+    private function sanitizePhoneForQuery(?string $phone): ?string
+    {
+        if (!$phone) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D+/', '', $phone);
+
+        return $digits ?: null;
     }
 }

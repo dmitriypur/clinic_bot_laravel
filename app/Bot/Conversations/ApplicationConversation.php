@@ -7,6 +7,7 @@ use App\Models\Application;
 use App\Models\City;
 use App\Models\Clinic;
 use App\Models\Doctor;
+use App\Models\TelegramContact;
 use BotMan\BotMan\Messages\Conversations\Conversation;
 use BotMan\BotMan\Messages\Incoming\Answer;
 use BotMan\BotMan\Messages\Outgoing\Actions\Button;
@@ -31,6 +32,10 @@ use BotMan\Drivers\Telegram\Extensions\KeyboardButton;
 class ApplicationConversation extends Conversation
 {
     use HandlesDeepLinks;
+
+    public const BUTTON_SHARE_PHONE = '📱 Использовать мой номер телефона';
+    public const BUTTON_SKIP_PHONE = '🔓 Открыть приложение без номера';
+
     /**
      * Массив для хранения данных заявки во время диалога
      *
@@ -67,28 +72,21 @@ class ApplicationConversation extends Conversation
      */
     public function showMainMenu()
     {
-//        $urlApp = "https://0c5bca5ded10.ngrok-free.app";
-//        $question = Question::create('🏥 Добро пожаловать в медицинский центр! Выберите действие:')
-//            ->addButtons([
-//                Button::create('📝 Записаться на прием')->value('make_appointment'),
-//                Button::create('👩🏻‍⚕️ Просмотр врачей')->value('view_doctors'),
-//                Button::create('🎁 Запись с промокодом')->value('appointment_promo'),
-//                Button::create('👉 Телеграм канал')->url('https://t.me/kidsvision1'),
-//                Button::create('👉 Телеграм канал')->url($urlApp),
-//            ]);
+        $user = $this->bot->getUser();
+        $message = $this->bot->getMessage();
+        $chatId = $message->getRecipient() ?: $user->getId();
 
-        $keyboard = [
-            'inline_keyboard' => [[
-                [
-                    'text' => 'Запустить приложение',
-                    'web_app' => ['url' => 'https://app.fondzrenie.ru']
-                ]
-            ]]
-        ];
+        $storedContact = TelegramContact::query()
+            ->where('tg_user_id', $user->getId())
+            ->first();
 
-        $this->bot->reply('Добро пожаловать! 🚀', [
-            'reply_markup' => json_encode($keyboard)
-        ]);
+        if ($storedContact && (!$storedContact->tg_chat_id || (string) $storedContact->tg_chat_id !== (string) $chatId)) {
+            $storedContact->tg_chat_id = $chatId;
+            $storedContact->save();
+        }
+
+        $this->sendPhoneRequestKeyboard((bool) $storedContact);
+        $this->sendWebAppButton($storedContact?->phone);
 
 //        $keyboard = Keyboard::create()
 //            ->type(Keyboard::TYPE_KEYBOARD)
@@ -133,6 +131,78 @@ class ApplicationConversation extends Conversation
 //                    $this->showMainMenu();
 //            }
 //        });
+    }
+
+    protected function sendPhoneRequestKeyboard(bool $hasStoredPhone): void
+    {
+        $keyboard = Keyboard::create()
+            ->type(Keyboard::TYPE_KEYBOARD)
+            ->resizeKeyboard(true)
+            ->oneTimeKeyboard(false)
+            ->addRow(
+                KeyboardButton::create(self::BUTTON_SHARE_PHONE)->requestContact()
+            )
+            ->addRow(
+                KeyboardButton::create(self::BUTTON_SKIP_PHONE)
+            )
+            ->toArray();
+
+        $text = $hasStoredPhone
+            ? 'Добро пожаловать! 🚀 При необходимости вы можете обновить номер кнопкой ниже или открыть приложение сразу.'
+            : 'Добро пожаловать! 🚀 Чтобы автоматически подставить ваш телефон в заявку, нажмите кнопку ниже.';
+
+        $this->bot->reply($text, [
+            'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
+        ]);
+    }
+
+    protected function sendWebAppButton(?string $phone = null): void
+    {
+        $url = $this->buildWebAppUrl($phone);
+
+        $keyboard = [
+            'inline_keyboard' => [[
+                [
+                    'text' => 'Запустить приложение',
+                    'web_app' => ['url' => $url],
+                ],
+            ]],
+        ];
+
+        $this->bot->reply('Откройте форму записи 👇', [
+            'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
+        ]);
+    }
+
+    protected function buildWebAppUrl(?string $phone = null): string
+    {
+        $user = $this->bot->getUser();
+        $message = $this->bot->getMessage();
+
+        $baseUrl = rtrim((string) config('services.telegram.web_app_url', 'https://app.fondzrenie.ru'), '/');
+
+        $query = [
+            'tg_user_id' => $user->getId(),
+            'tg_chat_id' => $message->getRecipient() ?: $user->getId(),
+        ];
+
+        $sanitizedPhone = $this->sanitizePhoneForQuery($phone);
+        if ($sanitizedPhone) {
+            $query['phone'] = $sanitizedPhone;
+        }
+
+        return $baseUrl . '?' . http_build_query($query);
+    }
+
+    protected function sanitizePhoneForQuery(?string $phone): ?string
+    {
+        if (!$phone) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D+/', '', $phone);
+
+        return $digits ?: null;
     }
 
     /**

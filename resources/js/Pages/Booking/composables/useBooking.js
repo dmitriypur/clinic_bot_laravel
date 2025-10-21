@@ -2,6 +2,14 @@ import { reactive, computed } from 'vue'
 import axios from 'axios'
 import { ru } from 'date-fns/locale'
 
+const APP_TIMEZONE = 'Europe/Moscow'
+const apiDateFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+})
+
 const ensureDateInstance = (value) => {
     if (!value) {
         return null
@@ -14,10 +22,7 @@ const formatDateForApi = (date) => {
         return null
     }
     const d = ensureDateInstance(date)
-    const year = d.getFullYear()
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
+    return apiDateFormatter.format(d)
 }
 
 const normalizeTelegramId = (value) => {
@@ -128,6 +133,12 @@ const parseTelegramInitDataString = (raw) => {
 
 export function useBooking() {
     const now = new Date()
+    const labelFormatter = new Intl.DateTimeFormat('ru-RU', {
+        timeZone: APP_TIMEZONE,
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+    })
     const state = reactive({
         totalSteps: 8,
         step: 1,
@@ -150,7 +161,7 @@ export function useBooking() {
         expandedClinicId: null,
         doctors: [],
         selectedDate: now,
-        minDate: now,
+        minDate: new Date(now.getTime()),
         slots: [],
         selectedSlot: null,
         isLoadingCities: false,
@@ -164,11 +175,7 @@ export function useBooking() {
     const hasAvailableSlots = computed(() => state.slots.some((slot) => slot.is_available))
     const selectedDateLabel = computed(() => {
         const date = ensureDateInstance(state.selectedDate) || new Date()
-        return date.toLocaleDateString('ru-RU', {
-            day: '2-digit',
-            month: 'long',
-            year: 'numeric',
-        })
+        return labelFormatter.format(date)
     })
 
     const datepickerLocale = ru
@@ -176,7 +183,7 @@ export function useBooking() {
     const resetSchedule = () => {
         const freshDate = new Date()
         state.selectedDate = freshDate
-        state.minDate = freshDate
+        state.minDate = new Date(freshDate.getTime())
         state.selectedSlot = null
         state.slots = []
         state.isLoadingSlots = false
@@ -602,6 +609,7 @@ export function useBooking() {
         datepickerLocale,
         hasAvailableSlots,
         selectedDateLabel,
+        appTimezone: APP_TIMEZONE,
         actions: {
             goTo,
             goBack,

@@ -21,6 +21,7 @@
             :auto-apply="true"
             :locale="datepickerLocale"
             :week-start="1"
+            :timezone="timezone"
         />
 
         <div>
@@ -116,6 +117,10 @@ const props = defineProps({
     datepickerLocale: {
         type: Object,
         required: true,
+    },
+    timezone: {
+        type: [String, Object],
+        default: 'Europe/Moscow',
     },
     doctor: {
         type: Object,

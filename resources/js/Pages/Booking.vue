@@ -17,6 +17,7 @@ const {
     datepickerLocale,
     hasAvailableSlots,
     selectedDateLabel,
+    appTimezone,
     actions,
 } = useBooking()
 
@@ -117,6 +118,7 @@ const branchName = computed(() => {
                 :has-available-slots="hasAvailableSlots"
                 :selected-date-label="selectedDateLabel"
                 :datepicker-locale="datepickerLocale"
+                :timezone="appTimezone"
                 :doctor="state.selectedDoctor"
                 :clinic-name="clinicName"
                 :branch-name="branchName"

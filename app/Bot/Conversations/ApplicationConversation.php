@@ -10,9 +10,7 @@ use App\Models\Doctor;
 use App\Models\TelegramContact;
 use BotMan\BotMan\Messages\Conversations\Conversation;
 use BotMan\BotMan\Messages\Incoming\Answer;
-use BotMan\BotMan\Messages\Attachments\Image;
 use BotMan\BotMan\Messages\Outgoing\Actions\Button;
-use BotMan\BotMan\Messages\Outgoing\OutgoingMessage;
 use BotMan\BotMan\Messages\Outgoing\Question;
 use BotMan\Drivers\Telegram\Extensions\Keyboard;
 use BotMan\Drivers\Telegram\Extensions\KeyboardButton;
@@ -87,7 +85,6 @@ class ApplicationConversation extends Conversation
             $storedContact->save();
         }
 
-        $this->sendWelcomeBanner();
         $this->sendPhoneRequestKeyboard((bool) $storedContact);
         $this->sendWebAppButton($storedContact?->phone);
 
@@ -155,15 +152,6 @@ class ApplicationConversation extends Conversation
             : 'Добро пожаловать! 🚀 Чтобы автоматически подставить ваш телефон в заявку, нажмите кнопку ниже.';
 
         $this->bot->reply($text, $keyboardPayload);
-    }
-
-    protected function sendWelcomeBanner(): void
-    {
-        $logoUrl = asset('images/logo.png');
-        $attachment = new Image($logoUrl);
-        $message = OutgoingMessage::create('Запись онлайн')->withAttachment($attachment);
-
-        $this->bot->reply($message);
     }
 
     protected function sendWebAppButton(?string $phone = null): void

@@ -141,6 +141,7 @@ export function useBooking() {
         selectedDoctor: null,
         fio: '',
         phone: '',
+        consent: false,
         tgUserId: null,
         tgChatId: null,
         cities: [],
@@ -222,6 +223,7 @@ export function useBooking() {
         if (fromStep >= 8 && toStep <= 7) {
             state.fio = ''
             state.phone = ''
+            state.consent = false
         }
 
         if (fromStep >= 7 && toStep <= 6) {
@@ -503,6 +505,7 @@ export function useBooking() {
         state.cities = []
         state.fio = ''
         state.phone = ''
+        state.consent = false
 
         await loadCities()
         initTelegramContext()

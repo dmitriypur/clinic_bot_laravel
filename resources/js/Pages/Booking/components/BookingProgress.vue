@@ -2,13 +2,16 @@
     <div>
         <div class="w-full bg-gray-200 rounded-full h-2">
             <div
-                class="bg-indigo-600 h-2 rounded-full transition-all duration-500"
+                class="bg-secondary h-2 rounded-full transition-all duration-500"
                 :style="{ width: progress + '%' }"
             ></div>
         </div>
         <p class="text-xs text-gray-500 mt-1 text-right">
             Шаг {{ current }} из {{ total }}
         </p>
+        <div>
+            <img src="../../../../../public/images/logo.png" alt="Логотип" width="300" height="48" class="block mb-8 mx-auto">
+        </div>
     </div>
 </template>
 

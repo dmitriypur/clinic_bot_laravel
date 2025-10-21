@@ -51,7 +51,7 @@ const branchName = computed(() => {
 </script>
 
 <template>
-    <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div class="min-h-screen flex items-center justify-center bg-gray-100 p-4">
         <div class="w-full max-w-md bg-white shadow-lg rounded-2xl p-6 space-y-6">
 
             <BookingProgress :current="state.step" :total="state.totalSteps" />
@@ -135,6 +135,7 @@ const branchName = computed(() => {
                 :branch-name="branchName"
                 v-model:fio="state.fio"
                 v-model:phone="state.phone"
+                v-model:consent="state.consent"
                 :tg-user-id="state.tgUserId"
                 :tg-chat-id="state.tgChatId"
                 @submit="actions.submit"

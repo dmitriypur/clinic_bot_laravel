@@ -2,18 +2,15 @@
     <div class="space-y-4">
         <h3 class="text-xl font-semibold text-gray-800">Форма записи</h3>
 
-        <div v-if="selectedSlot" class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-700 space-y-1">
+        <div v-if="selectedSlot" class="rounded-lg border border-secondary bg-yellow-50 px-4 py-3 text-sm text-primary space-y-1">
             <p><span class="font-medium">Дата:</span> {{ selectedDateLabel }}</p>
             <p><span class="font-medium">Время:</span> {{ selectedSlot.time }}</p>
             <p v-if="doctor"><span class="font-medium">Доктор:</span> {{ doctor.name }}</p>
             <p v-if="clinicName"><span class="font-medium">Клиника:</span> {{ clinicName }}</p>
             <p v-if="branchName"><span class="font-medium">Филиал:</span> {{ branchName }}</p>
-            <p v-if="selectedSlot.cabinet_name"><span class="font-medium">Кабинет:</span> {{ selectedSlot.cabinet_name }}</p>
-            <p v-if="tgUserId"><span class="font-medium">Telegram user ID:</span> {{ tgUserId }}</p>
-            <p v-if="tgChatId || tgUserId"><span class="font-medium">Telegram chat ID:</span> {{ tgChatId || tgUserId }}</p>
         </div>
 
-        <form class="space-y-3" @submit.prevent="$emit('submit')">
+        <form class="space-y-3" @submit.prevent="handleSubmit">
             <BaseInput
                 v-model="fioProxy"
                 placeholder="ФИО"
@@ -27,6 +24,25 @@
                 :error="phoneError"
                 @keydown="handlePhoneKeydown"
             />
+            <div>
+                <label :class="consentWrapperClasses">
+                    <input
+                        v-model="consentProxy"
+                        type="checkbox"
+                        :class="[
+                            'mt-0.5 h-5 w-5 rounded focus:ring-primary focus:ring-offset-0 transition',
+                            consentError ? 'border-red-500 text-red-500' : 'border-gray-300 text-primary'
+                        ]"
+                    >
+                    <span>Согласие с обработкой персональных данных</span>
+                </label>
+                <p
+                    v-if="consentError"
+                    class="mt-1 text-xs text-red-500"
+                >
+                    {{ consentError }}
+                </p>
+            </div>
             <BaseButton
                 class="w-full py-2"
                 variant="primary"
@@ -84,12 +100,18 @@ const props = defineProps({
         type: [String, Number],
         default: null,
     },
+    consent: {
+        type: Boolean,
+        default: false,
+    },
 })
 
-const emits = defineEmits(['update:fio', 'update:phone', 'submit', 'back'])
+const emits = defineEmits(['update:fio', 'update:phone', 'update:consent', 'submit', 'back'])
 
+const submitAttempted = ref(false)
 const fioError = ref('')
 const phoneError = ref('')
+const consentError = ref('')
 
 const controlKeys = new Set(['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter'])
 
@@ -141,6 +163,8 @@ const sanitizeFio = (value) => {
 
     if (value && sanitized !== value) {
         fioError.value = 'Можно вводить только буквы'
+    } else if (!value && submitAttempted.value) {
+        fioError.value = 'Укажите ФИО'
     } else {
         fioError.value = ''
     }
@@ -152,7 +176,7 @@ const formatPhone = (value) => {
     const digitsOnly = value.replace(/\D/g, '')
 
     if (!digitsOnly.length) {
-        phoneError.value = ''
+        phoneError.value = submitAttempted.value ? 'Укажите номер телефона' : ''
         return ''
     }
 
@@ -195,7 +219,18 @@ const formatPhone = (value) => {
 
 const fioProxy = computed({
     get: () => props.fio,
-    set: (value) => emits('update:fio', sanitizeFio(value)),
+    set: (value) => {
+        const sanitized = sanitizeFio(value)
+        emits('update:fio', sanitized)
+
+        if (submitAttempted.value) {
+            if (!sanitized.trim()) {
+                fioError.value = 'Укажите ФИО'
+            } else if (fioError.value === 'Укажите ФИО' || fioError.value === 'Можно вводить только буквы') {
+                fioError.value = ''
+            }
+        }
+    },
 })
 
 const handlePhoneKeydown = (event) => {
@@ -221,6 +256,76 @@ const phoneProxy = computed({
         const formatted = formatPhone(value)
 
         emits('update:phone', formatted)
+
+        if (submitAttempted.value) {
+            const digits = formatted.replace(/\D/g, '')
+
+            if (!digits.length) {
+                phoneError.value = 'Укажите номер телефона'
+            } else if (digits.length !== 11) {
+                phoneError.value = 'Введите 11 цифр номера'
+            } else {
+                phoneError.value = ''
+            }
+        }
     },
 })
+
+const consentProxy = computed({
+    get: () => props.consent,
+    set: (value) => {
+        emits('update:consent', value)
+        if (value) {
+            consentError.value = ''
+        }
+    },
+})
+
+const validateFields = () => {
+    let isValid = true
+
+    const trimmedFio = (props.fio || '').trim()
+    if (!trimmedFio) {
+        fioError.value = 'Укажите ФИО'
+        isValid = false
+    } else if (fioError.value === 'Укажите ФИО' || fioError.value === 'Можно вводить только буквы') {
+        fioError.value = ''
+    }
+
+    const phoneDigits = (props.phone || '').replace(/\D/g, '')
+    if (!phoneDigits.length) {
+        phoneError.value = 'Укажите номер телефона'
+        isValid = false
+    } else if (phoneDigits.length !== 11) {
+        phoneError.value = 'Введите 11 цифр номера'
+        isValid = false
+    } else {
+        phoneError.value = ''
+    }
+
+    return isValid && !fioError.value && !phoneError.value
+}
+
+const consentWrapperClasses = computed(() => [
+    'flex items-center gap-3 rounded-lg border px-3 py-2 text-sm text-gray-700 cursor-pointer select-none transition focus-within:ring-2 focus-within:ring-primary focus-within:border-primary',
+    consentError.value ? 'border-red-500' : 'border-gray-300',
+])
+
+const handleSubmit = () => {
+    submitAttempted.value = true
+
+    const fieldsValid = validateFields()
+
+    if (!consentProxy.value) {
+        consentError.value = 'Необходимо дать согласие на обработку персональных данных'
+    } else {
+        consentError.value = ''
+    }
+
+    if (!fieldsValid || consentError.value) {
+        return
+    }
+
+    emits('submit')
+}
 </script>

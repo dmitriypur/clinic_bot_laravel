@@ -2,7 +2,7 @@
     <div class="space-y-4">
         <h3 class="text-xl font-semibold text-gray-800">Выберите дату и время</h3>
 
-        <div class="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-700 space-y-1">
+        <div class="rounded-lg border border-secondary bg-yellow-50 px-4 py-3 text-sm text-primary space-y-1">
             <p v-if="doctor">
                 <span class="font-medium">Доктор:</span> {{ doctor.name }}
             </p>
@@ -44,7 +44,7 @@
                         !slot.is_available
                             ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
                             : (selectedSlot && selectedSlot.datetime === slot.datetime
-                                ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                                ? 'border-secondary bg-yellow-50 text-primary'
                                 : 'border-gray-200 hover:bg-indigo-100')
                     ]"
                     :disabled="!slot.is_available"

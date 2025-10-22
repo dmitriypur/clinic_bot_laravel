@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\CityResource;
 use App\Models\City;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class CityController extends Controller
 {
@@ -16,16 +17,44 @@ class CityController extends Controller
     {
         $query = City::where('status', 1); // Active cities only
 
-        $perPage = $request->get('size', 20);
-        $cities = $query->orderBy('name')->paginate($perPage);
+        $perPage = (int) $request->get('size', 20);
+        $usePagination = $request->has('page') || $request->has('size');
+
+        if ($usePagination) {
+            $cities = $query->orderBy('name')->paginate($perPage);
+
+            if ($cities->isEmpty()) {
+                return response()->json([
+                    'error' => 'Cities not found',
+                ], 404);
+            }
+
+            return CityResource::collection($cities);
+        }
+
+        $latestUpdate = City::query()->max('updated_at');
+        $versionStamp = $latestUpdate ? (string) strtotime((string) $latestUpdate) : '0';
+        $cacheKey = 'cities:index:' . md5($request->fullUrl() . '|' . $versionStamp);
+
+        if ($cached = Cache::get($cacheKey)) {
+            return response()->json($cached);
+        }
+
+        $cities = $query->orderBy('name')->get();
 
         if ($cities->isEmpty()) {
             return response()->json([
-                'error' => 'Cities not found'
+                'error' => 'Cities not found',
             ], 404);
         }
 
-        return CityResource::collection($cities);
+        $payload = CityResource::collection($cities)
+            ->toResponse($request)
+            ->getData(true);
+
+        Cache::put($cacheKey, $payload, now()->addMinutes(5));
+
+        return response()->json($payload);
     }
 
     /**

@@ -2,6 +2,20 @@ import { reactive, computed } from 'vue'
 import axios from 'axios'
 import { ru } from 'date-fns/locale'
 
+const citiesCache = {
+    data: null,
+    request: null,
+}
+
+const clinicsCache = new Map()
+const clinicsRequests = new Map()
+
+const branchesCache = new Map()
+const branchesRequests = new Map()
+
+const doctorsCache = new Map()
+const doctorsRequests = new Map()
+
 const APP_TIMEZONE = 'Europe/Moscow'
 const apiDateFormatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: APP_TIMEZONE,
@@ -262,47 +276,132 @@ export function useBooking() {
         state.step = previousStep
     }
 
-    const loadCities = async () => {
+    const loadCities = async ({ force = false } = {}) => {
+        if (!force && citiesCache.data) {
+            state.cities = citiesCache.data.slice()
+            return
+        }
+
+        if (!force && citiesCache.request) {
+            state.isLoadingCities = true
+            try {
+                const cached = await citiesCache.request
+                state.cities = cached.slice()
+            } catch (error) {
+                console.error('Не удалось загрузить города', error)
+                state.cities = []
+            } finally {
+                state.isLoadingCities = false
+            }
+            return
+        }
+
         state.isLoadingCities = true
+        const request = axios.get('/api/v1/cities')
+            .then(({ data }) => (Array.isArray(data.data) ? data.data : []))
+        citiesCache.request = request
+
         try {
-            const { data } = await axios.get('/api/v1/cities')
-            state.cities = Array.isArray(data.data) ? data.data : []
+            const cities = await request
+            citiesCache.data = cities
+            state.cities = cities.slice()
         } catch (error) {
             console.error('Не удалось загрузить города', error)
             state.cities = []
         } finally {
+            citiesCache.request = null
             state.isLoadingCities = false
         }
     }
 
-    const loadClinics = async () => {
+    const loadClinics = async ({ force = false } = {}) => {
         if (!state.cityId) {
             state.clinics = []
             return
         }
+        const cacheKey = String(state.cityId)
+
+        if (!force && clinicsCache.has(cacheKey)) {
+            state.clinics = clinicsCache.get(cacheKey).slice()
+            return
+        }
+
+        if (!force && clinicsRequests.has(cacheKey)) {
+            state.isLoadingClinics = true
+            try {
+                const cached = await clinicsRequests.get(cacheKey)
+                state.clinics = cached.slice()
+            } catch (error) {
+                console.error('Не удалось загрузить клиники', error)
+                state.clinics = []
+            } finally {
+                state.isLoadingClinics = false
+            }
+            return
+        }
         state.isLoadingClinics = true
+        const request = axios.get(`/api/v1/cities/${state.cityId}/clinics`)
+            .then(({ data }) => (Array.isArray(data.data) ? data.data : []))
+        clinicsRequests.set(cacheKey, request)
+
         try {
-            const { data } = await axios.get(`/api/v1/cities/${state.cityId}/clinics`)
-            state.clinics = Array.isArray(data.data) ? data.data : []
+            const clinics = await request
+            clinicsCache.set(cacheKey, clinics)
+            state.clinics = clinics.slice()
         } catch (error) {
             console.error('Не удалось загрузить клиники', error)
             state.clinics = []
         } finally {
+            clinicsRequests.delete(cacheKey)
             state.isLoadingClinics = false
         }
     }
 
-    const loadBranchesForClinic = async (clinicId) => {
-        state.loadingBranchesId = clinicId
-        try {
-            const { data } = await axios.get(`/api/v1/clinics/${clinicId}/branches`, {
-                params: {
-                    city_id: state.cityId,
-                },
-            })
+    const loadBranchesForClinic = async (clinicId, { force = false } = {}) => {
+        const cacheKey = `${state.cityId || 'null'}::${clinicId}`
+
+        if (!force && branchesCache.has(cacheKey)) {
             state.branchesByClinic = {
                 ...state.branchesByClinic,
-                [clinicId]: Array.isArray(data.data) ? data.data : [],
+                [clinicId]: branchesCache.get(cacheKey).slice(),
+            }
+            return
+        }
+
+        if (!force && branchesRequests.has(cacheKey)) {
+            state.loadingBranchesId = clinicId
+            try {
+                const cached = await branchesRequests.get(cacheKey)
+                state.branchesByClinic = {
+                    ...state.branchesByClinic,
+                    [clinicId]: cached.slice(),
+                }
+            } catch (error) {
+                console.error('Не удалось загрузить филиалы', error)
+                state.branchesByClinic = {
+                    ...state.branchesByClinic,
+                    [clinicId]: [],
+                }
+            } finally {
+                state.loadingBranchesId = null
+            }
+            return
+        }
+
+        state.loadingBranchesId = clinicId
+        const request = axios.get(`/api/v1/clinics/${clinicId}/branches`, {
+            params: {
+                city_id: state.cityId,
+            },
+        }).then(({ data }) => (Array.isArray(data.data) ? data.data : []))
+        branchesRequests.set(cacheKey, request)
+
+        try {
+            const branches = await request
+            branchesCache.set(cacheKey, branches)
+            state.branchesByClinic = {
+                ...state.branchesByClinic,
+                [clinicId]: branches.slice(),
             }
         } catch (error) {
             console.error('Не удалось загрузить филиалы', error)
@@ -311,27 +410,60 @@ export function useBooking() {
                 [clinicId]: [],
             }
         } finally {
+            branchesRequests.delete(cacheKey)
             state.loadingBranchesId = null
         }
     }
 
-    const loadDoctors = async () => {
+    const resolveDoctorsCacheKey = () => {
+        const parts = [
+            state.bookingMode || 'none',
+            state.cityId || 'none',
+            state.clinicId || 'none',
+            state.branchId || 'none',
+            state.birthDate || 'none',
+        ]
+        return parts.join('|')
+    }
+
+    const loadDoctors = async ({ force = false } = {}) => {
         state.isLoadingDoctors = true
+        const params = {}
+        if (state.birthDate) {
+            params.birth_date = state.birthDate
+        }
+        if (state.branchId) {
+            params.branch_id = state.branchId
+        }
+
+        const cacheKey = resolveDoctorsCacheKey()
+
         try {
-            const params = {}
-            if (state.birthDate) {
-                params.birth_date = state.birthDate
+            if (!force && doctorsCache.has(cacheKey)) {
+                state.doctors = doctorsCache.get(cacheKey).slice()
+                return
             }
-            if (state.branchId) {
-                params.branch_id = state.branchId
+
+            if (!force && doctorsRequests.has(cacheKey)) {
+                const cached = await doctorsRequests.get(cacheKey)
+                state.doctors = cached.slice()
+                return
             }
 
             if (state.bookingMode === 'clinic' && state.clinicId) {
-                const { data } = await axios.get(`/api/v1/clinics/${state.clinicId}/doctors`, { params })
-                state.doctors = Array.isArray(data.data) ? data.data : []
+                const request = axios.get(`/api/v1/clinics/${state.clinicId}/doctors`, { params })
+                    .then(({ data }) => (Array.isArray(data.data) ? data.data : []))
+                doctorsRequests.set(cacheKey, request)
+                const doctors = await request
+                doctorsCache.set(cacheKey, doctors)
+                state.doctors = doctors.slice()
             } else if (state.cityId) {
-                const { data } = await axios.get(`/api/v1/cities/${state.cityId}/doctors`, { params })
-                state.doctors = Array.isArray(data.data) ? data.data : []
+                const request = axios.get(`/api/v1/cities/${state.cityId}/doctors`, { params })
+                    .then(({ data }) => (Array.isArray(data.data) ? data.data : []))
+                doctorsRequests.set(cacheKey, request)
+                const doctors = await request
+                doctorsCache.set(cacheKey, doctors)
+                state.doctors = doctors.slice()
             } else {
                 state.doctors = []
             }
@@ -339,6 +471,7 @@ export function useBooking() {
             console.error('Не удалось загрузить докторов', error)
             state.doctors = []
         } finally {
+            doctorsRequests.delete(cacheKey)
             state.isLoadingDoctors = false
         }
     }
@@ -408,6 +541,9 @@ export function useBooking() {
         state.clinics = []
         state.doctors = []
         goTo(3)
+        loadClinics().catch((error) => {
+            console.error('Предзагрузка клиник завершилась с ошибкой', error)
+        })
     }
 
     const setBirthDate = (value) => {
@@ -514,7 +650,7 @@ export function useBooking() {
         state.phone = ''
         state.consent = false
 
-        await loadCities()
+        await loadCities({ force: true })
         initTelegramContext()
     }
 

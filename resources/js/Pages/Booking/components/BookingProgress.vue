@@ -10,7 +10,7 @@
             Шаг {{ current }} из {{ total }}
         </p>
         <div>
-            <img src="../../../../../public/images/logo.png" alt="Логотип" width="300" height="48" class="block mb-8 mx-auto">
+            <img src="../../../../../public/images/logo-mini.webp" alt="Логотип" width="300" height="48" class="block mb-8 mx-auto">
         </div>
     </div>
 </template>

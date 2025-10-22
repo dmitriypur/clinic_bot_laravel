@@ -8,6 +8,7 @@ use App\Http\Resources\ClinicResource;
 use App\Models\City;
 use App\Models\Clinic;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class ClinicController extends Controller
 {
@@ -30,9 +31,33 @@ class ClinicController extends Controller
         return ClinicResource::collection($cities);
     }
 
-    public function byCity(City $city)
+    public function byCity(Request $request, City $city)
     {
-        return ClinicResource::collection($city->clinics);
+        $latestUpdate = $city->clinics()->max('clinics.updated_at');
+        $versionStamp = $latestUpdate ? (string) strtotime((string) $latestUpdate) : '0';
+        $cacheKey = 'clinics:by-city:' . $city->id . ':' . md5($request->fullUrl() . '|' . $versionStamp);
+
+        if ($cached = Cache::get($cacheKey)) {
+            return response()->json($cached);
+        }
+
+        $clinics = $city->clinics()
+            ->where('clinics.status', 1)
+            ->select('clinics.id', 'clinics.name')
+            ->with(['branches' => function ($query) {
+                $query->where('branches.status', 1)
+                    ->select('branches.id', 'branches.clinic_id', 'branches.name');
+            }])
+            ->orderBy('clinics.name')
+            ->get();
+
+        $payload = ClinicResource::collection($clinics)
+            ->toResponse($request)
+            ->getData(true);
+
+        Cache::put($cacheKey, $payload, now()->addMinutes(5));
+
+        return response()->json($payload);
     }
 
     public function branches(Request $request, Clinic $clinic)
@@ -44,18 +69,34 @@ class ClinicController extends Controller
             $branchesQuery->where('city_id', $cityId);
         }
 
-        $branches = $branchesQuery->orderBy('name')->get()->map(function ($branch) {
-            return [
-                'id' => $branch->id,
-                'name' => $branch->name,
-                'address' => $branch->address,
-                'phone' => $branch->phone,
-            ];
-        });
+        $latestUpdate = $branchesQuery->max('updated_at');
+        $versionStamp = $latestUpdate ? (string) strtotime((string) $latestUpdate) : '0';
+        $cacheKey = 'clinics:branches:' . $clinic->id . ':' . ($cityId ?: 'any') . ':' . $versionStamp;
 
-        return response()->json([
+        if ($cached = Cache::get($cacheKey)) {
+            return response()->json($cached);
+        }
+
+        $branches = $branchesQuery
+            ->select('id', 'name', 'address', 'phone')
+            ->orderBy('name')
+            ->get()
+            ->map(function ($branch) {
+                return [
+                    'id' => $branch->id,
+                    'name' => $branch->name,
+                    'address' => $branch->address,
+                    'phone' => $branch->phone,
+                ];
+            });
+
+        $payload = [
             'data' => $branches,
-        ]);
+        ];
+
+        Cache::put($cacheKey, $payload, now()->addMinutes(5));
+
+        return response()->json($payload);
     }
 
 }

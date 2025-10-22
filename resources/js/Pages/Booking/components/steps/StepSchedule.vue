@@ -51,9 +51,6 @@
                     :disabled="!slot.is_available"
                 >
                     <span class="font-medium">{{ slot.time }}</span>
-                    <span v-if="slot.branch_name || slot.cabinet_name" class="block text-xs text-gray-500">
-                        {{ slot.branch_name ? slot.branch_name + (slot.cabinet_name ? ', ' : '') : '' }}{{ slot.cabinet_name ?? '' }}
-                    </span>
                     <span v-if="slot.is_past" class="block text-[10px] uppercase tracking-wide text-gray-400">Прошло</span>
                     <span v-else-if="slot.is_occupied" class="block text-[10px] uppercase tracking-wide text-red-500">Занято</span>
                 </button>

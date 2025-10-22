@@ -204,7 +204,15 @@ class DoctorController extends Controller
                 ->get(['cabinet_id', 'appointment_datetime']);
 
             foreach ($occupiedAppointments as $application) {
-                $key = $application->cabinet_id . '|' . Carbon::parse($application->appointment_datetime)->format('Y-m-d H:i:s');
+                $appointmentStart = $application->appointment_datetime;
+
+                if (!$appointmentStart) {
+                    continue;
+                }
+
+                $appointmentStartUtc = $appointmentStart->copy()->setTimezone('UTC');
+                $key = $application->cabinet_id . '|' . $appointmentStartUtc->format('Y-m-d H:i:s');
+
                 $occupiedMap[$key] = true;
             }
         }

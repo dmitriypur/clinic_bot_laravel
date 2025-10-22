@@ -136,6 +136,7 @@ const branchName = computed(() => {
                 :clinic-name="clinicName"
                 :branch-name="branchName"
                 v-model:fio="state.fio"
+                v-model:child-fio="state.childFio"
                 v-model:phone="state.phone"
                 v-model:consent="state.consent"
                 :tg-user-id="state.tgUserId"

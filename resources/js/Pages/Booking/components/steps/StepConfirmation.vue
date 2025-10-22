@@ -13,10 +13,17 @@
         <form class="space-y-3" @submit.prevent="handleSubmit">
             <BaseInput
                 v-model="fioProxy"
-                placeholder="ФИО"
+                placeholder="ФИО родителя"
                 :error="fioError"
                 @keydown="handleFioKeydown"
-                @paste="handleFioPaste"
+                @paste="handleParentFioPaste"
+            />
+            <BaseInput
+                v-model="childFioProxy"
+                placeholder="ФИО ребенка"
+                :error="childFioError"
+                @keydown="handleFioKeydown"
+                @paste="handleChildFioPaste"
             />
             <BaseInput
                 v-model="phoneProxy"
@@ -76,6 +83,10 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    childFio: {
+        type: String,
+        default: '',
+    },
     phone: {
         type: String,
         default: '',
@@ -106,14 +117,17 @@ const props = defineProps({
     },
 })
 
-const emits = defineEmits(['update:fio', 'update:phone', 'update:consent', 'submit', 'back'])
+const emits = defineEmits(['update:fio', 'update:childFio', 'update:phone', 'update:consent', 'submit', 'back'])
 
 const submitAttempted = ref(false)
 const fioError = ref('')
+const childFioError = ref('')
 const phoneError = ref('')
 const consentError = ref('')
 
 const controlKeys = new Set(['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter'])
+const parentFioEmptyMessage = 'Укажите ФИО родителя'
+const childFioEmptyMessage = 'Укажите ФИО ребенка'
 
 const isModifierPressed = (event) => event.ctrlKey || event.metaKey || event.altKey
 
@@ -129,7 +143,39 @@ const handleFioKeydown = (event) => {
     event.preventDefault()
 }
 
-const handleFioPaste = (event) => {
+const sanitizeFio = (value) => {
+    if (!value) {
+        return ''
+    }
+
+    return String(value).replace(/[^А-Яа-яЁёA-Za-z\s-]/g, '')
+}
+
+const updateFioValue = (propName, value, errorRef, emptyMessage) => {
+    const raw = value === null || value === undefined ? '' : String(value)
+    const sanitized = sanitizeFio(raw)
+
+    emits(`update:${propName}`, sanitized)
+
+    if (raw && sanitized !== raw) {
+        errorRef.value = 'Можно вводить только буквы'
+    } else if (submitAttempted.value && !sanitized.trim()) {
+        errorRef.value = emptyMessage
+    } else if (errorRef.value === emptyMessage || errorRef.value === 'Можно вводить только буквы') {
+        errorRef.value = ''
+    }
+
+    return sanitized
+}
+
+const createFioProxy = (propName, errorRef, emptyMessage) => computed({
+    get: () => props[propName],
+    set: (value) => {
+        updateFioValue(propName, value, errorRef, emptyMessage)
+    },
+})
+
+const createFioPasteHandler = (propName, errorRef, emptyMessage) => (event) => {
     const pasted = (event.clipboardData || window.clipboardData).getData('text')
 
     if (!pasted || /^[А-Яа-яЁёA-Za-z\s-]+$/.test(pasted)) {
@@ -138,38 +184,22 @@ const handleFioPaste = (event) => {
 
     event.preventDefault()
 
-    const sanitized = sanitizeFio(pasted)
-
+    const sanitizedClipboard = sanitizeFio(pasted)
     const target = event.target
 
     requestAnimationFrame(() => {
         const start = target.selectionStart
         const end = target.selectionEnd
-
         const current = target.value
-        const updated = `${current.slice(0, start)}${sanitized}${current.slice(end)}`
+        const updated = `${current.slice(0, start)}${sanitizedClipboard}${current.slice(end)}`
 
-        emits('update:fio', sanitizeFio(updated))
+        updateFioValue(propName, updated, errorRef, emptyMessage)
 
-        const newPosition = start + sanitized.length
+        const newPosition = start + sanitizedClipboard.length
         requestAnimationFrame(() => {
             target.setSelectionRange(newPosition, newPosition)
         })
     })
-}
-
-const sanitizeFio = (value) => {
-    const sanitized = value.replace(/[^А-Яа-яЁёA-Za-z\s-]/g, '')
-
-    if (value && sanitized !== value) {
-        fioError.value = 'Можно вводить только буквы'
-    } else if (!value && submitAttempted.value) {
-        fioError.value = 'Укажите ФИО'
-    } else {
-        fioError.value = ''
-    }
-
-    return sanitized
 }
 
 const formatPhone = (value) => {
@@ -217,21 +247,10 @@ const formatPhone = (value) => {
     return formatted
 }
 
-const fioProxy = computed({
-    get: () => props.fio,
-    set: (value) => {
-        const sanitized = sanitizeFio(value)
-        emits('update:fio', sanitized)
-
-        if (submitAttempted.value) {
-            if (!sanitized.trim()) {
-                fioError.value = 'Укажите ФИО'
-            } else if (fioError.value === 'Укажите ФИО' || fioError.value === 'Можно вводить только буквы') {
-                fioError.value = ''
-            }
-        }
-    },
-})
+const fioProxy = createFioProxy('fio', fioError, parentFioEmptyMessage)
+const childFioProxy = createFioProxy('childFio', childFioError, childFioEmptyMessage)
+const handleParentFioPaste = createFioPasteHandler('fio', fioError, parentFioEmptyMessage)
+const handleChildFioPaste = createFioPasteHandler('childFio', childFioError, childFioEmptyMessage)
 
 const handlePhoneKeydown = (event) => {
     if (controlKeys.has(event.key) || isModifierPressed(event)) {
@@ -286,10 +305,18 @@ const validateFields = () => {
 
     const trimmedFio = (props.fio || '').trim()
     if (!trimmedFio) {
-        fioError.value = 'Укажите ФИО'
+        fioError.value = parentFioEmptyMessage
         isValid = false
-    } else if (fioError.value === 'Укажите ФИО' || fioError.value === 'Можно вводить только буквы') {
+    } else if (fioError.value === parentFioEmptyMessage || fioError.value === 'Можно вводить только буквы') {
         fioError.value = ''
+    }
+
+    const trimmedChildFio = (props.childFio || '').trim()
+    if (!trimmedChildFio) {
+        childFioError.value = childFioEmptyMessage
+        isValid = false
+    } else if (childFioError.value === childFioEmptyMessage || childFioError.value === 'Можно вводить только буквы') {
+        childFioError.value = ''
     }
 
     const phoneDigits = (props.phone || '').replace(/\D/g, '')
@@ -303,7 +330,7 @@ const validateFields = () => {
         phoneError.value = ''
     }
 
-    return isValid && !fioError.value && !phoneError.value
+    return isValid && !fioError.value && !childFioError.value && !phoneError.value
 }
 
 const consentWrapperClasses = computed(() => [

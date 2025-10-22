@@ -165,6 +165,7 @@ export function useBooking() {
         selectedDoctorId: null,
         selectedDoctor: null,
         fio: '',
+        childFio: '',
         phone: '',
         consent: false,
         tgUserId: null,
@@ -243,6 +244,7 @@ export function useBooking() {
     const cleanupAfterBack = (fromStep, toStep) => {
         if (fromStep >= 8 && toStep <= 7) {
             state.fio = ''
+            state.childFio = ''
             state.phone = ''
             state.consent = false
         }
@@ -627,7 +629,8 @@ export function useBooking() {
             doctor_id: state.selectedDoctorId,
             cabinet_id: state.selectedSlot ? state.selectedSlot.cabinet_id : null,
             appointment_datetime: state.selectedSlot ? state.selectedSlot.datetime : null,
-            full_name: state.fio,
+            full_name_parent: (state.fio || '').trim(),
+            full_name: (state.childFio || '').trim(),
             phone: state.phone,
             birth_date: state.birthDate,
             tg_user_id: state.tgUserId,
@@ -647,6 +650,7 @@ export function useBooking() {
         state.doctors = []
         state.cities = []
         state.fio = ''
+        state.childFio = ''
         state.phone = ''
         state.consent = false
 

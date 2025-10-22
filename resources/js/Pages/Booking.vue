@@ -53,7 +53,7 @@ const branchName = computed(() => {
 
 <template>
     <div class="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-        <div class="w-full max-w-md bg-white shadow-lg rounded-2xl p-6 space-y-6">
+        <div class="w-full min-h-screen max-w-md bg-white shadow-lg rounded-2xl p-6 space-y-6">
 
             <BookingProgress :current="state.step" :total="state.totalSteps" />
 

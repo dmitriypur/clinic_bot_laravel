@@ -76,6 +76,7 @@ const branchName = computed(() => {
                 @next="actions.goTo(4)"
                 @skip="() => { actions.setBirthDate(null); actions.goTo(4) }"
                 @back="actions.goBack"
+                :datepicker-locale="datepickerLocale"
             />
 
             <StepChooseMode

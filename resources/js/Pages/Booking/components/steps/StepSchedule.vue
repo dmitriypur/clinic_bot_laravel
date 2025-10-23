@@ -16,12 +16,15 @@
 
         <Datepicker
             v-model="internalDate"
+            class="booking-picker"
+            :inline="true"
             :min-date="minDate"
             :enable-time-picker="false"
             :auto-apply="true"
             :locale="datepickerLocale"
             :week-start="1"
             :timezone="timezone"
+            :month-change-on-scroll="false"
         />
 
         <div>
@@ -143,3 +146,27 @@ const internalDate = computed({
     },
 })
 </script>
+<style scoped>
+
+:deep(.booking-picker) {
+    width: 100%;
+    flex-direction: column;
+
+    div{
+        width: 100%;
+    }
+
+    .dp__theme_light{
+        --dp-background-color: #fff8e6;
+        --dp-text-color: #1f2937;
+        --dp-primary-color: #f59e0b !important;
+        --dp-hover-color: #fde68a;
+        --dp-highlight-color: #f97316;
+        --dp-active-text-color: #0f172a;
+        --dp-border-radius: 12px;
+        --dp-input-padding: 12px;
+    }
+
+}
+
+</style>

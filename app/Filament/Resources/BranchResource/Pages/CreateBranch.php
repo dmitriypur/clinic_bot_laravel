@@ -9,4 +9,15 @@ use Filament\Resources\Pages\CreateRecord;
 class CreateBranch extends CreateRecord
 {
     protected static string $resource = BranchResource::class;
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        $user = auth()->user();
+
+        if ($user && $user->hasRole('partner')) {
+            $data['clinic_id'] = $user->clinic_id;
+        }
+
+        return $data;
+    }
 }

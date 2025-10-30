@@ -14,4 +14,22 @@ class CreateCity extends CreateRecord
     {
         return $this->getResource()::getUrl('index');
     }
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        $data['name'] = trim($data['name']);
+
+        return $data;
+    }
+
+    protected function afterCreate(): void
+    {
+        parent::afterCreate();
+
+        $user = auth()->user();
+
+        if ($user && $user->hasRole('partner') && $user->clinic_id) {
+            $this->record->clinics()->syncWithoutDetaching([$user->clinic_id]);
+        }
+    }
 }

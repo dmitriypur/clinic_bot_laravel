@@ -18,7 +18,7 @@ class BranchResource extends Resource
     protected static ?string $model = Branch::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-building-office';
-    
+
     protected static ?string $modelLabel = 'Филиал';
     protected static ?string $pluralModelLabel = 'Филиалы';
     protected static ?string $navigationLabel = 'Филиалы';
@@ -50,12 +50,12 @@ class BranchResource extends Resource
     {
         $user = auth()->user();
         $isPartner = $user && $user->hasRole('partner');
-        
+
         return $form
             ->schema([
                 Forms\Components\Select::make('clinic_id')
                     ->relationship(
-                        'clinic', 
+                        'clinic',
                         'name',
                         fn ($query) => $isPartner ? $query->where('id', $user->clinic_id) : $query
                     )
@@ -65,6 +65,7 @@ class BranchResource extends Resource
                     ->preload()
                     ->reactive()
                     ->default($isPartner ? $user->clinic_id : null)
+                    ->dehydrated() // keep the value when the field is disabled for partners
                     ->disabled($isPartner)
                     ->afterStateUpdated(fn (callable $set) => $set('city_id', null)),
                 Forms\Components\Select::make('city_id')
@@ -76,7 +77,7 @@ class BranchResource extends Resource
                         if (!$clinicId) {
                             return [];
                         }
-                        
+
                         return \App\Models\Clinic::find($clinicId)
                             ?->cities()
                             ->pluck('name', 'id')
@@ -204,17 +205,17 @@ class BranchResource extends Resource
     public static function getPages(): array
     {
         $user = auth()->user();
-        
+
         $pages = [
             'index' => Pages\ListBranches::route('/'),
         ];
-        
+
         // Только не-doctor пользователи могут создавать и редактировать филиалы
         if (!$user || !$user->hasRole('doctor')) {
             $pages['create'] = Pages\CreateBranch::route('/create');
             $pages['edit'] = Pages\EditBranch::route('/{record}/edit');
         }
-        
+
         return $pages;
     }
 }

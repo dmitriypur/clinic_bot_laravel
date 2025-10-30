@@ -61,8 +61,8 @@ class ClinicResource extends Resource
                         Select::make('cities')
                             ->label('Города')
                             ->relationship('cities', 'name')
-                            ->multiple()
                             ->preload()
+                            ->multiple()
                             ->searchable(),
                         Select::make('status')
                             ->label('Статус')
@@ -173,17 +173,6 @@ class ClinicResource extends Resource
                     ->label('Длительность слота')
                     ->formatStateUsing(fn ($state) => $state . ' мин')
                     ->sortable(),
-                TextColumn::make('crm_provider')
-                    ->label('CRM')
-                    ->formatStateUsing(function ($state) {
-                        return match ($state) {
-                            'bitrix24' => 'Bitrix24',
-                            'onec_crm' => '1С (уведомления)',
-                            'albato' => 'Albato',
-                            'amo_crm' => 'AmoCRM',
-                            default => '—',
-                        };
-                    }),
                 IconColumn::make('status')
                     ->label('Статус')
                     ->boolean(),

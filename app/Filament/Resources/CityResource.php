@@ -57,7 +57,9 @@ class CityResource extends Resource
                 TextInput::make('name')
                     ->label('Название')
                     ->required()
-                    ->maxLength(255),
+                    ->maxLength(255)
+                    ->unique(table: City::class, column: 'name', ignoreRecord: true)
+                    ->live(onBlur: true),
                 Toggle::make('status')
                     ->label('Активен')
                     ->required(),

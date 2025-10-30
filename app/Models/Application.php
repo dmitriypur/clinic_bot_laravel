@@ -112,6 +112,19 @@ class Application extends Model
             app(CrmNotificationService::class)->dispatch($application);
         });
 
+        static::saving(function (self $application) {
+            // Автоматически выставляем клинику по выбранному филиалу (актуально для заявок из WebApp)
+            if (!$application->clinic_id && $application->branch_id) {
+                $clinicId = Branch::query()
+                    ->whereKey($application->branch_id)
+                    ->value('clinic_id');
+
+                if ($clinicId) {
+                    $application->clinic_id = $clinicId;
+                }
+            }
+        });
+
         // Очищаем кэш календаря при обновлении заявки
         static::updated(function ($application) {
             static::clearCalendarCache();

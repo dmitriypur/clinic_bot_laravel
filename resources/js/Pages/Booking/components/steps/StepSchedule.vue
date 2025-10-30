@@ -34,8 +34,9 @@
             <div v-if="isLoadingSlots" class="text-sm text-gray-500">
                 Загружаем слоты...
             </div>
-            <div v-else-if="slots.length === 0" class="text-sm text-gray-500">
-                Смены врача на эту дату отсутствуют. Попробуйте выбрать другую дату.
+            <div v-else-if="slots.length === 0" class="text-sm text-gray-500 space-y-1">
+                <p>Смены врача на эту дату отсутствуют. Попробуйте выбрать другую дату.</p>
+                <p>Вы можете записаться без выбора времени.</p>
             </div>
             <div v-else class="grid grid-cols-2 gap-2">
                 <button
@@ -59,7 +60,7 @@
                 </button>
             </div>
             <p v-if="slots.length > 0 && !hasAvailableSlots" class="text-xs text-amber-600 mt-2">
-                Все слоты на выбранную дату заняты или уже прошли. Попробуйте выбрать другое число.
+                Все слоты на выбранную дату заняты или уже прошли. Попробуйте выбрать другое число или запишитесь без выбора времени.
             </p>
         </div>
 
@@ -70,6 +71,15 @@
             @click="$emit('next')"
         >
             Продолжить
+        </BaseButton>
+        <BaseButton
+            v-else-if="!isLoadingSlots && (slots.length === 0 || !hasAvailableSlots)"
+            class="w-full py-2"
+            variant="secondary"
+            type="button"
+            @click="$emit('skip')"
+        >
+            Записаться без выбора времени
         </BaseButton>
 
         <BaseButton variant="ghost" class="text-sm" @click="$emit('back')">
@@ -136,7 +146,7 @@ const props = defineProps({
     },
 })
 
-const emits = defineEmits(['update:selectedDate', 'change-date', 'select-slot', 'next', 'back'])
+const emits = defineEmits(['update:selectedDate', 'change-date', 'select-slot', 'next', 'skip', 'back'])
 
 const internalDate = computed({
     get: () => props.selectedDate,

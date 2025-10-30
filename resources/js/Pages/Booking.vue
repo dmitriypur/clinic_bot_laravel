@@ -126,6 +126,7 @@ const branchName = computed(() => {
                 @change-date="actions.onDateChange"
                 @select-slot="actions.selectSlot"
                 @next="actions.goTo(8)"
+                @skip="actions.skipSchedule"
                 @back="actions.goBack"
             />
 

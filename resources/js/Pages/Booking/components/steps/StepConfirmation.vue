@@ -9,6 +9,19 @@
             <p v-if="clinicName"><span class="font-medium">Клиника:</span> {{ clinicName }}</p>
             <p v-if="branchName"><span class="font-medium">Филиал:</span> {{ branchName }}</p>
         </div>
+        <div
+            v-else
+            class="rounded-lg border border-secondary bg-yellow-50 px-4 py-3 text-sm text-primary space-y-1"
+        >
+            <p v-if="doctor"><span class="font-medium">Доктор:</span> {{ doctor.name }}</p>
+            <p v-if="clinicName"><span class="font-medium">Клиника:</span> {{ clinicName }}</p>
+            <p v-if="branchName"><span class="font-medium">Филиал:</span> {{ branchName }}</p>
+            <p>
+                Запись будет оформлена без выбора
+                <span v-if="doctor">времени.</span>
+                <span v-else>времени и доктора.</span>
+            </p>
+        </div>
 
         <form class="space-y-3" @submit.prevent="handleSubmit">
             <BaseInput

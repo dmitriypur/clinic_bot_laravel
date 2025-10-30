@@ -478,6 +478,18 @@ export function useBooking() {
         }
     }
 
+    const goToDoctorStepOrConfirmation = async () => {
+        goTo(6)
+        await loadDoctors()
+        if (state.doctors.length === 0) {
+            if (state.history[state.history.length - 1] === 6) {
+                state.history.pop()
+            }
+            resetSchedule()
+            goTo(8)
+        }
+    }
+
     const loadSlots = async () => {
         if (!state.selectedDoctorId) {
             state.slots = []
@@ -535,6 +547,18 @@ export function useBooking() {
         applySlotContext(slot)
     }
 
+    const skipSchedule = () => {
+        if (state.isLoadingSlots) {
+            return
+        }
+        const canSkip = state.slots.length === 0 || !hasAvailableSlots.value
+        if (!canSkip) {
+            return
+        }
+        state.selectedSlot = null
+        goTo(8)
+    }
+
     const selectCity = async (cityId) => {
         state.cityId = cityId
         state.bookingMode = null
@@ -588,12 +612,10 @@ export function useBooking() {
 
         const clinicBranches = state.branchesByClinic[clinic.id] || []
         if (clinicBranches.length === 0) {
-            goTo(6)
-            await loadDoctors()
+            await goToDoctorStepOrConfirmation()
         } else if (clinicBranches.length === 1) {
             state.branchId = clinicBranches[0].id
-            goTo(6)
-            await loadDoctors()
+            await goToDoctorStepOrConfirmation()
         }
     }
 
@@ -601,8 +623,7 @@ export function useBooking() {
         state.clinicId = clinicId
         state.branchId = branch.id
         resetSelectedDoctor()
-        goTo(6)
-        await loadDoctors()
+        await goToDoctorStepOrConfirmation()
     }
 
     const selectDoctor = async (doctor) => {
@@ -761,6 +782,7 @@ export function useBooking() {
             selectBranch,
             selectDoctor,
             selectSlot,
+            skipSchedule,
             selectCity,
             setBirthDate,
             onDateChange,

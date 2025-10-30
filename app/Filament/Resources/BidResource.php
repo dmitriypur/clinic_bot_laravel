@@ -231,15 +231,7 @@ class BidResource extends Resource
                         if ($currentBranchId) {
                             $set('doctor_id', null);
                         }
-                    })
-                    ->rules([
-                        fn (\Filament\Forms\Get $get): \Closure => function (string $attribute, $value, \Closure $fail) use ($get) {
-                            // Проверяем только если форма отправляется (не при каждом изменении)
-                            if (request()->isMethod('POST') && $get('city_id') && !$value) {
-                                $fail("Поле клиника обязательно для заполнения.");
-                            }
-                        },
-                    ]),
+                    }),
                 Select::make('doctor_id')
                     ->label('Врач')
                     ->live()
@@ -275,15 +267,7 @@ class BidResource extends Resource
                         return $query->get()->mapWithKeys(function ($doctor) {
                             return [$doctor->id => $doctor->full_name];
                         });
-                    })
-                    ->rules([
-                        fn (\Filament\Forms\Get $get): \Closure => function (string $attribute, $value, \Closure $fail) use ($get) {
-                            // Проверяем только если форма отправляется (не при каждом изменении)
-                            if (request()->isMethod('POST') && $get('city_id') && !$value) {
-                                $fail("Поле клиника обязательно для заполнения.");
-                            }
-                        },
-                    ]),
+                    }),
 
                 Select::make('cabinet_id')
                     ->label('Кабинет')
@@ -296,15 +280,7 @@ class BidResource extends Resource
 
                         return \App\Models\Cabinet::where('branch_id', $branchId)
                             ->pluck('name', 'id');
-                    })
-                    ->rules([
-                        fn (\Filament\Forms\Get $get): \Closure => function (string $attribute, $value, \Closure $fail) use ($get) {
-                            // Проверяем только если форма отправляется (не при каждом изменении)
-                            if (request()->isMethod('POST') && $get('branch_id') && !$value) {
-                                $fail("Поле кабинет обязательно для заполнения.");
-                            }
-                        },
-                    ]),
+                    }),
 
                 Toggle::make('send_to_1c')
                     ->label('Отправить в 1С')

@@ -225,8 +225,7 @@ class ApplicationResource extends Resource
                         return $query->get()->mapWithKeys(function ($doctor) {
                             return [$doctor->id => $doctor->full_name];
                         });
-                    })
-                    ->required(),
+                    }),
 
                 Select::make('cabinet_id')
                     ->label('Кабинет')
@@ -239,8 +238,7 @@ class ApplicationResource extends Resource
 
                         return \App\Models\Cabinet::where('branch_id', $branchId)
                             ->pluck('name', 'id');
-                    })
-                    ->required(),
+                    }),
 
                 DateTimePicker::make('appointment_datetime')
                     ->label('Дата и время приема')

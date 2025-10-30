@@ -61,6 +61,7 @@ class ClinicResource extends Resource
                         Select::make('cities')
                             ->label('Города')
                             ->relationship('cities', 'name')
+                            ->multiple()
                             ->preload()
                             ->searchable(),
                         Select::make('status')

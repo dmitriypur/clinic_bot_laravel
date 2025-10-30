@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::table('clinics', function (Blueprint $table) {
             $table->string('crm_provider', 50)
                 ->default('none')
-                ->after('external_id');
+                ->after('slot_duration');
             $table->json('crm_settings')
                 ->nullable()
                 ->after('crm_provider');

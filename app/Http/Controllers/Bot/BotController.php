@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Bot;
 
 use App\Bot\Conversations\ApplicationConversation;
-use App\Bot\Conversations\ReviewConversation;
 use App\Http\Controllers\Controller;
 use App\Models\TelegramContact;
 use BotMan\BotMan\BotMan;
@@ -77,34 +76,8 @@ class BotController extends Controller
     {
 
 
-        // Обработчик команды /start с поддержкой deep links
+        // Обработчик команды /start для запуска WebApp-диалога
         $botman->hears('/start.*', function (BotMan $bot) {
-            $message = $bot->getMessage();
-            $text = $message->getText();
-
-
-
-            // Разбираем команду на части
-            $parts = preg_split('/\s+/', trim($text), 2);
-
-            if (count($parts) > 1) {
-                $param = $parts[1];
-
-                // Проверяем начинается ли параметр с 'review_'
-                // Это deep link для системы отзывов: /start review_doctor_uuid
-                if (str_starts_with($param, 'review_')) {
-                    // Извлекаем UUID врача из параметра
-                    $doctorUuid = str_replace('review_', '', $param);
-
-
-
-                    // Запускаем диалог оставления отзыва для конкретного врача
-                    $bot->startConversation(new ReviewConversation($doctorUuid));
-                    return;
-                }
-            }
-
-            // Запускаем обычный диалог записи к врачу
             $bot->startConversation(new ApplicationConversation());
         });
 

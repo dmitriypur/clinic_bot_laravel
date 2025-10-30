@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\CrmIntegrationLog;
 
 class Clinic extends Model
 {
@@ -12,11 +13,15 @@ class Clinic extends Model
         'name',
         'status',
         'slot_duration',
+        'external_id',
+        'crm_provider',
+        'crm_settings',
     ];
 
     protected $casts = [
         'status' => 'integer',
         'slot_duration' => 'integer',
+        'crm_settings' => 'array',
     ];
 
     public function cities(): BelongsToMany
@@ -42,6 +47,11 @@ class Clinic extends Model
     public function branches(): HasMany
     {
         return $this->hasMany(Branch::class);
+    }
+
+    public function crmIntegrationLogs(): HasMany
+    {
+        return $this->hasMany(CrmIntegrationLog::class);
     }
 
     /**

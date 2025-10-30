@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Jobs\SendAppointmentConfirmationNotification;
 use App\Jobs\SendAppointmentReminderNotification;
+use App\Services\Crm\CrmNotificationService;
 use App\Traits\HasCalendarOptimizations;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
@@ -108,6 +109,7 @@ class Application extends Model
         static::created(function ($application) {
             static::clearCalendarCache();
             $application->notifyTelegramAboutAppointmentConfirmation();
+            app(CrmNotificationService::class)->dispatch($application);
         });
 
         // Очищаем кэш календаря при обновлении заявки

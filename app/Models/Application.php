@@ -124,6 +124,10 @@ class Application extends Model
                 $application->scheduleTelegramReminderNotification();
             }
 
+            if ($application->wasChanged('clinic_id') && $application->clinic_id) {
+                app(CrmNotificationService::class)->dispatch($application);
+            }
+
             // Автоматически меняем статус на "Создана" при назначении статуса "Запись на прием"
             // if ($application->wasChanged('status_id')) {
             //     $newStatus = $application->status;

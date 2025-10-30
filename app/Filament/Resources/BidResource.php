@@ -296,7 +296,6 @@ class BidResource extends Resource
                     ->native(false)
                     ->displayFormat('d.m.Y H:i')
                     ->seconds(false)
-                    ->readonly()
                     ->live()
                     ->afterStateUpdated(function ($state, callable $set, callable $get) {
                         // Обновляем связанные поля при изменении времени
@@ -377,6 +376,7 @@ class BidResource extends Resource
             //
         ];
     }
+
     public static function getPages(): array
     {
         return [

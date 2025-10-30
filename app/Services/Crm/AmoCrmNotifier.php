@@ -17,6 +17,10 @@ class AmoCrmNotifier extends AbstractHttpNotifier
             return new CrmNotificationResult(false, error: 'Не указаны webhook_url или token для AmoCRM.');
         }
 
+        $appointmentDateTime = $application->appointment_datetime
+            ? $application->appointment_datetime->copy()->setTimezone(config('app.timezone'))
+            : null;
+
         $payload = [
             'name' => Arr::get($settings, 'lead_prefix', 'Заявка') . ' #' . $application->id,
             'price' => Arr::get($settings, 'price', 0),
@@ -33,7 +37,7 @@ class AmoCrmNotifier extends AbstractHttpNotifier
                 'name' => $application->full_name,
                 'birth_date' => $application->birth_date,
             ],
-            'appointment_datetime' => optional($application->appointment_datetime)->setTimezone(config('app.timezone'))->format('Y-m-d H:i:s'),
+            'appointment_datetime' => $appointmentDateTime?->format('Y-m-d H:i:s'),
         ];
 
         try {

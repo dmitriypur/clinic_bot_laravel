@@ -15,11 +15,13 @@ class Bitrix24Notifier extends AbstractHttpNotifier
             return new CrmNotificationResult(false, error: 'Не указан корректный webhook_url для Bitrix24.');
         }
 
+        $appointmentDateTime = $application->appointment_datetime
+            ? $application->appointment_datetime->copy()->setTimezone(config('app.timezone'))
+            : null;
+
         $comment = sprintf(
             "Дата приема: %s\nКлиника: %s\nФилиал: %s\nВрач: %s",
-            optional($application->appointment_datetime)
-                ? $application->appointment_datetime->copy()->setTimezone(config('app.timezone'))->format('d.m.Y H:i')
-                : '—',
+            $appointmentDateTime?->format('d.m.Y H:i') ?? '—',
             $application->clinic?->name ?? '—',
             $application->branch?->name ?? '—',
             $application->doctor?->full_name ?? '—'

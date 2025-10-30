@@ -17,12 +17,16 @@ class OneCNotifier extends AbstractHttpNotifier
             return new CrmNotificationResult(false, error: 'Не указаны webhook_url или token для 1С.');
         }
 
+        $appointmentDateTime = $application->appointment_datetime
+            ? $application->appointment_datetime->copy()->setTimezone(config('app.timezone'))
+            : null;
+
         $payload = [
             'application_id' => $application->id,
             'clinic' => $application->clinic?->name,
             'branch' => $application->branch?->name,
             'doctor' => $application->doctor?->full_name,
-            'appointment_datetime' => optional($application->appointment_datetime)->setTimezone(config('app.timezone'))->format('Y-m-d H:i:s'),
+            'appointment_datetime' => $appointmentDateTime?->format('Y-m-d H:i:s'),
             'patient' => [
                 'full_name' => $application->full_name,
                 'full_name_parent' => $application->full_name_parent,

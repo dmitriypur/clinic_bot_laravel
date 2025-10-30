@@ -16,6 +16,10 @@ class AlbatoNotifier extends AbstractHttpNotifier
             return new CrmNotificationResult(false, error: 'Не указан webhook_url для Albato.');
         }
 
+        $appointmentDateTime = $application->appointment_datetime
+            ? $application->appointment_datetime->copy()->setTimezone(config('app.timezone'))
+            : null;
+
         $payload = [
             'id' => $application->id,
             'clinic' => $application->clinic?->name,
@@ -26,7 +30,7 @@ class AlbatoNotifier extends AbstractHttpNotifier
                 'phone' => $application->phone,
                 'birth_date' => $application->birth_date,
             ],
-            'appointment_datetime' => optional($application->appointment_datetime)->setTimezone(config('app.timezone'))->format('Y-m-d H:i:s'),
+            'appointment_datetime' => $appointmentDateTime?->format('Y-m-d H:i:s'),
         ];
 
         try {

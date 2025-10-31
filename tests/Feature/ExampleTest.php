@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
@@ -57,5 +58,46 @@ class ExampleTest extends TestCase
         $response = $this->get('/app');
 
         $response->assertNotFound();
+    }
+
+    public function test_partner_user_query_is_limited_to_self(): void
+    {
+        Role::create(['name' => 'partner', 'guard_name' => 'web']);
+
+        $partner = User::factory()->create(['email' => 'partner@example.com']);
+        $partner->assignRole('partner');
+
+        $other = User::factory()->create(['email' => 'other@example.com']);
+        $other->assignRole('partner');
+
+        $this->actingAs($partner);
+
+        $ids = UserResource::getEloquentQuery()->pluck('id')->all();
+
+        $this->assertSame([$partner->id], $ids);
+    }
+
+    public function test_partner_cannot_create_users(): void
+    {
+        Role::create(['name' => 'partner', 'guard_name' => 'web']);
+
+        $partner = User::factory()->create();
+        $partner->assignRole('partner');
+
+        $this->actingAs($partner);
+
+        $this->assertFalse(UserResource::canCreate());
+    }
+
+    public function test_super_admin_can_create_users(): void
+    {
+        Role::create(['name' => 'super_admin', 'guard_name' => 'web']);
+
+        $superAdmin = User::factory()->create();
+        $superAdmin->assignRole('super_admin');
+
+        $this->actingAs($superAdmin);
+
+        $this->assertTrue(UserResource::canCreate());
     }
 }

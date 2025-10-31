@@ -17,7 +17,7 @@ use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
 use App\Models\Doctor;
@@ -36,24 +36,10 @@ class UserResource extends Resource
 
     public static function form(Form $form): Form
     {
-        return $form
-            ->schema([
-                Section::make('Роли и разрешения')
-                    ->schema([
-                        CheckboxList::make('roles')
-                            ->label('Роли')
-                            ->relationship('roles', 'name')
-                            ->options(Role::all()->pluck('name', 'id'))
-                            ->descriptions([
-                                'super_admin' => 'Полный доступ ко всем функциям',
-                                'admin' => 'Административный доступ',
-                                'editor' => 'Редактирование контента',
-                                'doctor' => 'Доктор',
-                                'partner' => 'Партнёр',
-                            ])
-                            ->columns(3)
-                            ->live(),
-                    ]),
+        $currentUser = auth()->user();
+
+        if ($currentUser && $currentUser->hasRole('partner')) {
+            return $form->schema([
                 Section::make('Основная информация')
                     ->schema([
                         TextInput::make('name')
@@ -66,29 +52,7 @@ class UserResource extends Resource
                             ->required()
                             ->unique(User::class, 'email', ignoreRecord: true)
                             ->maxLength(255),
-                        Select::make('clinic_id')
-                            ->label('Клиника')
-                            ->relationship('clinic', 'name')
-                            ->visible(function (Get $get): bool {
-                                $roleIds = $get('roles') ?? [];
-                                $partnerRole = Role::where('name', 'partner')->first();
-                                return $partnerRole && in_array($partnerRole->id, $roleIds);
-                            })
-                            ->live(),
-                        Select::make('doctor_id')
-                            ->label('Врач')
-                            ->relationship('doctor', 'id')
-                            ->getOptionLabelFromRecordUsing(fn (Doctor $record): string => $record->full_name)
-                            ->searchable()
-                            ->preload()
-                            ->visible(function (Get $get): bool {
-                                $roleIds = $get('roles') ?? [];
-                                $doctorRole = Role::where('name', 'doctor')->first();
-                                return $doctorRole && in_array($doctorRole->id, $roleIds);
-                            })
-                            ->live(),
                     ])->columnSpanFull(),
-
                 Section::make('Пароль')
                     ->schema([
                         TextInput::make('password')
@@ -106,8 +70,80 @@ class UserResource extends Resource
                             ->minLength(5)
                             ->dehydrated(false),
                     ])->columnSpanFull(),
-                
             ]);
+        }
+
+        return $form->schema([
+            Section::make('Роли и разрешения')
+                ->schema([
+                    CheckboxList::make('roles')
+                        ->label('Роли')
+                        ->relationship('roles', 'name')
+                        ->options(Role::all()->pluck('name', 'id'))
+                        ->descriptions([
+                            'super_admin' => 'Полный доступ ко всем функциям',
+                            'admin' => 'Административный доступ',
+                            'editor' => 'Редактирование контента',
+                            'doctor' => 'Доктор',
+                            'partner' => 'Партнёр',
+                        ])
+                        ->columns(3)
+                        ->live(),
+                ]),
+            Section::make('Основная информация')
+                ->schema([
+                    TextInput::make('name')
+                        ->label('Имя')
+                        ->required()
+                        ->maxLength(255),
+                    TextInput::make('email')
+                        ->label('Email')
+                        ->email()
+                        ->required()
+                        ->unique(User::class, 'email', ignoreRecord: true)
+                        ->maxLength(255),
+                    Select::make('clinic_id')
+                        ->label('Клиника')
+                        ->relationship('clinic', 'name')
+                        ->visible(function (Get $get): bool {
+                            $roleIds = $get('roles') ?? [];
+                            $partnerRole = Role::where('name', 'partner')->first();
+                            return $partnerRole && in_array($partnerRole->id, $roleIds);
+                        })
+                        ->live(),
+                    Select::make('doctor_id')
+                        ->label('Врач')
+                        ->relationship('doctor', 'id')
+                        ->getOptionLabelFromRecordUsing(fn (Doctor $record): string => $record->full_name)
+                        ->searchable()
+                        ->preload()
+                        ->visible(function (Get $get): bool {
+                            $roleIds = $get('roles') ?? [];
+                            $doctorRole = Role::where('name', 'doctor')->first();
+                            return $doctorRole && in_array($doctorRole->id, $roleIds);
+                        })
+                        ->live(),
+                ])->columnSpanFull(),
+
+            Section::make('Пароль')
+                ->schema([
+                    TextInput::make('password')
+                        ->label('Пароль')
+                        ->password()
+                        ->required(fn (string $context): bool => $context === 'create')
+                        ->minLength(5)
+                        ->same('password_confirmation')
+                        ->dehydrated(fn ($state) => filled($state))
+                        ->dehydrateStateUsing(fn ($state) => Hash::make($state)),
+                    TextInput::make('password_confirmation')
+                        ->label('Подтверждение пароля')
+                        ->password()
+                        ->required(fn (string $context): bool => $context === 'create')
+                        ->minLength(5)
+                        ->dehydrated(false),
+                ])->columnSpanFull(),
+
+        ]);
     }
 
     public static function table(Table $table): Table
@@ -144,11 +180,14 @@ class UserResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->visible(fn (User $record): bool => auth()->user()?->hasRole('super_admin') ?? false
+                    || auth()->id() === $record->id),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(fn (): bool => auth()->user()?->hasRole('super_admin') ?? false),
                 ]),
             ]);
     }
@@ -167,5 +206,33 @@ class UserResource extends Resource
             'create' => Pages\CreateUser::route('/create'),
             'edit' => Pages\EditUser::route('/{record}/edit'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        $user = auth()->user();
+
+        if ($user && $user->hasRole('partner')) {
+            $query->whereKey($user->getKey());
+        }
+
+        return $query;
+    }
+
+    public static function canCreate(): bool
+    {
+        return auth()->user()?->hasRole('super_admin') ?? false;
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return auth()->user()?->hasRole('super_admin') ?? false;
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return auth()->user()?->hasRole('super_admin') ?? false;
     }
 }

@@ -12,8 +12,10 @@ class EditUser extends EditRecord
 
     protected function getHeaderActions(): array
     {
-        return [
-            Actions\DeleteAction::make(),
-        ];
+        if (! auth()->user()?->hasRole('super_admin')) {
+            return [];
+        }
+
+        return [Actions\DeleteAction::make()];
     }
 }

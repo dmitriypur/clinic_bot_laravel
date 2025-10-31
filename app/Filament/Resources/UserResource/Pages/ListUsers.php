@@ -12,8 +12,19 @@ class ListUsers extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [
-            Actions\CreateAction::make(),
-        ];
+        if (! auth()->user()?->hasRole('super_admin')) {
+            return [];
+        }
+
+        return [Actions\CreateAction::make()];
+    }
+
+    protected function getTableBulkActions(): array
+    {
+        if (! auth()->user()?->hasRole('super_admin')) {
+            return [];
+        }
+
+        return parent::getTableBulkActions();
     }
 }

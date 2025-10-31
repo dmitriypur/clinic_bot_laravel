@@ -23,9 +23,19 @@ class ExampleTest extends TestCase
     public function test_telegram_header_allows_access_without_query_params(): void
     {
         $response = $this->withHeaders([
-            'User-Agent' => 'Mozilla/5.0 TelegramDesktop/5.2',
+            'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
             'X-Telegram-Web-App-Init-Data' => 'sample',
         ])->get('/app');
+
+        $response->assertOk();
+    }
+
+    public function test_telegram_origin_and_params_allow_access(): void
+    {
+        $response = $this->withHeaders([
+            'Origin' => 'https://web.telegram.org',
+            'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+        ])->get('/app?tg_user_id=789');
 
         $response->assertOk();
     }

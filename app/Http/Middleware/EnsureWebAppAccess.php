@@ -48,6 +48,30 @@ class EnsureWebAppAccess
 
         $hasInitDataHeader = filled($initDataHeader);
 
-        return $hasTelegramUserAgent && ($hasTelegramParams || $hasInitDataHeader);
+        $origin = (string) $request->header('Origin', '');
+        $referer = (string) $request->header('Referer', '');
+        $hasTelegramOrigin = $this->containsTelegramDomain($origin) || $this->containsTelegramDomain($referer);
+
+        if ($hasInitDataHeader) {
+            return true;
+        }
+
+        return ($hasTelegramUserAgent && ($hasTelegramParams || $hasTelegramOrigin))
+            || ($hasTelegramOrigin && $hasTelegramParams);
+    }
+
+    private function containsTelegramDomain(string $value): bool
+    {
+        if ($value === '') {
+            return false;
+        }
+
+        $normalized = Str::lower($value);
+
+        return Str::contains($normalized, [
+            'telegram.org',
+            't.me',
+            'telegram.me',
+        ]);
     }
 }

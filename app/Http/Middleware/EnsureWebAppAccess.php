@@ -40,6 +40,14 @@ class EnsureWebAppAccess
         $hasTelegramParams = filled($request->query('tg_user_id'))
             || filled($request->query('tg_chat_id'));
 
-        return $hasTelegramUserAgent && $hasTelegramParams;
+        $initDataHeader = collect([
+            $request->header('X-Telegram-Web-App-Init-Data'),
+            $request->header('X-Telegram-Init-Data'),
+            $request->header('X-Telegram-WebApp-Init-Data'),
+        ])->first(fn ($value) => filled($value));
+
+        $hasInitDataHeader = filled($initDataHeader);
+
+        return $hasTelegramUserAgent && ($hasTelegramParams || $hasInitDataHeader);
     }
 }

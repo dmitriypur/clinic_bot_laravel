@@ -20,6 +20,16 @@ class ExampleTest extends TestCase
         $response->assertOk();
     }
 
+    public function test_telegram_header_allows_access_without_query_params(): void
+    {
+        $response = $this->withHeaders([
+            'User-Agent' => 'Mozilla/5.0 TelegramDesktop/5.2',
+            'X-Telegram-Web-App-Init-Data' => 'sample',
+        ])->get('/app');
+
+        $response->assertOk();
+    }
+
     public function test_super_admin_can_access_app_route(): void
     {
         Role::create(['name' => 'super_admin', 'guard_name' => 'web']);

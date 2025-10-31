@@ -28,14 +28,12 @@ class LegacySqlImportSeeder extends Seeder
             throw new \RuntimeException(sprintf('Устаревший каталог дампа не найден: %s', $this->dumpDirectory));
         }
 
-        DB::transaction(function () {
-            $this->importCities();
-            $this->importClinics();
-            $this->importDoctors();
-            $this->importUsers();
-            $this->importClinicCityRelations();
-            $this->importClinicDoctorRelations();
-        });
+        $this->importCities();
+        $this->importClinics();
+        $this->importDoctors();
+        $this->importUsers();
+        $this->importClinicCityRelations();
+        $this->importClinicDoctorRelations();
     }
 
     private function importCities(): void

@@ -24,8 +24,6 @@ class CreateCity extends CreateRecord
 
     protected function afterCreate(): void
     {
-        parent::afterCreate();
-
         $user = auth()->user();
 
         if ($user && $user->hasRole('partner') && $user->clinic_id) {

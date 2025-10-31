@@ -6,9 +6,9 @@ use Inertia\Inertia;
 use App\Http\Controllers\Admin\CabinetShiftController;
 use App\Http\Controllers\ExportDownloadController;
 
-Route::get('/', function () {
+Route::get('/app', function () {
     return Inertia::render('Booking');
-});
+})->middleware('telegram.webapp');
 
 // Telegram Bot webhook
 Route::match(['get', 'post'], '/botman', [BotController::class, 'handle']);
@@ -17,7 +17,7 @@ Route::match(['get', 'post'], '/botman', [BotController::class, 'handle']);
 Route::get('/download/export/{exportId}', [ExportDownloadController::class, 'download'])
     ->name('export.download');
 
-Route::middleware(['web','auth','verified'])->prefix('admin')->group(function(){
+Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('cabinets/{cabinet}/shifts/events', [CabinetShiftController::class,'events'])
         ->name('admin.cabinet.shifts.events');
 

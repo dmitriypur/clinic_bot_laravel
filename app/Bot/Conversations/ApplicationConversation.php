@@ -101,7 +101,7 @@ class ApplicationConversation extends Conversation
         $user = $this->bot->getUser();
         $message = $this->bot->getMessage();
 
-        $baseUrl = rtrim((string) config('services.telegram.web_app_url', 'https://app.fondzrenie.ru'), '/');
+        $baseUrl = rtrim((string) config('services.telegram.web_app_url', 'https://adminzrenie.ru/app'), '/');
 
         $query = [
             'tg_user_id' => $user->getId(),

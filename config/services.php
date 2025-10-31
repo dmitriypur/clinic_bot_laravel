@@ -36,7 +36,7 @@ return [
     ],
 
     'telegram' => [
-        'web_app_url' => env('TELEGRAM_WEB_APP_URL', 'https://app.fondzrenie.ru'),
+        'web_app_url' => env('TELEGRAM_WEB_APP_URL', 'https://adminzrenie.ru/app'),
     ],
 
 ];

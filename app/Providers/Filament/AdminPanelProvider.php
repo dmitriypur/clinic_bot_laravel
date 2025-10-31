@@ -46,7 +46,7 @@ class AdminPanelProvider extends PanelProvider
             ->sidebarCollapsibleOnDesktop()
             ->sidebarWidth('16rem')
             ->brandLogo(asset('images/logo.png'))
-            ->brandLogoHeight('2.5rem')
+            ->brandLogoHeight('auto')
             ->colors([
                 'primary' => [
                     500 => '#d89730', // основной

@@ -16,12 +16,14 @@ class Clinic extends Model
         'external_id',
         'crm_provider',
         'crm_settings',
+        'dashboard_calendar_enabled',
     ];
 
     protected $casts = [
         'status' => 'integer',
         'slot_duration' => 'integer',
         'crm_settings' => 'array',
+        'dashboard_calendar_enabled' => 'boolean',
     ];
 
     public function cities(): BelongsToMany

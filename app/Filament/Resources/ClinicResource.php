@@ -8,6 +8,7 @@ use App\Models\Clinic;
 use Filament\Forms;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -92,6 +93,11 @@ class ClinicResource extends Resource
                             ->default(30)
                             ->helperText('Используется для всех филиалов, если у них не задана своя длительность')
                             ->required(),
+                        Toggle::make('dashboard_calendar_enabled')
+                            ->label('Виджет календаря заявок')
+                            ->helperText('Управляет отображением календаря заявок и расписания для партнеров этой клиники.')
+                            ->default(true)
+                            ->visible(fn () => auth()->user()?->isSuperAdmin()),
                     ])->columns(2),
                 Forms\Components\Section::make('CRM интеграция')
                     ->schema([
@@ -175,6 +181,9 @@ class ClinicResource extends Resource
                     ->sortable(),
                 IconColumn::make('status')
                     ->label('Статус')
+                    ->boolean(),
+                IconColumn::make('dashboard_calendar_enabled')
+                    ->label('Календарь')
                     ->boolean(),
             ])
             ->filters([

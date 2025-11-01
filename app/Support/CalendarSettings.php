@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Clinic;
 use App\Models\SystemSetting;
 use App\Models\User;
 
@@ -30,6 +31,18 @@ class CalendarSettings
             return true;
         }
 
+        if ($user->isPartner()) {
+            return self::isEnabledForClinic($user->clinic);
+        }
+
+        if ($user->hasRole('admin')) {
+            return self::valueOrDefault(self::resolveKeyForUser($user), true);
+        }
+
+        if ($user->isSuperAdmin()) {
+            return self::valueOrDefault(self::resolveKeyForUser($user), true);
+        }
+
         $key = self::resolveKeyForUser($user);
 
         $value = self::valueOrDefault($key);
@@ -52,14 +65,30 @@ class CalendarSettings
             return;
         }
 
-        if ($user->isDoctor()) {
-            // Врач не может отключить календарь
+        if ($user->isDoctor() || $user->isPartner()) {
+            // Врачи и партнеры не управляют настройкой самостоятельно
             return;
         }
 
         $key = self::resolveKeyForUser($user);
 
         SystemSetting::setValue($key, $enabled);
+    }
+
+    public static function setEnabledForClinic(Clinic $clinic, bool $enabled): void
+    {
+        $clinic->forceFill([
+            'dashboard_calendar_enabled' => $enabled,
+        ])->saveQuietly();
+    }
+
+    public static function isEnabledForClinic(?Clinic $clinic): bool
+    {
+        if (!$clinic) {
+            return true;
+        }
+
+        return (bool) ($clinic->dashboard_calendar_enabled ?? true);
     }
 
     /**
@@ -86,4 +115,3 @@ class CalendarSettings
         return SystemSetting::getValue($key, $default);
     }
 }
-

@@ -70,6 +70,18 @@ class Dashboard extends Page
             return;
         }
 
+        if ($user && $user->isPartner()) {
+            $this->isCalendarEnabled = CalendarSettings::isEnabledForUser($user);
+            $this->activeTab = $this->isCalendarEnabled ? ($this->activeTab ?? 'appointments') : 'schedule';
+            return;
+        }
+
+        if (!$user || (! $user->isSuperAdmin() && ! $user->hasRole('admin'))) {
+            $this->isCalendarEnabled = CalendarSettings::isEnabledForUser($user);
+            $this->activeTab = $this->isCalendarEnabled ? ($this->activeTab ?? 'appointments') : 'schedule';
+            return;
+        }
+
         $enabled = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         $enabled = $enabled ?? false;
 

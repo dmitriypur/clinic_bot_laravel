@@ -10,7 +10,12 @@
         </div>
 
         <!-- Управление календарем заявок -->
-        @php $canToggleCalendar = ! auth()->user()?->isDoctor(); @endphp
+        @php
+            $user = auth()->user();
+            $isDoctor = $user?->isDoctor();
+            $isPartner = $user?->isPartner();
+            $canToggleCalendar = $user && ($user->isSuperAdmin() || $user->hasRole('admin'));
+        @endphp
         <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -18,8 +23,10 @@
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
                         @if($canToggleCalendar)
                             Включите календарь, если нужно работать с заявками. При отключении календарь не загружается и не расходует ресурсы.
-                        @else
+                        @elseif($isDoctor)
                             Календарь доступен для врачей всегда, чтобы вы могли видеть свое расписание и управлять приемами.
+                        @else
+                            Настройку видимости календаря управляет супер-администратор.
                         @endif
                     </p>
                 </div>
@@ -47,9 +54,13 @@
                             {{ $isCalendarEnabled ? 'Включен' : 'Выключен' }}
                         </span>
                     </label>
-                @else
+                @elseif($isDoctor)
                     <span class="inline-flex items-center rounded-full bg-primary-100 px-3 py-1 text-sm font-medium text-primary-900 dark:bg-primary-500/10 dark:text-primary-200">
                         Всегда включен
+                    </span>
+                @else
+                    <span class="inline-flex items-center rounded-full {{ $isCalendarEnabled ? 'bg-primary-100 text-primary-900 dark:bg-primary-500/10 dark:text-primary-200' : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200' }} px-3 py-1 text-sm font-medium">
+                        {{ $isCalendarEnabled ? 'Включен для вашей клиники' : 'Выключен администратором' }}
                     </span>
                 @endif
             </div>

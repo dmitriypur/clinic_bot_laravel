@@ -13,13 +13,14 @@ class EditClinic extends EditRecord
     public function mount(int | string $record): void
     {
         parent::mount($record);
-        
+
         // Проверяем права доступа
         $user = auth()->user();
-        if (!$user->hasRole('super_admin') && !$user->hasRole('partner')) {
+
+        if (! $user || ! $user->can('update_clinic')) {
             abort(403, 'У вас нет прав для редактирования клиник');
         }
-        
+
         // Если пользователь - партнер, проверяем, что он редактирует свою клинику
         if ($user->hasRole('partner') && $this->record->id !== $user->clinic_id) {
             abort(403, 'Вы можете редактировать только свою клинику');
@@ -30,8 +31,19 @@ class EditClinic extends EditRecord
     {
         return [
             Actions\DeleteAction::make()
-                ->visible(fn () => auth()->user()->hasRole('super_admin') || 
-                    (auth()->user()->hasRole('partner') && $this->record->id === auth()->user()->clinic_id)),
+                ->visible(function (): bool {
+                    $user = auth()->user();
+
+                    if (! $user) {
+                        return false;
+                    }
+
+                    if ($user->hasRole('partner')) {
+                        return $user->can('delete_clinic') && $this->record->id === $user->clinic_id;
+                    }
+
+                    return $user->can('delete_clinic');
+                }),
         ];
     }
 }

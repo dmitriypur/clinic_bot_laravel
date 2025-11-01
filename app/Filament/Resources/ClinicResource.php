@@ -191,12 +191,36 @@ class ClinicResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
-                    ->visible(fn () => auth()->check() && (auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('partner'))),
+                    ->visible(function (Clinic $record): bool {
+                        $user = auth()->user();
+
+                        if (! $user) {
+                            return false;
+                        }
+
+                        if ($user->hasRole('partner')) {
+                            return $user->can('update_clinic') && $record->getKey() === $user->clinic_id;
+                        }
+
+                        return $user->can('update_clinic');
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make()
-                        ->visible(fn () => auth()->check() && (auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('partner'))),
+                        ->visible(function (): bool {
+                            $user = auth()->user();
+
+                            if (! $user) {
+                                return false;
+                            }
+
+                            if ($user->hasRole('partner')) {
+                                return $user->can('delete_clinic');
+                            }
+
+                            return $user->can('delete_any_clinic');
+                        }),
                 ]),
             ]);
     }

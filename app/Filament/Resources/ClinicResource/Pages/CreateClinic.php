@@ -13,10 +13,11 @@ class CreateClinic extends CreateRecord
     public function mount(): void
     {
         parent::mount();
-        
+
         // Проверяем права доступа
         $user = auth()->user();
-        if (!$user->hasRole('super_admin') && !$user->hasRole('partner')) {
+
+        if (! $user || ! $user->can('create_clinic')) {
             abort(403, 'У вас нет прав для создания клиник');
         }
     }

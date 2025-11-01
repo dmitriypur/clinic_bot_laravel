@@ -13,7 +13,8 @@ class ListClinics extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()
+                ->visible(fn (): bool => auth()->user()?->can('create_clinic') ?? false),
         ];
     }
 }

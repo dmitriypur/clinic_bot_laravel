@@ -31,7 +31,7 @@
                             class="sr-only focus-visible:outline-none"
                             aria-label="Переключить отображение календаря заявок"
                         >
-                        <span class="relative inline-flex h-6 w-11 items-center">
+                        <span class="relative inline-flex h-6 w-11 items-center p-1">
                             <span @class([
                                 'absolute inset-0 rounded-full transition-colors duration-200',
                                 'bg-primary-500' => $isCalendarEnabled,

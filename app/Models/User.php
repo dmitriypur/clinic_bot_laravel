@@ -73,9 +73,10 @@ class User extends Authenticatable implements FilamentUser
     public function canAccessPanel(Panel $panel): bool
     {
         // Разрешаем доступ пользователям с ролью super_admin, partner или doctor
-        return $this->hasRole(['super_admin', 'partner', 'doctor']);
+        return $this->hasRole('super_admin') || $this->can('access_filament');
+        // return $this->hasRole(['super_admin', 'partner', 'doctor', 'admin']);
     }
-    
+
     /**
      * Проверяет, является ли пользователь супер-администратором
      */
@@ -83,7 +84,7 @@ class User extends Authenticatable implements FilamentUser
     {
         return $this->hasRole('super_admin');
     }
-    
+
     /**
      * Проверяет, является ли пользователь партнером
      */
@@ -91,7 +92,7 @@ class User extends Authenticatable implements FilamentUser
     {
         return $this->hasRole('partner');
     }
-    
+
     /**
      * Проверяет, является ли пользователь врачом
      */
@@ -99,7 +100,7 @@ class User extends Authenticatable implements FilamentUser
     {
         return $this->hasRole('doctor');
     }
-    
+
     /**
      * Получает кабинеты, к которым имеет доступ пользователь
      */
@@ -108,22 +109,22 @@ class User extends Authenticatable implements FilamentUser
         if ($this->isSuperAdmin()) {
             return \App\Models\Cabinet::all();
         }
-        
+
         if ($this->isPartner()) {
             return \App\Models\Cabinet::whereHas('branch', function($query) {
                 $query->where('clinic_id', $this->clinic_id);
             })->get();
         }
-        
+
         if ($this->isDoctor()) {
             return \App\Models\Cabinet::whereHas('branch.doctors', function($query) {
                 $query->where('doctor_id', $this->doctor_id);
             })->get();
         }
-        
+
         return collect();
     }
-    
+
     /**
      * Получает смены, к которым имеет доступ пользователь
      */
@@ -132,17 +133,17 @@ class User extends Authenticatable implements FilamentUser
         if ($this->isSuperAdmin()) {
             return \App\Models\DoctorShift::all();
         }
-        
+
         if ($this->isPartner()) {
             return \App\Models\DoctorShift::whereHas('cabinet.branch', function($query) {
                 $query->where('clinic_id', $this->clinic_id);
             })->get();
         }
-        
+
         if ($this->isDoctor()) {
             return \App\Models\DoctorShift::where('doctor_id', $this->doctor_id)->get();
         }
-        
+
         return collect();
     }
 

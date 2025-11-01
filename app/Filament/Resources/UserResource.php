@@ -17,6 +17,7 @@ use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
@@ -181,13 +182,13 @@ class UserResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
-                    ->visible(fn (User $record): bool => auth()->user()?->hasRole('super_admin') ?? false
+                    ->visible(fn (User $record): bool => auth()->user()?->can('update_user') ?? false
                     || auth()->id() === $record->id),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make()
-                        ->visible(fn (): bool => auth()->user()?->hasRole('super_admin') ?? false),
+                        ->visible(fn (): bool => auth()->user()?->can('delete_any_user') ?? false),
                 ]),
             ]);
     }
@@ -219,20 +220,5 @@ class UserResource extends Resource
         }
 
         return $query;
-    }
-
-    public static function canCreate(): bool
-    {
-        return auth()->user()?->hasRole('super_admin') ?? false;
-    }
-
-    public static function canDelete(Model $record): bool
-    {
-        return auth()->user()?->hasRole('super_admin') ?? false;
-    }
-
-    public static function canDeleteAny(): bool
-    {
-        return auth()->user()?->hasRole('super_admin') ?? false;
     }
 }

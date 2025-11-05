@@ -45,6 +45,7 @@ class AdminPanelProvider extends PanelProvider
             ->emailVerification(false)
             ->sidebarCollapsibleOnDesktop()
             ->sidebarWidth('16rem')
+            ->favicon(asset('favicon.png'))
             ->brandLogo(asset('images/logo.png'))
             ->brandLogoHeight('auto')
             ->colors([

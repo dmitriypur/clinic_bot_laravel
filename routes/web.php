@@ -8,7 +8,7 @@ use App\Http\Controllers\ExportDownloadController;
 
 Route::get('/app', function () {
     return Inertia::render('Booking');
-})->middleware('telegram.webapp');
+});
 
 // Telegram Bot webhook
 Route::match(['get', 'post'], '/botman', [BotController::class, 'handle']);

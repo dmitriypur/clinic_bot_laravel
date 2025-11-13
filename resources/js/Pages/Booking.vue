@@ -2,7 +2,6 @@
 import { computed, onMounted } from 'vue'
 
 import BookingProgress from './Booking/components/BookingProgress.vue'
-import StepStart from './Booking/components/steps/StepStart.vue'
 import StepSelectCity from './Booking/components/steps/StepSelectCity.vue'
 import StepBirthDate from './Booking/components/steps/StepBirthDate.vue'
 import StepChooseMode from './Booking/components/steps/StepChooseMode.vue'
@@ -18,6 +17,9 @@ const {
     hasAvailableSlots,
     selectedDateLabel,
     appTimezone,
+    currentStepPosition,
+    totalSteps,
+    isPromoFlow,
     actions,
 } = useBooking()
 
@@ -26,8 +28,10 @@ onMounted(() => {
     actions.loadCities()
 })
 
+// Находим выбранную клинику для отображения сводной информации
 const selectedClinic = computed(() => state.clinics.find((clinic) => clinic.id === state.clinicId) ?? null)
 
+// Находим выбранный филиал исходя из текущей клиники
 const selectedBranch = computed(() => {
     if (!state.clinicId) {
         return null
@@ -36,6 +40,7 @@ const selectedBranch = computed(() => {
     return branches.find((branch) => branch.id === state.branchId) ?? null
 })
 
+// Имя клиники берём из выбранного слота при его наличии, иначе — из локального выбора
 const clinicName = computed(() => {
     if (state.selectedSlot?.clinic_name) {
         return state.selectedSlot.clinic_name
@@ -43,6 +48,7 @@ const clinicName = computed(() => {
     return selectedClinic.value ? selectedClinic.value.name : ''
 })
 
+// Аналогично определяем имя филиала
 const branchName = computed(() => {
     if (state.selectedSlot?.branch_name) {
         return state.selectedSlot.branch_name
@@ -55,13 +61,32 @@ const branchName = computed(() => {
     <div class="min-h-screen flex items-center justify-center">
         <div class="w-full min-h-screen max-w-md bg-white px-6 py-12 space-y-6">
 
-            <BookingProgress :current="state.step" :total="state.totalSteps" />
+            <!-- Прогресс строится относительно активного сценария (обычный или по промокоду) -->
+            <BookingProgress :current="currentStepPosition" :total="totalSteps" />
 
-            <StepStart
+            <!-- Первый шаг сразу показывает форму для заполнения персональных данных -->
+            <StepConfirmation
                 v-if="state.step === 1"
-                @next="actions.goTo(2)"
+                v-model:fio="state.fio"
+                v-model:child-fio="state.childFio"
+                v-model:phone="state.phone"
+                v-model:consent="state.consent"
+                v-model:promo-code="state.promoCode"
+                :selected-slot="null"
+                :doctor="null"
+                :clinic-name="''"
+                :branch-name="''"
+                :selected-date-label="selectedDateLabel"
+                :tg-user-id="state.tgUserId"
+                :tg-chat-id="state.tgChatId"
+                :show-selection-details="false"
+                :show-back-button="false"
+                :show-form="true"
+                submit-label="Далее"
+                @submit="actions.handleInitialFormSubmit"
             />
 
+            <!-- Далее следуют стандартные шаги мастера -->
             <StepSelectCity
                 v-else-if="state.step === 2"
                 :cities="state.cities"
@@ -95,8 +120,10 @@ const branchName = computed(() => {
                 :selected-branch-id="state.branchId"
                 :is-loading="state.isLoadingClinics"
                 :loading-branches-id="state.loadingBranchesId"
+                :is-promo-flow="isPromoFlow"
                 @toggle-clinic="actions.toggleClinic"
                 @select-branch="actions.selectBranch"
+                @select-clinic="actions.selectClinicForPromo"
                 @back="actions.goBack"
             />
 
@@ -123,9 +150,11 @@ const branchName = computed(() => {
                 :doctor="state.selectedDoctor"
                 :clinic-name="clinicName"
                 :branch-name="branchName"
+                :slot-validation-error="state.slotValidationError"
+                :is-validating-slot="state.isSlotValidationInProgress"
                 @change-date="actions.onDateChange"
                 @select-slot="actions.selectSlot"
-                @next="actions.goTo(8)"
+                @next="actions.handleScheduleNext"
                 @skip="actions.skipSchedule"
                 @back="actions.goBack"
             />
@@ -141,8 +170,12 @@ const branchName = computed(() => {
                 v-model:child-fio="state.childFio"
                 v-model:phone="state.phone"
                 v-model:consent="state.consent"
+                v-model:promo-code="state.promoCode"
                 :tg-user-id="state.tgUserId"
                 :tg-chat-id="state.tgChatId"
+                :show-selection-details="true"
+                :show-form="false"
+                :submit-label="isPromoFlow ? 'Отправить' : 'Записаться'"
                 @submit="actions.submit"
                 @back="actions.goBack"
             />

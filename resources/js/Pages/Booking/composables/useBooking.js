@@ -24,6 +24,10 @@ const apiDateFormatter = new Intl.DateTimeFormat('en-CA', {
     day: '2-digit',
 })
 
+// Шаблоны шагов мастера для разных сценариев
+const PROMO_FLOW_STEPS = [1, 2, 5, 8]
+const DEFAULT_FLOW_STEPS = [1, 2, 3, 4, 5, 6, 7, 8]
+
 const ensureDateInstance = (value) => {
     if (!value) {
         return null
@@ -153,8 +157,8 @@ export function useBooking() {
         month: 'long',
         year: 'numeric',
     })
+    // Единый стор для всей страницы бронирования; изменяется только через экшены ниже
     const state = reactive({
-        totalSteps: 8,
         step: 1,
         history: [1],
         bookingMode: null,
@@ -168,6 +172,7 @@ export function useBooking() {
         childFio: '',
         phone: '',
         consent: false,
+        promoCode: '',
         tgUserId: null,
         tgChatId: null,
         cities: [],
@@ -184,9 +189,20 @@ export function useBooking() {
         isLoadingDoctors: false,
         isLoadingSlots: false,
         loadingBranchesId: null,
+        slotValidationError: null,
+        isSlotValidationInProgress: false,
     })
 
-    const progress = computed(() => (state.step / state.totalSteps) * 100)
+    // Флаг «промо» активируется сразу после ввода непустого промокода
+    const isPromoFlow = computed(() => Boolean((state.promoCode || '').trim()))
+    // Дерево шагов зависит от наличия промокода
+    const activeStepsOrder = computed(() => (isPromoFlow.value ? PROMO_FLOW_STEPS : DEFAULT_FLOW_STEPS))
+    const currentStepPosition = computed(() => {
+        const index = activeStepsOrder.value.indexOf(state.step)
+        return index === -1 ? 1 : index + 1
+    })
+    const totalSteps = computed(() => activeStepsOrder.value.length)
+    const progress = computed(() => (totalSteps.value ? (currentStepPosition.value / totalSteps.value) * 100 : 0))
     const hasAvailableSlots = computed(() => state.slots.some((slot) => slot.is_available))
     const selectedDateLabel = computed(() => {
         const date = ensureDateInstance(state.selectedDate) || new Date()
@@ -195,6 +211,7 @@ export function useBooking() {
 
     const datepickerLocale = ru
 
+    // При любом изменении врача/клиники очищаем даты и выбранные слоты
     const resetSchedule = () => {
         const freshDate = new Date()
         state.selectedDate = freshDate
@@ -202,6 +219,8 @@ export function useBooking() {
         state.selectedSlot = null
         state.slots = []
         state.isLoadingSlots = false
+        state.slotValidationError = null
+        state.isSlotValidationInProgress = false
     }
 
     const resetSelectedDoctor = () => {
@@ -210,6 +229,7 @@ export function useBooking() {
         resetSchedule()
     }
 
+    // Смена города/режима требует полного сброса клиник и веток
     const resetClinicContext = () => {
         state.clinicId = null
         state.branchId = null
@@ -236,19 +256,13 @@ export function useBooking() {
         }
     }
 
+    // Переключение шага с сохранением истории для кнопки «Назад»
     const goTo = (stepNumber) => {
         state.step = stepNumber
         state.history.push(stepNumber)
     }
 
     const cleanupAfterBack = (fromStep, toStep) => {
-        if (fromStep >= 8 && toStep <= 7) {
-            state.fio = ''
-            state.childFio = ''
-            state.phone = ''
-            state.consent = false
-        }
-
         if (fromStep >= 7 && toStep <= 6) {
             resetSchedule()
         }
@@ -278,6 +292,7 @@ export function useBooking() {
         state.step = previousStep
     }
 
+    // Загружаем список городов с примитивным кешированием
     const loadCities = async ({ force = false } = {}) => {
         if (!force && citiesCache.data) {
             state.cities = citiesCache.data.slice()
@@ -316,6 +331,7 @@ export function useBooking() {
         }
     }
 
+    // Список клиник зависит от выбранного города, поэтому кешируем по city_id
     const loadClinics = async ({ force = false } = {}) => {
         if (!state.cityId) {
             state.clinics = []
@@ -498,6 +514,7 @@ export function useBooking() {
         }
 
         state.isLoadingSlots = true
+        state.slotValidationError = null
         const previouslySelected = state.selectedSlot ? state.selectedSlot.datetime : null
         state.selectedSlot = null
 
@@ -536,6 +553,7 @@ export function useBooking() {
 
     const onDateChange = async (value) => {
         state.selectedDate = ensureDateInstance(value) || new Date()
+        state.slotValidationError = null
         await loadSlots()
     }
 
@@ -544,7 +562,41 @@ export function useBooking() {
             return
         }
         state.selectedSlot = slot
+        state.slotValidationError = null
         applySlotContext(slot)
+    }
+
+    const handleScheduleNext = async () => {
+        if (!state.selectedSlot) {
+            return
+        }
+
+        // Локальный режим – просто переходим дальше
+        if (!state.selectedSlot.onec_slot_id) {
+            goTo(8)
+            return
+        }
+
+        state.slotValidationError = null
+        state.isSlotValidationInProgress = true
+
+        try {
+            await axios.post('/api/v1/applications/check-slot', {
+                clinic_id: state.clinicId ?? state.selectedSlot.clinic_id,
+                branch_id: state.branchId ?? state.selectedSlot.branch_id,
+                doctor_id: state.selectedDoctorId,
+                onec_slot_id: state.selectedSlot.onec_slot_id,
+            })
+            goTo(8)
+        } catch (error) {
+            const message = error.response?.data?.errors?.onec_slot_id?.[0]
+                ?? error.response?.data?.message
+                ?? 'Слот только что заняли в 1С. Пожалуйста, выберите другое время.'
+            state.slotValidationError = message
+            await loadSlots()
+        } finally {
+            state.isSlotValidationInProgress = false
+        }
     }
 
     const skipSchedule = () => {
@@ -556,20 +608,43 @@ export function useBooking() {
             return
         }
         state.selectedSlot = null
+        state.slotValidationError = null
         goTo(8)
     }
 
+    // После заполнения формы на первом шаге переходим к выбору города
+    const handleInitialFormSubmit = () => {
+        if (state.step !== 1) {
+            return
+        }
+        goTo(2)
+        if (!state.cities.length && !state.isLoadingCities) {
+            loadCities().catch((error) => {
+                console.error('Не удалось обновить список городов', error)
+            })
+        }
+    }
+
+    // После выбора города запускаем соответствующий сценарий (обычный или промо)
     const selectCity = async (cityId) => {
         state.cityId = cityId
-        state.bookingMode = null
+        state.bookingMode = isPromoFlow.value ? 'promo' : null
         resetClinicContext()
         resetSelectedDoctor()
         state.clinics = []
         state.doctors = []
-        goTo(3)
-        loadClinics().catch((error) => {
-            console.error('Предзагрузка клиник завершилась с ошибкой', error)
-        })
+        if (isPromoFlow.value) {
+            goTo(5)
+            await loadClinics()
+            if (state.clinics.length === 1) {
+                await selectClinicForPromo(state.clinics[0])
+            }
+        } else {
+            goTo(3)
+            loadClinics().catch((error) => {
+                console.error('Предзагрузка клиник завершилась с ошибкой', error)
+            })
+        }
     }
 
     const setBirthDate = (value) => {
@@ -592,7 +667,28 @@ export function useBooking() {
         await loadDoctors()
     }
 
+    // В промо-режиме клиника — последний обязательный шаг перед отправкой
+    const selectClinicForPromo = async (clinic) => {
+        if (!clinic) {
+            return
+        }
+        state.clinicId = clinic.id
+        state.branchId = null
+        state.expandedClinicId = null
+        state.bookingMode = 'promo'
+        resetSelectedDoctor()
+        resetSchedule()
+        if (state.step === 8) {
+            return
+        }
+        goTo(8)
+    }
+
     const toggleClinic = async (clinic) => {
+        if (isPromoFlow.value) {
+            await selectClinicForPromo(clinic)
+            return
+        }
         if (state.expandedClinicId === clinic.id) {
             state.expandedClinicId = null
             state.clinicId = null
@@ -620,6 +716,9 @@ export function useBooking() {
     }
 
     const selectBranch = async ({ clinicId, branch }) => {
+        if (isPromoFlow.value) {
+            return
+        }
         state.clinicId = clinicId
         state.branchId = branch.id
         resetSelectedDoctor()
@@ -638,6 +737,7 @@ export function useBooking() {
         await loadSlots()
     }
 
+    // Финальная отправка заявки в API
     const submit = async () => {
         if (!state.tgChatId && state.tgUserId) {
             state.tgChatId = state.tgUserId
@@ -649,6 +749,7 @@ export function useBooking() {
             branch_id: state.branchId,
             doctor_id: state.selectedDoctorId,
             cabinet_id: state.selectedSlot ? state.selectedSlot.cabinet_id : null,
+            onec_slot_id: state.selectedSlot ? state.selectedSlot.onec_slot_id : null,
             appointment_datetime: state.selectedSlot ? state.selectedSlot.datetime : null,
             full_name_parent: (state.fio || '').trim(),
             full_name: (state.childFio || '').trim(),
@@ -656,6 +757,7 @@ export function useBooking() {
             birth_date: state.birthDate,
             tg_user_id: state.tgUserId,
             tg_chat_id: state.tgChatId,
+            promo_code: (state.promoCode || '').trim() || null,
         })
 
         alert('Вы успешно записаны!')
@@ -674,11 +776,13 @@ export function useBooking() {
         state.childFio = ''
         state.phone = ''
         state.consent = false
+        state.promoCode = ''
 
         await loadCities({ force: true })
         initTelegramContext()
     }
 
+    // Подтягиваем данные из Telegram WebApp чтобы максимально авто-заполнить форму
     const initTelegramContext = () => {
         if (typeof window === 'undefined') {
             return
@@ -764,6 +868,7 @@ export function useBooking() {
         }
     }
 
+    // Экспортируем состояние, вычисления и экшены для страницы
     return {
         state,
         progress,
@@ -771,6 +876,9 @@ export function useBooking() {
         hasAvailableSlots,
         selectedDateLabel,
         appTimezone: APP_TIMEZONE,
+        currentStepPosition,
+        totalSteps,
+        isPromoFlow,
         actions: {
             goTo,
             goBack,
@@ -782,12 +890,15 @@ export function useBooking() {
             selectBranch,
             selectDoctor,
             selectSlot,
+            handleScheduleNext,
             skipSchedule,
             selectCity,
             setBirthDate,
             onDateChange,
             submit,
             initTelegramContext,
+            selectClinicForPromo,
+            handleInitialFormSubmit,
         },
     }
 }

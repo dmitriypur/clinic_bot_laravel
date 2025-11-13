@@ -2,28 +2,36 @@
     <div class="space-y-4">
         <h3 class="text-xl font-semibold text-gray-800">Форма записи</h3>
 
-        <div v-if="selectedSlot" class="rounded-lg border border-secondary bg-yellow-50 px-4 py-3 text-sm text-primary space-y-1">
-            <p><span class="font-medium">Дата:</span> {{ selectedDateLabel }}</p>
-            <p><span class="font-medium">Время:</span> {{ selectedSlot.time }}</p>
-            <p v-if="doctor"><span class="font-medium">Доктор:</span> {{ doctor.name }}</p>
-            <p v-if="clinicName"><span class="font-medium">Клиника:</span> {{ clinicName }}</p>
-            <p v-if="branchName"><span class="font-medium">Филиал:</span> {{ branchName }}</p>
-        </div>
-        <div
-            v-else
-            class="rounded-lg border border-secondary bg-yellow-50 px-4 py-3 text-sm text-primary space-y-1"
-        >
-            <p v-if="doctor"><span class="font-medium">Доктор:</span> {{ doctor.name }}</p>
-            <p v-if="clinicName"><span class="font-medium">Клиника:</span> {{ clinicName }}</p>
-            <p v-if="branchName"><span class="font-medium">Филиал:</span> {{ branchName }}</p>
-            <p>
-                Запись будет оформлена без выбора
-                <span v-if="doctor">времени.</span>
-                <span v-else>времени и доктора.</span>
-            </p>
+        <!-- Блок с информацией о выборе слота/клиники отображаем только когда это требуется текущим шагом -->
+        <div v-if="showSelectionDetails">
+            <div v-if="selectedSlot" class="rounded-lg border border-secondary bg-yellow-50 px-4 py-3 text-sm text-primary space-y-1">
+                <p><span class="font-medium">Дата:</span> {{ selectedDateLabel }}</p>
+                <p><span class="font-medium">Время:</span> {{ selectedSlot.time }}</p>
+                <p v-if="doctor"><span class="font-medium">Доктор:</span> {{ doctor.name }}</p>
+                <p v-if="clinicName"><span class="font-medium">Клиника:</span> {{ clinicName }}</p>
+                <p v-if="branchName"><span class="font-medium">Филиал:</span> {{ branchName }}</p>
+            </div>
+            <div
+                v-else
+                class="rounded-lg border border-secondary bg-yellow-50 px-4 py-3 text-sm text-primary space-y-1"
+            >
+                <p v-if="doctor"><span class="font-medium">Доктор:</span> {{ doctor.name }}</p>
+                <p v-if="clinicName"><span class="font-medium">Клиника:</span> {{ clinicName }}</p>
+                <p v-if="branchName"><span class="font-medium">Филиал:</span> {{ branchName }}</p>
+                <p>
+                    Запись будет оформлена без выбора
+                    <span v-if="doctor">времени.</span>
+                    <span v-else>времени и доктора.</span>
+                </p>
+            </div>
         </div>
 
-        <form class="space-y-3" @submit.prevent="handleSubmit">
+        <!-- Форма редактирования персональных данных используется только на первом шаге -->
+        <form
+            v-if="showForm"
+            class="space-y-3"
+            @submit.prevent="handleSubmit"
+        >
             <BaseInput
                 v-model="fioProxy"
                 placeholder="ФИО родителя"
@@ -43,6 +51,10 @@
                 placeholder="Телефон"
                 :error="phoneError"
                 @keydown="handlePhoneKeydown"
+            />
+            <BaseInput
+                v-model="promoCodeProxy"
+                placeholder="Промокод"
             />
             <div>
                 <label :class="consentWrapperClasses">
@@ -68,11 +80,38 @@
                 variant="primary"
                 type="submit"
             >
-                Записаться
+                {{ submitLabel }}
             </BaseButton>
         </form>
 
-        <BaseButton variant="ghost" class="text-sm" @click="$emit('back')">
+        <!-- Финальный шаг показывает только сводные данные и кнопку отправки -->
+        <div
+            v-else
+            class="space-y-3"
+        >
+            <div class="rounded-lg border border-secondary bg-gray-50 px-4 py-3 text-sm text-gray-800 space-y-2">
+                <p><span class="font-medium">ФИО родителя:</span> {{ fio || 'Не указано' }}</p>
+                <p><span class="font-medium">ФИО ребенка:</span> {{ childFio || 'Не указано' }}</p>
+                <p><span class="font-medium">Телефон:</span> {{ phone || 'Не указан' }}</p>
+                <p><span class="font-medium">Промокод:</span> {{ promoCode || 'Не указан' }}</p>
+                <p><span class="font-medium">Согласие:</span> {{ consent ? 'Получено' : 'Не дано' }}</p>
+            </div>
+            <BaseButton
+                class="w-full py-2"
+                variant="primary"
+                type="button"
+                @click="handleSubmit"
+            >
+                {{ submitLabel }}
+            </BaseButton>
+        </div>
+
+        <BaseButton
+            v-if="showBackButton"
+            variant="ghost"
+            class="text-sm"
+            @click="$emit('back')"
+        >
             ← Назад
         </BaseButton>
     </div>
@@ -83,6 +122,7 @@ import { computed, ref } from 'vue'
 import BaseButton from '../../../../Components/ui/BaseButton.vue'
 import BaseInput from '../../../../Components/ui/BaseInput.vue'
 
+// Универсальный шаг мастера: умеет работать как интерактивная форма и как финальный обзор.
 const props = defineProps({
     selectedSlot: {
         type: Object,
@@ -128,10 +168,31 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    promoCode: {
+        type: String,
+        default: '',
+    },
+    showSelectionDetails: {
+        type: Boolean,
+        default: true,
+    },
+    showForm: {
+        type: Boolean,
+        default: true,
+    },
+    submitLabel: {
+        type: String,
+        default: 'Записаться',
+    },
+    showBackButton: {
+        type: Boolean,
+        default: true,
+    },
 })
 
-const emits = defineEmits(['update:fio', 'update:childFio', 'update:phone', 'update:consent', 'submit', 'back'])
+const emits = defineEmits(['update:fio', 'update:childFio', 'update:phone', 'update:consent', 'update:promoCode', 'submit', 'back'])
 
+// Сервисные переменные для отслеживания ошибок и повторной валидации
 const submitAttempted = ref(false)
 const fioError = ref('')
 const childFioError = ref('')
@@ -313,6 +374,11 @@ const consentProxy = computed({
     },
 })
 
+const promoCodeProxy = computed({
+    get: () => props.promoCode,
+    set: (value) => emits('update:promoCode', value ?? ''),
+})
+
 const validateFields = () => {
     let isValid = true
 
@@ -352,6 +418,12 @@ const consentWrapperClasses = computed(() => [
 ])
 
 const handleSubmit = () => {
+    // Если шаг в режиме только просмотра, просто отправляем событие без повторной валидации
+    if (!props.showForm) {
+        emits('submit')
+        return
+    }
+
     submitAttempted.value = true
 
     const fieldsValid = validateFields()

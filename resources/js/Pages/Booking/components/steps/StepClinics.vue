@@ -18,7 +18,7 @@
             >
                 <button
                     type="button"
-                    @click="$emit('toggle-clinic', clinic)"
+                    @click="handleClinicClick(clinic)"
                     :class="[
                         'w-full flex justify-between items-center px-4 py-3 text-left rounded-lg transition',
                         selectedClinicId === clinic.id ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-indigo-50'
@@ -26,12 +26,17 @@
                 >
                     <span class="font-medium text-gray-800">{{ clinic.name }}</span>
                     <span class="text-xs text-gray-500">
-                        {{ expandedClinicId === clinic.id ? 'Скрыть' : 'Филиалы' }}
+                        <template v-if="isPromoFlow">
+                            Выбрать
+                        </template>
+                        <template v-else>
+                            {{ expandedClinicId === clinic.id ? 'Скрыть' : 'Филиалы' }}
+                        </template>
                     </span>
                 </button>
 
                 <div
-                    v-if="expandedClinicId === clinic.id"
+                    v-if="!isPromoFlow && expandedClinicId === clinic.id"
                     class="border-t border-gray-200 px-4 py-3 space-y-2 bg-white rounded-b-lg"
                 >
                     <div v-if="loadingBranchesId === clinic.id" class="text-sm text-gray-500">
@@ -74,7 +79,9 @@
 <script setup>
 import BaseButton from '../../../../Components/ui/BaseButton.vue'
 
-defineProps({
+// Компонент мульти-режимный: либо показываем стандартный аккордеон клиник с филиалами,
+// либо в промо-режиме клиника выбирается мгновенно без раскрытия.
+const props = defineProps({
     clinics: {
         type: Array,
         default: () => [],
@@ -103,7 +110,20 @@ defineProps({
         type: [Number, String, null],
         default: null,
     },
+    isPromoFlow: {
+        type: Boolean,
+        default: false,
+    },
 })
 
-defineEmits(['toggle-clinic', 'select-branch', 'back'])
+const emits = defineEmits(['toggle-clinic', 'select-branch', 'select-clinic', 'back'])
+
+// В промо-режиме сразу прокидываем выбранную клинику наружу, иначе переключаем аккордеон
+const handleClinicClick = (clinic) => {
+    if (props.isPromoFlow) {
+        emits('select-clinic', clinic)
+        return
+    }
+    emits('toggle-clinic', clinic)
+}
 </script>

@@ -13,26 +13,19 @@ class OneCNotifier extends AbstractHttpNotifier
         $endpoint = Arr::get($settings, 'webhook_url');
         $token = Arr::get($settings, 'token');
 
-        if (!$endpoint || !$token) {
+        if (! $endpoint || ! $token) {
             return new CrmNotificationResult(false, error: 'Не указаны webhook_url или token для 1С.');
         }
 
-        $appointmentDateTime = $application->appointment_datetime
-            ? $application->appointment_datetime->copy()->setTimezone(config('app.timezone'))
-            : null;
-
         $payload = [
-            'application_id' => $application->id,
-            'clinic' => $application->clinic?->name,
-            'branch' => $application->branch?->name,
-            'doctor' => $application->doctor?->full_name,
-            'appointment_datetime' => $appointmentDateTime?->format('Y-m-d H:i:s'),
-            'patient' => [
-                'full_name' => $application->full_name,
-                'full_name_parent' => $application->full_name_parent,
-                'birth_date' => $application->birth_date,
-                'phone' => $application->phone,
-            ],
+            'tgid' => (string) ($application->tg_user_id ?? ''),
+            'chatid' => (string) ($application->tg_chat_id ?? ''),
+            'promocode' => (string) ($application->promo_code ?? ''),
+            'fullname' => (string) ($application->full_name ?? ''),
+            'birthday' => (string) ($application->birth_date ?? ''),
+            'phone' => (string) ($application->phone ?? ''),
+            'city' => (string) ($application->city?->name ?? ''),
+            'items' => (object) [],
         ];
 
         try {

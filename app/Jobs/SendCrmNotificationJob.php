@@ -4,8 +4,8 @@ namespace App\Jobs;
 
 use App\Models\Application;
 use App\Models\CrmIntegrationLog;
-use App\Services\Crm\CrmNotifierFactory;
 use App\Services\Crm\CrmNotificationResult;
+use App\Services\Crm\CrmNotifierFactory;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -17,21 +17,19 @@ class SendCrmNotificationJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function __construct(private readonly int $applicationId)
-    {
-    }
+    public function __construct(private readonly int $applicationId) {}
 
     public function handle(CrmNotifierFactory $factory): void
     {
-        $application = Application::with(['clinic', 'branch', 'doctor'])->find($this->applicationId);
+        $application = Application::with(['clinic', 'branch', 'doctor', 'city'])->find($this->applicationId);
 
-        if (!$application) {
+        if (! $application) {
             return;
         }
 
         $clinic = $application->clinic;
 
-        if (!$clinic || $clinic->crm_provider === 'none' || !$clinic->crm_provider) {
+        if (! $clinic || $clinic->crm_provider === 'none' || ! $clinic->crm_provider) {
             return;
         }
 
@@ -39,11 +37,12 @@ class SendCrmNotificationJob implements ShouldQueue
 
         $notifier = $factory->make($clinic->crm_provider);
 
-        if (!$notifier) {
+        if (! $notifier) {
             Log::warning('CRM notifier not found for provider.', [
                 'clinic_id' => $clinic->id,
                 'provider' => $clinic->crm_provider,
             ]);
+
             return;
         }
 
@@ -51,7 +50,7 @@ class SendCrmNotificationJob implements ShouldQueue
 
         $this->logAttempt($application, $result);
 
-        if (!$result->success && $this->attempts() < 3) {
+        if (! $result->success && $this->attempts() < 3) {
             $this->release(60);
         }
     }

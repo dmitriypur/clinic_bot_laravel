@@ -26,6 +26,7 @@ return [
             'label' => 'Albato',
             'fields' => [
                 'webhook_url' => ['label' => 'Webhook URL', 'required' => true],
+                'secret' => ['label' => 'Secret', 'required' => true],
             ],
         ],
         'amo_crm' => [

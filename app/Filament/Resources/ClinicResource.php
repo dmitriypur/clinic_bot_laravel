@@ -128,6 +128,11 @@ class ClinicResource extends Resource
                                     ->visible(fn (Forms\Get $get) => in_array($get('crm_provider'), ['amo_crm', 'onec_crm']))
                                     ->required(fn (Forms\Get $get) => in_array($get('crm_provider'), ['amo_crm', 'onec_crm']))
                                     ->dehydrated(fn (Forms\Get $get) => in_array($get('crm_provider'), ['amo_crm', 'onec_crm'])),
+                                TextInput::make('crm_settings.secret')
+                                    ->label('Secret')
+                                    ->visible(fn (Forms\Get $get) => $get('crm_provider') === 'albato')
+                                    ->required(fn (Forms\Get $get) => $get('crm_provider') === 'albato')
+                                    ->dehydrated(fn (Forms\Get $get) => $get('crm_provider') === 'albato'),
                                 TextInput::make('crm_settings.title_prefix')
                                     ->label('Префикс названия лида')
                                     ->visible(fn (Forms\Get $get) => $get('crm_provider') === 'bitrix24')

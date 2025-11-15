@@ -30,7 +30,7 @@ class OneCNotifier extends AbstractHttpNotifier
 
         try {
             $response = $this->http
-                ->withHeaders(['X-Auth-Token' => $token])
+                ->withHeaders(['X-LO-Token' => $token])
                 ->post($endpoint, $payload)
                 ->throw();
 

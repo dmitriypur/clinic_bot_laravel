@@ -5,6 +5,7 @@ namespace App\Services\Crm;
 use App\Models\Application;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 class OneCNotifier extends AbstractHttpNotifier
@@ -23,7 +24,7 @@ class OneCNotifier extends AbstractHttpNotifier
             'chatid' => (string) ($application->tg_chat_id ?? ''),
             'promocode' => (string) ($application->promo_code ?? ''),
             'fullname' => (string) ($application->full_name ?? ''),
-            'birthday' => (string) ($application->birth_date ?? ''),
+            'birthday' => $this->formatBirthday($application->birth_date),
             'phone' => $this->formatPhone($application->phone),
             'city' => (string) ($application->city?->name ?? ''),
             'items' => (object) [],
@@ -68,5 +69,24 @@ class OneCNotifier extends AbstractHttpNotifier
         }
 
         return '';
+    }
+
+    private function formatBirthday(mixed $birthDate): string
+    {
+        if ($birthDate instanceof \DateTimeInterface) {
+            return $birthDate->format('d.m.Y');
+        }
+
+        $birthDate = (string) ($birthDate ?? '');
+
+        if ($birthDate === '') {
+            return '';
+        }
+
+        try {
+            return Carbon::parse($birthDate)->format('d.m.Y');
+        } catch (\Throwable $exception) {
+            return '';
+        }
     }
 }

@@ -2,43 +2,43 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Exports\ApplicationExporter;
 use App\Filament\Resources\BidResource\Pages;
-use App\Filament\Resources\BidResource\RelationManagers;
 use App\Models\Application;
 use App\Models\Clinic;
-use App\Filament\Widgets\AppointmentCalendarWidget;
-use Filament\Forms;
+use Carbon\Carbon;
+use Filament\Actions\Exports\Enums\ExportFormat;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Tables;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\TernaryFilter;
-use Filament\Tables\Table;
-use Carbon\Carbon;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use Filament\Tables\Actions\ExportAction;
-use Filament\Actions\Exports\Enums\ExportFormat;
-use App\Filament\Exports\ApplicationExporter;
 use Filament\Support\Colors\Color;
+use Filament\Tables;
+use Filament\Tables\Actions\ExportAction;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class BidResource extends Resource
 {
     protected static ?string $model = Application::class;
 
     protected static ?string $navigationLabel = 'Заявки';
+
     protected static ?string $pluralNavigationLabel = 'Заявки';
+
     protected static ?string $pluralLabel = 'Заявки';
+
     protected static ?string $label = 'Заявка';
+
     protected static ?string $navigationGroup = 'Журнал приемов';
 
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-bottom-center-text';
+
     protected static ?int $navigationSort = 5;
 
     public static function getEloquentQuery(): Builder
@@ -71,27 +71,31 @@ class BidResource extends Resource
     {
         return $form
             ->schema([
+                Hidden::make('onec_slot_id')
+                    ->dehydrated(true),
                 TextInput::make('full_name_parent')
                     ->label('ФИО родителя'),
                 TextInput::make('full_name')
                     ->label('ФИО ребенка')
                     ->rules([
                         fn (): \Closure => function (string $attribute, $value, \Closure $fail) {
-                            if (request()->isMethod('POST') && !$value) {
-                                $fail("Поле ФИО ребенка обязательно для заполнения.");
+                            if (request()->isMethod('POST') && ! $value) {
+                                $fail('Поле ФИО ребенка обязательно для заполнения.');
                             }
                         },
-                    ]),
+                    ])
+                    ->required(),
                 DatePicker::make('birth_date')
                     ->label('Дата рождения'),
                 TextInput::make('phone')
                     ->label('Телефон')
+                    ->required()
                     ->tel()
                     ->dehydrateStateUsing(fn ($state) => $state ? preg_replace('/\D+/', '', $state) : null)
                     ->rules([
                         fn (): \Closure => function (string $attribute, $value, \Closure $fail) {
-                            if (request()->isMethod('POST') && !$value) {
-                                $fail("Поле телефон обязательно для заполнения.");
+                            if (request()->isMethod('POST') && ! $value) {
+                                $fail('Поле телефон обязательно для заполнения.');
                             }
                         },
                     ]),
@@ -100,6 +104,7 @@ class BidResource extends Resource
                 Select::make('city_id')
                     ->label('Город')
                     ->live()
+                    ->required()
                     ->options(function (callable $get) {
                         $user = auth()->user();
 
@@ -109,6 +114,7 @@ class BidResource extends Resource
                             if ($clinic) {
                                 return $clinic->cities->pluck('name', 'id');
                             }
+
                             return [];
                         }
 
@@ -117,8 +123,8 @@ class BidResource extends Resource
                     })
                     ->rules([
                         fn (): \Closure => function (string $attribute, $value, \Closure $fail) {
-                            if (request()->isMethod('POST') && !$value) {
-                                $fail("Поле город обязательно для заполнения.");
+                            if (request()->isMethod('POST') && ! $value) {
+                                $fail('Поле город обязательно для заполнения.');
                             }
                         },
                     ])
@@ -134,9 +140,10 @@ class BidResource extends Resource
                 Select::make('clinic_id')
                     ->label('Клиника')
                     ->live()
+                    ->required()
                     ->options(function (callable $get) {
                         $cityId = $get('city_id');
-                        if (!$cityId) {
+                        if (! $cityId) {
                             return [];
                         }
 
@@ -148,6 +155,7 @@ class BidResource extends Resource
                             if ($clinic && $clinic->cities->contains('id', $cityId)) {
                                 return [$clinic->id => $clinic->name];
                             }
+
                             return [];
                         }
 
@@ -167,8 +175,8 @@ class BidResource extends Resource
                     ->rules([
                         fn (\Filament\Forms\Get $get): \Closure => function (string $attribute, $value, \Closure $fail) use ($get) {
                             // Проверяем только если форма отправляется (не при каждом изменении)
-                            if (request()->isMethod('POST') && $get('city_id') && !$value) {
-                                $fail("Поле клиника обязательно для заполнения.");
+                            if (request()->isMethod('POST') && $get('city_id') && ! $value) {
+                                $fail('Поле клиника обязательно для заполнения.');
                             }
                         },
                     ]),
@@ -180,7 +188,7 @@ class BidResource extends Resource
                         $cityId = $get('city_id');
                         $clinicId = $get('clinic_id');
 
-                        if (!$cityId) {
+                        if (! $cityId) {
                             return [];
                         }
 
@@ -195,9 +203,10 @@ class BidResource extends Resource
                                     ->where('clinic_id', $clinic->id);
 
                                 return $query->get()->mapWithKeys(function ($branch) use ($clinic) {
-                                    return [$branch->id => $clinic->name . ' - ' . $branch->name];
+                                    return [$branch->id => $clinic->name.' - '.$branch->name];
                                 });
                             }
+
                             return [];
                         }
 
@@ -212,8 +221,9 @@ class BidResource extends Resource
 
                         return $query->get()->mapWithKeys(function ($branch) {
                             if ($branch->clinic) {
-                                return [$branch->id => $branch->clinic->name . ' - ' . $branch->name];
+                                return [$branch->id => $branch->clinic->name.' - '.$branch->name];
                             }
+
                             return [$branch->id => $branch->name];
                         });
                     })
@@ -266,7 +276,7 @@ class BidResource extends Resource
                     ->live()
                     ->options(function (callable $get) {
                         $branchId = $get('branch_id');
-                        if (!$branchId) {
+                        if (! $branchId) {
                             return [];
                         }
 
@@ -289,6 +299,7 @@ class BidResource extends Resource
                     ->live()
                     ->default(function () {
                         $newStatus = \App\Models\ApplicationStatus::where('slug', 'new')->first();
+
                         return $newStatus ? $newStatus->id : null;
                     }),
                 DateTimePicker::make('appointment_datetime')
@@ -321,7 +332,6 @@ class BidResource extends Resource
                     }),
             ]);
     }
-
 
     public static function table(Table $table): Table
     {

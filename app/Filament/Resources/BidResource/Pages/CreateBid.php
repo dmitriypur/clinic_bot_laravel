@@ -4,13 +4,14 @@ namespace App\Filament\Resources\BidResource\Pages;
 
 use App\Filament\Resources\BidResource;
 use App\Filament\Widgets\BidCalendarWidget;
-use App\Models\Application;
+use App\Services\Admin\AdminApplicationService;
+use App\Services\OneC\Exceptions\OneCBookingException;
 use App\Support\CalendarSettings;
-use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 
 class CreateBid extends CreateRecord
 {
@@ -56,7 +57,7 @@ class CreateBid extends CreateRecord
      */
     protected function getFormDataForCalendar(): array
     {
-        $data = $this->form->getState();
+        $data = $this->form->getRawState();
 
         return [
             'city_id' => $data['city_id'] ?? null,
@@ -93,9 +94,13 @@ class CreateBid extends CreateRecord
         }
 
         // Получаем текущие данные формы
-        $currentData = $this->form->getState();
+        $currentData = $this->form->getRawState();
 
         // Обновляем только поля связанные с календарем, сохраняя уже заполненные данные
+        $selectedOnecSlotId = array_key_exists('onec_slot_id', $slotData)
+            ? $slotData['onec_slot_id']
+            : null;
+
         $this->form->fill([
             'city_id' => $slotData['city_id'] ?? $currentData['city_id'] ?? null,
             'clinic_id' => $slotData['clinic_id'] ?? $currentData['clinic_id'] ?? null,
@@ -103,6 +108,7 @@ class CreateBid extends CreateRecord
             'cabinet_id' => $slotData['cabinet_id'] ?? $currentData['cabinet_id'] ?? null,
             'doctor_id' => $slotData['doctor_id'] ?? $currentData['doctor_id'] ?? null,
             'appointment_datetime' => $slotData['appointment_datetime'] ?? null,
+            'onec_slot_id' => $selectedOnecSlotId,
             // Сохраняем уже заполненные обязательные поля
             'full_name' => $currentData['full_name'] ?? null,
             'full_name_parent' => $currentData['full_name_parent'] ?? null,
@@ -127,7 +133,7 @@ class CreateBid extends CreateRecord
 
         try {
             // Получаем текущие данные формы
-            $currentData = $this->form->getState();
+            $currentData = $this->form->getRawState();
 
             // Объединяем данные формы с данными слота
             $applicationData = array_merge($currentData, $slotData);
@@ -137,6 +143,10 @@ class CreateBid extends CreateRecord
             if ($appointmentStatus) {
                 $applicationData['status_id'] = $appointmentStatus->id;
             }
+
+            $applicationData['onec_slot_id'] = array_key_exists('onec_slot_id', $slotData)
+                ? $slotData['onec_slot_id']
+                : null;
 
             // Обновляем форму с новыми данными
             $this->form->fill($applicationData);
@@ -150,15 +160,15 @@ class CreateBid extends CreateRecord
 
         } catch (\Exception $e) {
             // Логируем ошибку
-            \Log::error('Ошибка обновления заявки данными слота: ' . $e->getMessage(), [
+            \Log::error('Ошибка обновления заявки данными слота: '.$e->getMessage(), [
                 'slotData' => $slotData,
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             // Показываем уведомление об ошибке
             Notification::make()
                 ->title('Ошибка обновления')
-                ->body('Ошибка: ' . $e->getMessage())
+                ->body('Ошибка: '.$e->getMessage())
                 ->danger()
                 ->send();
         }
@@ -200,8 +210,26 @@ class CreateBid extends CreateRecord
                 $data['appointment_datetime'] = null;
             }
 
-            // Создаем новую заявку
-            $application = Application::create($data);
+            $slotExternalId = $data['onec_slot_id'] ?? null;
+
+            $branch = $data['branch_id'] ?? null;
+
+            if ($branch && app(AdminApplicationService::class)->branchRequiresOneCSlot((int) $branch) && ! $slotExternalId) {
+                Notification::make()
+                    ->title('Выберите слот 1С')
+                    ->body('Для этого филиала запись создаётся только через календарь со слотами 1С.')
+                    ->danger()
+                    ->send();
+
+                throw ValidationException::withMessages([
+                    'appointment_datetime' => 'Выберите время в календаре (слот 1С).',
+                ]);
+            }
+
+            $application = app(AdminApplicationService::class)->create($data, [
+                'onec_slot_id' => $slotExternalId,
+                'appointment_source' => 'Админка',
+            ]);
 
             if ($another) {
                 // Если создаем еще одну заявку - очищаем форму
@@ -213,17 +241,31 @@ class CreateBid extends CreateRecord
                 // Перенаправляем на страницу редактирования
                 $this->redirect(static::getResource()::getUrl('edit', ['record' => $application]));
             }
+        } catch (ValidationException $exception) {
+            Notification::make()
+                ->title('Запись не сохранена')
+                ->body($exception->getMessage() ?: '1С отклонила запись. Проверьте время или обновите слот.')
+                ->danger()
+                ->send();
+
+            $this->setErrorBag($exception->validator?->errors() ?? $exception->errors());
+        } catch (OneCBookingException $exception) {
+            Notification::make()
+                ->title('1С отклонила запись')
+                ->body($exception->getMessage())
+                ->danger()
+                ->send();
         } catch (\Exception $e) {
             // Логируем ошибку с деталями
-            \Log::error('Ошибка создания заявки: ' . $e->getMessage(), [
+            \Log::error('Ошибка создания заявки: '.$e->getMessage(), [
                 'data' => $data,
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             // Показываем уведомление об ошибке с деталями
             \Filament\Notifications\Notification::make()
                 ->title('Ошибка создания заявки')
-                ->body('Ошибка: ' . $e->getMessage())
+                ->body('Ошибка: '.$e->getMessage())
                 ->danger()
                 ->send();
         }

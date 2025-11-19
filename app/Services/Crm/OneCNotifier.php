@@ -5,6 +5,7 @@ namespace App\Services\Crm;
 use App\Models\Application;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 
 class OneCNotifier extends AbstractHttpNotifier
 {
@@ -23,7 +24,7 @@ class OneCNotifier extends AbstractHttpNotifier
             'promocode' => (string) ($application->promo_code ?? ''),
             'fullname' => (string) ($application->full_name ?? ''),
             'birthday' => (string) ($application->birth_date ?? ''),
-            'phone' => (string) ($application->phone ?? ''),
+            'phone' => $this->formatPhone($application->phone),
             'city' => (string) ($application->city?->name ?? ''),
             'items' => (object) [],
         ];
@@ -38,5 +39,34 @@ class OneCNotifier extends AbstractHttpNotifier
         } catch (RequestException $exception) {
             return new CrmNotificationResult(false, error: $exception->getMessage());
         }
+    }
+
+    private function formatPhone(?string $phone): string
+    {
+        $digits = preg_replace('/\D+/', '', (string) $phone) ?? '';
+
+        if ($digits === '') {
+            return '';
+        }
+
+        $length = strlen($digits);
+
+        if ($length === 11) {
+            if (Str::startsWith($digits, '7')) {
+                return $digits;
+            }
+
+            if (Str::startsWith($digits, '8')) {
+                return '7' . substr($digits, 1);
+            }
+
+            return '';
+        }
+
+        if ($length === 10) {
+            return '7' . $digits;
+        }
+
+        return '';
     }
 }

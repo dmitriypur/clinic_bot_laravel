@@ -26,8 +26,7 @@ class OneCNotifier extends AbstractHttpNotifier
             'fullname' => (string) ($application->full_name ?? ''),
             'birthday' => $this->formatBirthday($application->birth_date),
             'phone' => $this->formatPhone($application->phone),
-            'city' => (string) ($application->city?->name ?? ''),
-            'items' => (object) [],
+            'city' => (string) ($application->city?->name ?? '')
         ];
 
         try {
@@ -36,7 +35,29 @@ class OneCNotifier extends AbstractHttpNotifier
                 ->post($endpoint, $payload)
                 ->throw();
 
-            return new CrmNotificationResult(true, $response->json());
+            $responseData = $response->json();
+
+            if (! is_array($responseData)) {
+                return new CrmNotificationResult(false, error: 'Некорректный ответ от 1С.');
+            }
+
+            $failMessage = Arr::get($responseData, 'fail');
+
+            if (is_string($failMessage) && trim($failMessage) !== '') {
+                return new CrmNotificationResult(
+                    false,
+                    $responseData,
+                    error: sprintf('1С вернула ошибку: %s', $failMessage)
+                );
+            }
+
+            $successMessage = Arr::get($responseData, 'responce', Arr::get($responseData, 'response'));
+
+            if (is_string($successMessage) && Str::lower(trim($successMessage)) === 'well done') {
+                return new CrmNotificationResult(true, $responseData);
+            }
+
+            return new CrmNotificationResult(false, $responseData, error: 'Неожиданный ответ от 1С.');
         } catch (RequestException $exception) {
             return new CrmNotificationResult(false, error: $exception->getMessage());
         }

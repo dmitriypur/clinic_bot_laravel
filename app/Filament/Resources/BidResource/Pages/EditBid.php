@@ -20,7 +20,7 @@ class EditBid extends EditRecord
     /**
      * Слушатели событий Livewire
      */
-    protected $listeners = ['slotSelected', 'updateApplicationFromSlot'];
+    protected $listeners = ["slotSelected", "updateApplicationFromSlot"];
 
     /**
      * Инициализация при монтировании компонента
@@ -31,15 +31,13 @@ class EditBid extends EditRecord
 
         if ($this->isCalendarEnabled()) {
             // Отправляем начальные данные формы в календарь
-            $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
+            $this->dispatch("formDataUpdated", $this->getFormDataForCalendar());
         }
     }
 
     protected function getHeaderActions(): array
     {
-        return [
-            Actions\DeleteAction::make(),
-        ];
+        return [Actions\DeleteAction::make()];
     }
 
     /**
@@ -48,13 +46,13 @@ class EditBid extends EditRecord
      */
     protected function getFooterWidgets(): array
     {
-        if (! $this->isCalendarEnabled()) {
+        if (!$this->isCalendarEnabled()) {
             return [];
         }
 
         return [
             BidCalendarWidget::make([
-                'formData' => $this->getFormDataForCalendar(),
+                "formData" => $this->getFormDataForCalendar(),
             ]),
         ];
     }
@@ -67,11 +65,11 @@ class EditBid extends EditRecord
         $data = $this->form->getState();
 
         return [
-            'city_id' => $data['city_id'] ?? null,
-            'clinic_id' => $data['clinic_id'] ?? null,
-            'branch_id' => $data['branch_id'] ?? null,
-            'doctor_id' => $data['doctor_id'] ?? null,
-            'cabinet_id' => $data['cabinet_id'] ?? null,
+            "city_id" => $data["city_id"] ?? null,
+            "clinic_id" => $data["clinic_id"] ?? null,
+            "branch_id" => $data["branch_id"] ?? null,
+            "doctor_id" => $data["doctor_id"] ?? null,
+            "cabinet_id" => $data["cabinet_id"] ?? null,
         ];
     }
 
@@ -81,12 +79,21 @@ class EditBid extends EditRecord
     public function updated($property): void
     {
         // Обновляем календарь при изменении полей фильтрации
-        if ($this->isCalendarEnabled() && in_array($property, ['data.city_id', 'data.clinic_id', 'data.branch_id', 'data.doctor_id', 'data.cabinet_id'])) {
-            $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
+        if (
+            $this->isCalendarEnabled() &&
+            in_array($property, [
+                "data.city_id",
+                "data.clinic_id",
+                "data.branch_id",
+                "data.doctor_id",
+                "data.cabinet_id",
+            ])
+        ) {
+            $this->dispatch("formDataUpdated", $this->getFormDataForCalendar());
         }
 
         // При изменении статуса обновляем виджеты
-        if ($property === 'data.status_id') {
+        if ($property === "data.status_id") {
             $this->dispatch('$refresh');
         }
     }
@@ -96,7 +103,7 @@ class EditBid extends EditRecord
      */
     public function slotSelected($slotData): void
     {
-        if (! $this->isCalendarEnabled()) {
+        if (!$this->isCalendarEnabled()) {
             return;
         }
 
@@ -105,23 +112,28 @@ class EditBid extends EditRecord
 
         // Обновляем только поля связанные с календарем, сохраняя уже заполненные данные
         $this->form->fill([
-            'city_id' => $slotData['city_id'] ?? $currentData['city_id'] ?? null,
-            'clinic_id' => $slotData['clinic_id'] ?? $currentData['clinic_id'] ?? null,
-            'branch_id' => $slotData['branch_id'] ?? $currentData['branch_id'] ?? null,
-            'cabinet_id' => $slotData['cabinet_id'] ?? $currentData['cabinet_id'] ?? null,
-            'doctor_id' => $slotData['doctor_id'] ?? $currentData['doctor_id'] ?? null,
-            'appointment_datetime' => $slotData['appointment_datetime'] ?? null,
+            "city_id" =>
+                $slotData["city_id"] ?? ($currentData["city_id"] ?? null),
+            "clinic_id" =>
+                $slotData["clinic_id"] ?? ($currentData["clinic_id"] ?? null),
+            "branch_id" =>
+                $slotData["branch_id"] ?? ($currentData["branch_id"] ?? null),
+            "cabinet_id" =>
+                $slotData["cabinet_id"] ?? ($currentData["cabinet_id"] ?? null),
+            "doctor_id" =>
+                $slotData["doctor_id"] ?? ($currentData["doctor_id"] ?? null),
+            "appointment_datetime" => $slotData["appointment_datetime"] ?? null,
             // Сохраняем уже заполненные обязательные поля
-            'full_name' => $currentData['full_name'] ?? null,
-            'full_name_parent' => $currentData['full_name_parent'] ?? null,
-            'phone' => $currentData['phone'] ?? null,
-            'birth_date' => $currentData['birth_date'] ?? null,
-            'promo_code' => $currentData['promo_code'] ?? null,
-            'status_id' => $currentData['status_id'] ?? null,
+            "full_name" => $currentData["full_name"] ?? null,
+            "full_name_parent" => $currentData["full_name_parent"] ?? null,
+            "phone" => $currentData["phone"] ?? null,
+            "birth_date" => $currentData["birth_date"] ?? null,
+            "promo_code" => $currentData["promo_code"] ?? null,
+            "status_id" => $currentData["status_id"] ?? null,
         ]);
 
         // Обновляем календарь с новыми данными
-        $this->dispatch('formDataUpdated', $this->getFormDataForCalendar());
+        $this->dispatch("formDataUpdated", $this->getFormDataForCalendar());
     }
 
     /**
@@ -129,11 +141,11 @@ class EditBid extends EditRecord
      */
     public function getFooter(): ?View
     {
-        if (! $this->isCalendarEnabled()) {
+        if (!$this->isCalendarEnabled()) {
             return null;
         }
 
-        return view('filament.pages.bid-calendar-integration');
+        return view("filament.pages.bid-calendar-integration");
     }
 
     /**
@@ -141,7 +153,7 @@ class EditBid extends EditRecord
      */
     public function updateApplicationFromSlot($slotData): void
     {
-        if (! $this->isCalendarEnabled()) {
+        if (!$this->isCalendarEnabled()) {
             return;
         }
 
@@ -153,9 +165,12 @@ class EditBid extends EditRecord
             $applicationData = array_merge($currentData, $slotData);
 
             // Устанавливаем статус "Запись на прием"
-            $appointmentStatus = \App\Models\ApplicationStatus::where('slug', 'appointment')->first();
+            $appointmentStatus = \App\Models\ApplicationStatus::where(
+                "slug",
+                "appointment",
+            )->first();
             if ($appointmentStatus) {
-                $applicationData['status_id'] = $appointmentStatus->id;
+                $applicationData["status_id"] = $appointmentStatus->id;
             }
 
             // Обновляем форму с новыми данными
@@ -163,23 +178,28 @@ class EditBid extends EditRecord
 
             // Показываем уведомление об успехе
             Notification::make()
-                ->title('Время выбрано')
-                ->body('Время приема выбрано из календаря. Статус изменен на "Запись на прием"')
+                ->title("Время выбрано")
+                ->body(
+                    'Время приема выбрано из календаря. Статус изменен на "Запись на прием"',
+                )
                 ->success()
                 ->send();
-
         } catch (\Exception $e) {
             // Логируем ошибку
-            \Log::error('Ошибка обновления заявки данными слота в EditBid: ' . $e->getMessage(), [
-                'slotData' => $slotData,
-                'currentRecord' => $this->record->id,
-                'trace' => $e->getTraceAsString()
-            ]);
+            \Log::error(
+                "Ошибка обновления заявки данными слота в EditBid: " .
+                    $e->getMessage(),
+                [
+                    "slotData" => $slotData,
+                    "currentRecord" => $this->record->id,
+                    "trace" => $e->getTraceAsString(),
+                ],
+            );
 
             // Показываем уведомление об ошибке
             Notification::make()
-                ->title('Ошибка обновления')
-                ->body('Ошибка: ' . $e->getMessage())
+                ->title("Ошибка обновления")
+                ->body("Ошибка: " . $e->getMessage())
                 ->danger()
                 ->send();
         }
@@ -188,20 +208,34 @@ class EditBid extends EditRecord
     /**
      * Сохранение изменений заявки
      */
-    public function save(bool $shouldRedirect = true, bool $shouldSendSavedNotification = true): void
-    {
+    public function save(
+        bool $shouldRedirect = true,
+        bool $shouldSendSavedNotification = true,
+    ): void {
         try {
             $data = $this->form->getState();
 
-            if (isset($data['phone'])) {
-                $digitsOnly = preg_replace('/\D+/', '', $data['phone']);
-                $data['phone'] = $digitsOnly ?: null;
+            if (isset($data["phone"])) {
+                $digitsOnly = preg_replace("/\D+/", "", $data["phone"]);
+                $data["phone"] = $digitsOnly ?: null;
+            }
+
+            // Валидация: если выбран город, то клиника обязательна
+            if (!empty($data["city_id"]) && empty($data["clinic_id"])) {
+                \Filament\Notifications\Notification::make()
+                    ->title("Ошибка валидации")
+                    ->body(
+                        "Поле клиника обязательно для заполнения при выборе города.",
+                    )
+                    ->danger()
+                    ->send();
+                return;
             }
 
             // Если статус "Новая" или "Отменен" - очищаем appointment_datetime
-            $status = ApplicationStatus::find($data['status_id']);
-            if ($status && in_array($status->slug, ['new', 'bid_cancelled'])) {
-                $data['appointment_datetime'] = null;
+            $status = ApplicationStatus::find($data["status_id"]);
+            if ($status && in_array($status->slug, ["new", "bid_cancelled"])) {
+                $data["appointment_datetime"] = null;
             }
 
             // Обновляем заявку
@@ -210,28 +244,28 @@ class EditBid extends EditRecord
             if ($shouldSendSavedNotification) {
                 // Показываем уведомление об успешном сохранении
                 \Filament\Notifications\Notification::make()
-                    ->title('Заявка сохранена')
-                    ->body('Изменения в заявке успешно сохранены.')
+                    ->title("Заявка сохранена")
+                    ->body("Изменения в заявке успешно сохранены.")
                     ->success()
                     ->send();
             }
 
             if ($shouldRedirect) {
                 // Перенаправляем на список заявок
-                $this->redirect(static::getResource()::getUrl('index'));
+                $this->redirect(static::getResource()::getUrl("index"));
             }
         } catch (\Exception $e) {
             // Логируем ошибку с деталями
-            \Log::error('Ошибка сохранения заявки: ' . $e->getMessage(), [
-                'data' => $data,
-                'record_id' => $this->record->id,
-                'trace' => $e->getTraceAsString()
+            \Log::error("Ошибка сохранения заявки: " . $e->getMessage(), [
+                "data" => $data,
+                "record_id" => $this->record->id,
+                "trace" => $e->getTraceAsString(),
             ]);
 
             // Показываем уведомление об ошибке с деталями
             \Filament\Notifications\Notification::make()
-                ->title('Ошибка сохранения заявки')
-                ->body('Ошибка: ' . $e->getMessage())
+                ->title("Ошибка сохранения заявки")
+                ->body("Ошибка: " . $e->getMessage())
                 ->danger()
                 ->send();
         }
@@ -247,9 +281,9 @@ class EditBid extends EditRecord
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        if (isset($data['phone'])) {
-            $digitsOnly = preg_replace('/\D+/', '', $data['phone']);
-            $data['phone'] = $digitsOnly ?: null;
+        if (isset($data["phone"])) {
+            $digitsOnly = preg_replace("/\D+/", "", $data["phone"]);
+            $data["phone"] = $digitsOnly ?: null;
         }
 
         return $data;
@@ -257,9 +291,9 @@ class EditBid extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        if (isset($data['phone'])) {
-            $digitsOnly = preg_replace('/\D+/', '', $data['phone']);
-            $data['phone'] = $digitsOnly ?: null;
+        if (isset($data["phone"])) {
+            $digitsOnly = preg_replace("/\D+/", "", $data["phone"]);
+            $data["phone"] = $digitsOnly ?: null;
         }
 
         return $data;

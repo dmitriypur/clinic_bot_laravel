@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Exports\ApplicationExporter;
+use App\Filament\Filters\ApplicationFilters;
 use App\Filament\Resources\BidResource\Pages;
 use App\Models\Application;
 use App\Models\Clinic;
@@ -432,6 +433,14 @@ class BidResource extends Resource
                     ->dateTime("d.m.Y H:i")
                     ->sortable()
                     ->toggleable(),
+                TextColumn::make('phone')
+                    ->label('Телефон')
+                    ->sortable()
+                    ->toggleable(),
+                TextColumn::make('promo_code')
+                    ->label('Промокод')
+                    ->sortable()
+                    ->toggleable(),
                 TextColumn::make("status.name")
                     ->label("Статус")
                     ->badge()
@@ -443,7 +452,9 @@ class BidResource extends Resource
                     ->toggleable()
                     ->sortable(),
             ])
-            ->filters([])
+            ->filters([
+                ApplicationFilters::make(),
+            ])
             ->actions([Tables\Actions\EditAction::make()])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

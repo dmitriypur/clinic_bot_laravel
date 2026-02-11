@@ -5,6 +5,7 @@ namespace App\Filament\Filters;
 use App\Services\CalendarFilterService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Tables\Filters\Filter;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -81,6 +82,10 @@ class ApplicationFilters extends Filter
                             ->pluck('name', 'id')
                             ->toArray();
                     }),
+                TextInput::make('promo_code')
+                    ->label('Промокод'),
+                TextInput::make('phone')
+                    ->label('Телефон'),
             ])
             ->query(function (Builder $query, array $data): Builder {
                 $filterService = app(CalendarFilterService::class);
@@ -92,6 +97,8 @@ class ApplicationFilters extends Filter
                     'branch_ids' => $data['branch_ids'] ?? [],
                     'doctor_ids' => $data['doctor_ids'] ?? [],
                     'status_ids' => $data['status_ids'] ?? [],
+                    'promo_code' => $data['promo_code'] ?? null,
+                    'phone' => $data['phone'] ?? null,
                 ];
 
                 return $filterService->applyApplicationFilters($query, $filters, $user);

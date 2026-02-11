@@ -489,7 +489,14 @@ class ApplicationResource extends Resource
                     ->dateTime('d.m.Y H:i')
                     ->sortable()
                     ->toggleable(),
-
+                TextColumn::make('phone')
+                    ->label('Телефон')
+                    ->sortable()
+                    ->toggleable(),
+                TextColumn::make('promo_code')
+                    ->label('Промокод')
+                    ->sortable()
+                    ->toggleable(),
                 TextColumn::make('status.name')
                     ->label('Статус')
                     ->badge()

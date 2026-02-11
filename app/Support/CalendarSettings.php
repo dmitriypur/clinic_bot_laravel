@@ -23,7 +23,7 @@ class CalendarSettings
      */
     public static function isEnabledForUser(?User $user): bool
     {
-        if (!$user) {
+        if (! $user) {
             return self::valueOrDefault(self::BASE_KEY, true);
         }
 
@@ -60,8 +60,9 @@ class CalendarSettings
      */
     public static function setEnabledForUser(?User $user, bool $enabled): void
     {
-        if (!$user) {
+        if (! $user) {
             SystemSetting::setValue(self::BASE_KEY, $enabled);
+
             return;
         }
 
@@ -84,7 +85,7 @@ class CalendarSettings
 
     public static function isEnabledForClinic(?Clinic $clinic): bool
     {
-        if (!$clinic) {
+        if (! $clinic) {
             return true;
         }
 
@@ -97,14 +98,14 @@ class CalendarSettings
     protected static function resolveKeyForUser(User $user): string
     {
         if ($user->isSuperAdmin()) {
-            return self::BASE_KEY . '_user_' . $user->id;
+            return self::BASE_KEY.'_user_'.$user->id;
         }
 
         if ($user->clinic_id) {
-            return self::BASE_KEY . '_clinic_' . $user->clinic_id;
+            return self::BASE_KEY.'_clinic_'.$user->clinic_id;
         }
 
-        return self::BASE_KEY . '_user_' . $user->id;
+        return self::BASE_KEY.'_user_'.$user->id;
     }
 
     /**

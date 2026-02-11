@@ -6,9 +6,7 @@ use Illuminate\Http\Client\Factory as HttpFactory;
 
 class CrmNotifierFactory
 {
-    public function __construct(private readonly HttpFactory $http)
-    {
-    }
+    public function __construct(private readonly HttpFactory $http) {}
 
     public function make(string $provider): ?CrmNotifierInterface
     {

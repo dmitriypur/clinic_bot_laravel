@@ -26,7 +26,7 @@ class SystemSetting extends Model
      */
     public static function getValue(string $key, mixed $default = null): mixed
     {
-        if (!Schema::hasTable('system_settings')) {
+        if (! Schema::hasTable('system_settings')) {
             return $default;
         }
 
@@ -48,7 +48,7 @@ class SystemSetting extends Model
      */
     public static function setValue(string $key, mixed $value): void
     {
-        if (!Schema::hasTable('system_settings')) {
+        if (! Schema::hasTable('system_settings')) {
             return;
         }
 
@@ -62,6 +62,6 @@ class SystemSetting extends Model
 
     protected static function cacheKey(string $key): string
     {
-        return 'system_setting_' . $key;
+        return 'system_setting_'.$key;
     }
 }

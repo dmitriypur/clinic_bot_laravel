@@ -394,8 +394,15 @@ const validateFields = () => {
     if (!trimmedChildFio) {
         childFioError.value = childFioEmptyMessage
         isValid = false
-    } else if (childFioError.value === childFioEmptyMessage || childFioError.value === 'Можно вводить только буквы') {
-        childFioError.value = ''
+    } else {
+        // Проверяем, что введено хотя бы 2 слова (Фамилия и Имя)
+        const words = trimmedChildFio.split(/\s+/).filter(w => w.length > 0)
+        if (words.length < 2) {
+            childFioError.value = 'Укажите Фамилию и Имя ребенка'
+            isValid = false
+        } else {
+            childFioError.value = ''
+        }
     }
 
     const phoneDigits = (props.phone || '').replace(/\D/g, '')

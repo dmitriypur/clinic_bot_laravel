@@ -24,7 +24,7 @@ class LegacySqlImportSeeder extends Seeder
 
     public function run(): void
     {
-        if (!is_dir($this->dumpDirectory)) {
+        if (! is_dir($this->dumpDirectory)) {
             throw new \RuntimeException(sprintf('Устаревший каталог дампа не найден: %s', $this->dumpDirectory));
         }
 
@@ -132,7 +132,7 @@ class LegacySqlImportSeeder extends Seeder
             $doctor->timestamps = true;
         }
 
-        if (!empty($rows)) {
+        if (! empty($rows)) {
             $this->resetAutoIncrement('doctors');
         }
     }
@@ -171,7 +171,7 @@ class LegacySqlImportSeeder extends Seeder
             $email = $this->makeEmailFromUsername($username, (int) $id, $emailPool);
 
             $attributes = [
-                'name' => $username ?: ('Legacy User #' . $id),
+                'name' => $username ?: ('Legacy User #'.$id),
                 'email' => $email,
                 'password' => '123456',
                 'clinic_id' => $clinicId !== null ? (int) $clinicId : null,
@@ -210,7 +210,7 @@ class LegacySqlImportSeeder extends Seeder
         foreach ($rows as $values) {
             [, $clinicId, $cityId] = $values + [null, null, null];
 
-            if (!$clinicId || !$cityId) {
+            if (! $clinicId || ! $cityId) {
                 continue;
             }
 
@@ -231,7 +231,7 @@ class LegacySqlImportSeeder extends Seeder
         foreach ($rows as $values) {
             [, $clinicId, $doctorId] = $values + [null, null, null];
 
-            if (!$clinicId || !$doctorId) {
+            if (! $clinicId || ! $doctorId) {
                 continue;
             }
 
@@ -249,7 +249,7 @@ class LegacySqlImportSeeder extends Seeder
     {
         $path = $this->getDumpPath($fileName);
 
-        if (!is_file($path)) {
+        if (! is_file($path)) {
             return [];
         }
 
@@ -283,16 +283,19 @@ class LegacySqlImportSeeder extends Seeder
                 if ($inString && $i + 1 < $length && $valueString[$i + 1] === "'") {
                     $buffer .= "'";
                     $i++;
+
                     continue;
                 }
 
-                $inString = !$inString;
+                $inString = ! $inString;
+
                 continue;
             }
 
-            if ($char === ',' && !$inString) {
+            if ($char === ',' && ! $inString) {
                 $values[] = $this->normalizeSqlValue(trim($buffer));
                 $buffer = '';
+
                 continue;
             }
 
@@ -323,7 +326,7 @@ class LegacySqlImportSeeder extends Seeder
             return false;
         }
 
-        if (is_numeric($value) && !str_contains($value, 'e')) {
+        if (is_numeric($value) && ! str_contains($value, 'e')) {
             return str_contains($value, '.') ? (float) $value : (int) $value;
         }
 
@@ -345,7 +348,7 @@ class LegacySqlImportSeeder extends Seeder
 
     private function toCarbon($value): ?Carbon
     {
-        if (!$value) {
+        if (! $value) {
             return null;
         }
 
@@ -359,16 +362,16 @@ class LegacySqlImportSeeder extends Seeder
     private function makeEmailFromUsername(?string $username, int $id, array &$emailPool): string
     {
         $base = $username ? Str::slug($username, '.') : null;
-        if (!$base) {
-            $base = 'legacy-user-' . $id;
+        if (! $base) {
+            $base = 'legacy-user-'.$id;
         }
 
         $domain = 'legacy.imported';
-        $candidate = $base . '@' . $domain;
+        $candidate = $base.'@'.$domain;
         $suffix = 1;
 
         while (isset($emailPool[$candidate])) {
-            $candidate = $base . '+' . $suffix . '@' . $domain;
+            $candidate = $base.'+'.$suffix.'@'.$domain;
             $suffix++;
         }
 
@@ -379,7 +382,7 @@ class LegacySqlImportSeeder extends Seeder
 
     private function getDumpPath(string $fileName): string
     {
-        return $this->dumpDirectory . DIRECTORY_SEPARATOR . $fileName;
+        return $this->dumpDirectory.DIRECTORY_SEPARATOR.$fileName;
     }
 
     private function resetAutoIncrement(string $table): void
@@ -401,7 +404,7 @@ class LegacySqlImportSeeder extends Seeder
             }
         } elseif ($driver === 'mysql') {
             try {
-                DB::statement("ALTER TABLE {$table} AUTO_INCREMENT = " . ($maxId + 1));
+                DB::statement("ALTER TABLE {$table} AUTO_INCREMENT = ".($maxId + 1));
             } catch (\Throwable) {
                 // Ignore if permission is missing
             }

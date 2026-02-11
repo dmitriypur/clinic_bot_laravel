@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\DoctorResource\Pages;
 
 use App\Filament\Resources\DoctorResource;
-use Filament\Actions;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateDoctor extends CreateRecord
@@ -19,7 +18,7 @@ class CreateDoctor extends CreateRecord
     {
         // Сохраняем связи с филиалами после создания врача
         $branchIds = $this->data['branch_ids'] ?? [];
-        if (!empty($branchIds)) {
+        if (! empty($branchIds)) {
             $this->record->branches()->sync($branchIds);
         }
     }
@@ -28,6 +27,7 @@ class CreateDoctor extends CreateRecord
     {
         // Убираем branch_ids из основных данных, чтобы избежать ошибок
         unset($data['branch_ids']);
+
         return $data;
     }
 }

@@ -28,7 +28,7 @@ return new class extends Migration
             $table->uuid('uuid')->unique();
             $table->string('review_link', 500)->nullable();
             $table->timestamps();
-            
+
             $table->index('status');
             $table->index('uuid');
         });

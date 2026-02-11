@@ -28,7 +28,7 @@ class ClearCalendarCache extends Command
     {
         $user = $this->option('user');
         $all = $this->option('all');
-        
+
         if ($all) {
             // Очищаем весь кэш календаря
             $this->clearAllCalendarCache();
@@ -41,53 +41,55 @@ class ClearCalendarCache extends Command
                 $this->clearUserCalendarCache(auth()->id());
             } else {
                 $this->error('No user specified and no authenticated user found.');
+
                 return 1;
             }
         }
-        
+
         $this->info('Calendar cache cleared successfully!');
+
         return 0;
     }
-    
+
     /**
      * Очищает весь кэш календаря
      */
     private function clearAllCalendarCache(): void
     {
         $this->info('Clearing all calendar cache...');
-        
+
         $keys = Cache::get('calendar_cache_keys', []);
-        
+
         foreach ($keys as $key) {
             Cache::forget($key);
         }
-        
+
         Cache::forget('calendar_cache_keys');
-        
+
         $this->info('All calendar cache cleared.');
     }
-    
+
     /**
      * Очищает кэш для конкретного пользователя
      */
     private function clearUserCalendarCache($userId): void
     {
         $this->info("Clearing calendar cache for user {$userId}...");
-        
+
         // Удаляем все ключи кэша, связанные с пользователем
         $pattern = "calendar_*_{$userId}";
-        
+
         // Получаем все ключи кэша
         $keys = Cache::get('calendar_cache_keys', []);
-        
-        $userKeys = array_filter($keys, function($key) use ($userId) {
+
+        $userKeys = array_filter($keys, function ($key) use ($userId) {
             return str_contains($key, "_{$userId}");
         });
-        
+
         foreach ($userKeys as $key) {
             Cache::forget($key);
         }
-        
+
         $this->info("Calendar cache cleared for user {$userId}.");
     }
 }

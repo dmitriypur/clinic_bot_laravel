@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('name', 500);
             $table->integer('status');
             $table->timestamps();
-            
+
             $table->index('name');
             $table->index('status');
         });

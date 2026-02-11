@@ -54,11 +54,10 @@ class ListApplications extends ListRecords
         parent::mount();
         $this->isCalendarEnabled = CalendarSettings::isEnabledForUser(Auth::user());
 
-        if (!$this->isCalendarEnabled) {
+        if (! $this->isCalendarEnabled) {
             $this->activeTab = 'list';
-        } elseif (!$this->activeTab) {
+        } elseif (! $this->activeTab) {
             $this->activeTab = 'calendar';
         }
     }
-
 }

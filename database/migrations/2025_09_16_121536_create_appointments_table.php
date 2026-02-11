@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('appointments')) {
+            return;
+        }
+
         Schema::create('appointments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('application_id')->constrained()->onDelete('cascade');
@@ -19,7 +23,7 @@ return new class extends Migration
             $table->timestamp('completed_at')->nullable();
             $table->text('notes')->nullable(); // Заметки врача
             $table->timestamps();
-            
+
             // Индексы для оптимизации
             $table->index(['application_id', 'status']);
             $table->index('started_at');

@@ -2,8 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Filament\Widgets\AllCabinetsScheduleWidget;
-use App\Filament\Widgets\AppointmentCalendarWidget;
 use App\Support\CalendarSettings;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
@@ -31,31 +29,15 @@ class Dashboard extends Page
     public ?string $activeTab = 'appointments';
 
     /**
-     * Получение виджетов для страницы
-     */
-    public function getWidgets(): array
-    {
-        $widgets = [
-            AllCabinetsScheduleWidget::class,
-        ];
-
-        if (CalendarSettings::isEnabledForUser(Auth::user())) {
-            array_unshift($widgets, AppointmentCalendarWidget::class);
-        }
-
-        return $widgets;
-    }
-
-    /**
      * Инициализация активного таба
      */
     public function mount(): void
     {
         $this->isCalendarEnabled = CalendarSettings::isEnabledForUser(Auth::user());
 
-        if (!$this->isCalendarEnabled) {
+        if (! $this->isCalendarEnabled) {
             $this->activeTab = 'schedule';
-        } elseif (!$this->activeTab) {
+        } elseif (! $this->activeTab) {
             $this->activeTab = 'appointments';
         }
     }
@@ -67,18 +49,21 @@ class Dashboard extends Page
         if ($user && $user->isDoctor()) {
             $this->isCalendarEnabled = true;
             $this->activeTab = $this->activeTab ?? 'appointments';
+
             return;
         }
 
         if ($user && $user->isPartner()) {
             $this->isCalendarEnabled = CalendarSettings::isEnabledForUser($user);
             $this->activeTab = $this->isCalendarEnabled ? ($this->activeTab ?? 'appointments') : 'schedule';
+
             return;
         }
 
-        if (!$user || (! $user->isSuperAdmin() && ! $user->hasRole('admin'))) {
+        if (! $user || (! $user->isSuperAdmin() && ! $user->hasRole('admin'))) {
             $this->isCalendarEnabled = CalendarSettings::isEnabledForUser($user);
             $this->activeTab = $this->isCalendarEnabled ? ($this->activeTab ?? 'appointments') : 'schedule';
+
             return;
         }
 
@@ -87,7 +72,7 @@ class Dashboard extends Page
 
         CalendarSettings::setEnabledForUser($user, $enabled);
 
-        if (!$enabled) {
+        if (! $enabled) {
             $this->activeTab = 'schedule';
         } elseif ($this->activeTab !== 'appointments') {
             $this->activeTab = 'appointments';
@@ -95,5 +80,4 @@ class Dashboard extends Page
 
         $this->isCalendarEnabled = $enabled;
     }
-
 }

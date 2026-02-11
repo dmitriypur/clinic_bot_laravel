@@ -32,9 +32,9 @@
                 </div>
                 @if($canToggleCalendar)
                     <label class="inline-flex gap-2 items-center cursor-pointer select-none space-x-3 rounded-full focus-within:outline-none focus-within:ring-2 focus-within:ring-primary-500 focus-within:ring-offset-2">
-                        <input
-                            type="checkbox"
-                            wire:model.live="isCalendarEnabled"
+                        <input 
+                            type="checkbox" 
+                            wire:model.live="isCalendarEnabled" 
                             class="sr-only focus-visible:outline-none"
                             aria-label="Переключить отображение календаря заявок"
                         >
@@ -70,7 +70,7 @@
         @if($isCalendarEnabled)
             <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-1">
                 <div class="flex space-x-1" role="tablist">
-                    <button
+                    <button 
                         wire:click="$set('activeTab', 'appointments')"
                         role="tab"
                         class="flex-1 inline-flex items-center justify-center px-4 py-3 text-sm font-medium rounded-md transition-all duration-200 {{ $activeTab === 'appointments' ? 'bg-primary-500 text-white shadow-lg transform scale-105' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700' }}"
@@ -78,8 +78,8 @@
                         <x-heroicon-o-calendar-days class="w-5 h-5 mr-2" />
                         Заявки
                     </button>
-
-                    <button
+                    
+                    <button 
                         wire:click="$set('activeTab', 'schedule')"
                         role="tab"
                         class="flex-1 inline-flex items-center justify-center px-4 py-3 text-sm font-medium rounded-md transition-all duration-200 {{ $activeTab === 'schedule' ? 'bg-primary-500 text-white shadow-lg transform scale-105' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700' }}"
@@ -111,29 +111,35 @@
                 </div>
             @endif
         </div>
+
+        @if($user?->isSuperAdmin())
+            <div class="fi-wi-widget">
+                @livewire(\App\Filament\Widgets\IntegrationStatusWidget::class)
+            </div>
+        @endif
     </div>
 
     <style>
         .tab-content {
             min-height: 600px;
         }
-
+        
         .fi-wi-widget {
             background: white;
             border-radius: 0.5rem;
             box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
-
+        
         .dark .fi-wi-widget {
             background: #1f2937;
             box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px 0 rgba(0, 0, 0, 0.2);
         }
-
+        
         /* Анимация переключения табов */
         .tab-content > div {
             animation: fadeIn 0.3s ease-in-out;
         }
-
+        
         @keyframes fadeIn {
             from {
                 opacity: 0;

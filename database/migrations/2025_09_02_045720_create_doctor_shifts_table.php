@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Миграция для создания таблицы смен врачей
- * 
+ *
  * Создает таблицу doctor_shifts для хранения информации о сменах врачей в кабинетах.
  * Каждая смена привязана к врачу и кабинету, имеет время начала/окончания и длительность слота.
  * Включает уникальные ограничения для предотвращения конфликтов расписания.
@@ -20,7 +20,7 @@ return new class extends Migration
     {
         Schema::create('doctor_shifts', function (Blueprint $table) {
             $table->id();  // Первичный ключ
-            
+
             // Связи с другими таблицами
             $table->foreignId('doctor_id')->constrained('doctors')->onDelete('cascade');  // Связь с врачом
             $table->foreignId('cabinet_id')->constrained('cabinets')->onDelete('cascade');  // Связь с кабинетом
@@ -38,7 +38,7 @@ return new class extends Migration
             // Индексы для оптимизации запросов
             $table->index(['cabinet_id', 'date'], 'idx_cabinet_date');  // Быстрый поиск по кабинету и дате
             $table->index(['doctor_id', 'date'], 'idx_doctor_date');    // Быстрый поиск по врачу и дате
-            
+
             // Уникальное ограничение для предотвращения дублирования смен
             $table->unique(['doctor_id', 'cabinet_id', 'date', 'start_time', 'end_time'], 'unique_doctor_shift');
         });

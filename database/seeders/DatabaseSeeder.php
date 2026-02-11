@@ -28,7 +28,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'admin@admin.ru',
             'password' => bcrypt('password'),
         ]);
-        
+
         // Назначаем роль super_admin
         $admin->assignRole('super_admin');
     }

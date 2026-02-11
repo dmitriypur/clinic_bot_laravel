@@ -2,9 +2,8 @@
 
 namespace App\Traits;
 
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 
 trait HasCalendarOptimizations
 {
@@ -41,16 +40,16 @@ trait HasCalendarOptimizations
      */
     public function scopeCachedCalendarData(Builder $query, string $cacheKey, int $ttl = 300)
     {
-        $cacheKey = "calendar_{$cacheKey}_" . (auth()->id() ?? 'guest');
-        
+        $cacheKey = "calendar_{$cacheKey}_".(auth()->id() ?? 'guest');
+
         // Сохраняем ключ кэша для последующей очистки
         $existingKeys = \Illuminate\Support\Facades\Cache::get('calendar_cache_keys', []);
-        if (!in_array($cacheKey, $existingKeys)) {
+        if (! in_array($cacheKey, $existingKeys)) {
             $existingKeys[] = $cacheKey;
             \Illuminate\Support\Facades\Cache::put('calendar_cache_keys', $existingKeys, 3600); // 1 час
         }
-        
-        return \Illuminate\Support\Facades\Cache::remember($cacheKey, $ttl, function() use ($query) {
+
+        return \Illuminate\Support\Facades\Cache::remember($cacheKey, $ttl, function () use ($query) {
             return $query->get();
         });
     }
@@ -61,7 +60,7 @@ trait HasCalendarOptimizations
     public function scopeOptimizedDateRange(Builder $query, Carbon $start, Carbon $end): Builder
     {
         return $query->whereBetween('start_time', [$start, $end])
-                    ->orderBy('start_time');
+            ->orderBy('start_time');
     }
 
     /**
@@ -70,15 +69,15 @@ trait HasCalendarOptimizations
     public function scopeBatchCalendarData(Builder $query, array $dateRanges): Builder
     {
         $conditions = [];
-        
+
         foreach ($dateRanges as $range) {
             $conditions[] = [
                 'start_time' => '>=',
                 'end_time' => '<=',
-                'values' => [$range['start'], $range['end']]
+                'values' => [$range['start'], $range['end']],
             ];
         }
-        
+
         return $query->where(function ($q) use ($conditions) {
             foreach ($conditions as $condition) {
                 $q->orWhereBetween('start_time', $condition['values']);
@@ -119,12 +118,12 @@ trait HasCalendarOptimizations
     {
         $startTime = microtime(true);
         $memoryBefore = memory_get_usage();
-        
+
         $results = $query->get();
-        
+
         $endTime = microtime(true);
         $memoryAfter = memory_get_usage();
-        
+
         return [
             'execution_time' => round(($endTime - $startTime) * 1000, 2), // ms
             'memory_usage' => round(($memoryAfter - $memoryBefore) / 1024 / 1024, 2), // MB

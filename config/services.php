@@ -36,7 +36,11 @@ return [
     ],
 
     'telegram' => [
-        'web_app_url' => env('TELEGRAM_WEB_APP_URL', 'https://adminzrenie.ru/app'),
+        'web_app_url' => env('TELEGRAM_WEB_APP_URL', 'https://app.fondzrenie.ru'),
+    ],
+
+    'onec' => [
+        'timeout' => env('ONEC_API_TIMEOUT', 15),
     ],
 
 ];

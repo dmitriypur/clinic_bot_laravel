@@ -19,55 +19,71 @@ class Application extends Model
     use HasCalendarOptimizations;
 
     public $incrementing = true;
-    protected $keyType = 'integer';
+
+    protected $keyType = "integer";
 
     // Константы статусов приема (устаревшие, используйте ApplicationStatus)
-    const STATUS_SCHEDULED = 'scheduled';
-    const STATUS_IN_PROGRESS = 'in_progress';
-    const STATUS_COMPLETED = 'completed';
+    const STATUS_SCHEDULED = "scheduled";
+
+    const STATUS_IN_PROGRESS = "in_progress";
+
+    const STATUS_COMPLETED = "completed";
 
     // Slug-и статусов (новая система статусов заявок)
-    public const STATUS_SLUG_APPOINTMENT_SCHEDULED = 'appointment_scheduled';
-    public const STATUS_SLUG_APPOINTMENT_IN_PROGRESS = 'appointment_in_progress';
-    public const STATUS_SLUG_APPOINTMENT_COMPLETED = 'appointment_completed';
-    public const STATUS_SLUG_APPOINTMENT_CONFIRMED = 'appointment_confirmed';
+    public const STATUS_SLUG_APPOINTMENT_SCHEDULED = "appointment_scheduled";
+
+    public const STATUS_SLUG_APPOINTMENT_IN_PROGRESS = "appointment_in_progress";
+
+    public const STATUS_SLUG_APPOINTMENT_COMPLETED = "appointment_completed";
+
+    public const STATUS_SLUG_APPOINTMENT_CONFIRMED = "appointment_confirmed";
 
     // Константы источников создания заявки
-    const SOURCE_TELEGRAM = 'telegram';
-    const SOURCE_FRONTEND = 'frontend';
+    const SOURCE_TELEGRAM = "telegram";
+
+    const SOURCE_FRONTEND = "frontend";
+
+    public const INTEGRATION_TYPE_LOCAL = "local";
+
+    public const INTEGRATION_TYPE_ONEC = "onec";
 
     protected $fillable = [
-        'city_id',
-        'clinic_id',
-        'branch_id',
-        'doctor_id',
-        'cabinet_id',
-        'appointment_datetime',
-        'full_name_parent',
-        'full_name',
-        'birth_date',
-        'phone',
-        'promo_code',
-        'tg_user_id',
-        'tg_chat_id',
-        'send_to_1c',
-        'appointment_status',
-        'source',
-        'status_id',
+        "city_id",
+        "clinic_id",
+        "branch_id",
+        "doctor_id",
+        "cabinet_id",
+        "appointment_datetime",
+        "full_name_parent",
+        "full_name",
+        "birth_date",
+        "phone",
+        "promo_code",
+        "tg_user_id",
+        "tg_chat_id",
+        "send_to_1c",
+        "appointment_status",
+        "source",
+        "status_id",
+        "external_appointment_id",
+        "integration_type",
+        "integration_status",
+        "integration_payload",
     ];
 
     protected $casts = [
-        'id' => 'integer',
-        'city_id' => 'integer',
-        'clinic_id' => 'integer',
-        'branch_id' => 'integer',
-        'doctor_id' => 'integer',
-        'cabinet_id' => 'integer',
-        'tg_user_id' => 'integer',
-        'tg_chat_id' => 'integer',
-        'send_to_1c' => 'boolean',
-        'appointment_status' => 'string',
-        'status_id' => 'integer',
+        "id" => "integer",
+        "city_id" => "integer",
+        "clinic_id" => "integer",
+        "branch_id" => "integer",
+        "doctor_id" => "integer",
+        "cabinet_id" => "integer",
+        "tg_user_id" => "integer",
+        "tg_chat_id" => "integer",
+        "send_to_1c" => "boolean",
+        "appointment_status" => "string",
+        "status_id" => "integer",
+        "integration_payload" => "array",
     ];
 
     protected function appointmentDatetime(): Attribute
@@ -78,23 +94,24 @@ class Application extends Model
                     return null;
                 }
 
-                $timezone = config('app.timezone', 'UTC');
+                $timezone = config("app.timezone", "UTC");
 
-                return Carbon::parse($value, 'UTC')->setTimezone($timezone);
+                return Carbon::parse($value, "UTC")->setTimezone($timezone);
             },
             set: function ($value) {
                 if (empty($value)) {
                     return null;
                 }
 
-                $timezone = config('app.timezone', 'UTC');
+                $timezone = config("app.timezone", "UTC");
 
-                $date = $value instanceof Carbon
-                    ? $value->copy()
-                    : Carbon::parse($value, $timezone);
+                $date =
+                    $value instanceof Carbon
+                        ? $value->copy()
+                        : Carbon::parse($value, $timezone);
 
-                return $date->setTimezone('UTC');
-            }
+                return $date->setTimezone("UTC");
+            },
         );
     }
 
@@ -117,7 +134,7 @@ class Application extends Model
             if (!$application->clinic_id && $application->branch_id) {
                 $clinicId = Branch::query()
                     ->whereKey($application->branch_id)
-                    ->value('clinic_id');
+                    ->value("clinic_id");
 
                 if ($clinicId) {
                     $application->clinic_id = $clinicId;
@@ -129,15 +146,18 @@ class Application extends Model
         static::updated(function ($application) {
             static::clearCalendarCache();
 
-            if ($application->wasChanged('status_id')) {
+            if ($application->wasChanged("status_id")) {
                 $application->notifyTelegramAboutAppointmentConfirmation();
             }
 
-            if ($application->wasChanged('appointment_datetime')) {
+            if ($application->wasChanged("appointment_datetime")) {
                 $application->scheduleTelegramReminderNotification();
             }
 
-            if ($application->wasChanged('clinic_id') && $application->clinic_id) {
+            if (
+                $application->wasChanged("clinic_id") &&
+                $application->clinic_id
+            ) {
                 app(CrmNotificationService::class)->dispatch($application);
             }
 
@@ -170,14 +190,14 @@ class Application extends Model
     protected static function clearCalendarCache(): void
     {
         // Очищаем все ключи кэша календаря
-        $keys = Cache::get('calendar_cache_keys', []);
+        $keys = Cache::get("calendar_cache_keys", []);
 
         foreach ($keys as $key) {
             Cache::forget($key);
         }
 
         // Очищаем ключ со списком ключей
-        Cache::forget('calendar_cache_keys');
+        Cache::forget("calendar_cache_keys");
     }
 
     public function city(): BelongsTo
@@ -207,12 +227,18 @@ class Application extends Model
 
     public function status(): BelongsTo
     {
-        return $this->belongsTo(ApplicationStatus::class, 'status_id');
+        return $this->belongsTo(ApplicationStatus::class, "status_id");
     }
 
     public function appointment(): HasOne
     {
         return $this->hasOne(Appointment::class);
+    }
+
+    public function usesExternalIntegration(): bool
+    {
+        return $this->integration_type &&
+            $this->integration_type !== self::INTEGRATION_TYPE_LOCAL;
     }
 
     /**
@@ -247,8 +273,8 @@ class Application extends Model
         if ($this->isScheduled() && !$this->appointment) {
             // Создаем новый прием
             $appointment = $this->appointment()->create([
-                'status' => \App\Enums\AppointmentStatus::IN_PROGRESS,
-                'started_at' => now(),
+                "status" => \App\Enums\AppointmentStatus::IN_PROGRESS,
+                "started_at" => now(),
             ]);
 
             if ($appointment) {
@@ -256,21 +282,23 @@ class Application extends Model
                 $this->fillStatusFromSlug(
                     [
                         self::STATUS_SLUG_APPOINTMENT_IN_PROGRESS,
-                        'appointment_in-progress',
-                        'appointment_started',
-                        'appointment-started',
-                        'in_progress',
+                        "appointment_in-progress",
+                        "appointment_started",
+                        "appointment-started",
+                        "in_progress",
                     ],
                     [
-                        'Идет прием',
-                        'Идёт прием',
-                        'Идёт приём',
-                        'Прием в процессе',
-                    ]
+                        "Идет прием",
+                        "Идёт прием",
+                        "Идёт приём",
+                        "Прием в процессе",
+                    ],
                 );
+
                 return $this->save();
             }
         }
+
         return false;
     }
 
@@ -285,9 +313,11 @@ class Application extends Model
 
             if ($appointmentCompleted) {
                 $this->applyCompletedStatus();
+
                 return $this->save();
             }
         }
+
         return false;
     }
 
@@ -296,11 +326,11 @@ class Application extends Model
      */
     public function getStatusLabel(): string
     {
-        return match($this->appointment_status) {
-            self::STATUS_SCHEDULED => 'Запланирован',
-            self::STATUS_IN_PROGRESS => 'В процессе',
-            self::STATUS_COMPLETED => 'Завершен',
-            default => 'Неизвестно'
+        return match ($this->appointment_status) {
+            self::STATUS_SCHEDULED => "Запланирован",
+            self::STATUS_IN_PROGRESS => "В процессе",
+            self::STATUS_COMPLETED => "Завершен",
+            default => "Неизвестно",
         };
     }
 
@@ -309,11 +339,11 @@ class Application extends Model
      */
     public function getSourceLabel(): string
     {
-        return match($this->source) {
-            self::SOURCE_TELEGRAM => 'Telegram бот',
-            self::SOURCE_FRONTEND => 'Фронтенд форма',
-            null => 'Админ-панель',
-            default => 'Неизвестно'
+        return match ($this->source) {
+            self::SOURCE_TELEGRAM => "Telegram бот",
+            self::SOURCE_FRONTEND => "Фронтенд форма",
+            null => "Админ-панель",
+            default => "Неизвестно",
         };
     }
 
@@ -322,7 +352,7 @@ class Application extends Model
      */
     public function getStatusName(): string
     {
-        return $this->status?->name ?? 'Не указан';
+        return $this->status?->name ?? "Не указан";
     }
 
     /**
@@ -330,7 +360,7 @@ class Application extends Model
      */
     public function getStatusColor(): string
     {
-        return $this->status?->color ?? 'gray';
+        return $this->status?->color ?? "gray";
     }
 
     /**
@@ -365,21 +395,26 @@ class Application extends Model
         $status = ApplicationStatus::getBySlug($slug);
         if ($status) {
             $this->status_id = $status->id;
+
             return $this->save();
         }
+
         return false;
     }
 
     /**
      * Устанавливает идентификатор статуса без сохранения записи.
      */
-    public function fillStatusFromSlug(string | array | null $slug, ?array $fallbackNames = null): void
-    {
+    public function fillStatusFromSlug(
+        string|array|null $slug,
+        ?array $fallbackNames = null,
+    ): void {
         $slugs = array_filter(Arr::wrap($slug));
 
         foreach ($slugs as $candidate) {
             if ($statusId = self::resolveStatusIdBySlug($candidate)) {
                 $this->status_id = $statusId;
+
                 return;
             }
         }
@@ -391,12 +426,13 @@ class Application extends Model
         foreach ($fallbackNames as $name) {
             $name = trim((string) $name);
 
-            if ($name === '') {
+            if ($name === "") {
                 continue;
             }
 
             if ($statusId = self::resolveStatusIdByName($name)) {
                 $this->status_id = $statusId;
+
                 return;
             }
         }
@@ -404,17 +440,17 @@ class Application extends Model
 
     protected function notifyTelegramAboutAppointmentConfirmation(): void
     {
-        if (! $this->status_id) {
+        if (!$this->status_id) {
             return;
         }
 
         $status = $this->status;
 
-        if (! $status || $status->getKey() !== $this->status_id) {
+        if (!$status || $status->getKey() !== $this->status_id) {
             $status = ApplicationStatus::find($this->status_id);
         }
 
-        if (! $this->shouldNotifyTelegramOnStatus($status)) {
+        if (!$this->shouldNotifyTelegramOnStatus($status)) {
             return;
         }
 
@@ -423,9 +459,10 @@ class Application extends Model
         $this->scheduleTelegramReminderNotification();
     }
 
-    protected function shouldNotifyTelegramOnStatus(?ApplicationStatus $status): bool
-    {
-        if (! $status) {
+    protected function shouldNotifyTelegramOnStatus(
+        ?ApplicationStatus $status,
+    ): bool {
+        if (!$status) {
             return false;
         }
 
@@ -433,7 +470,7 @@ class Application extends Model
             return false;
         }
 
-        if ($status->type && $status->type !== 'appointment') {
+        if ($status->type && $status->type !== "appointment") {
             return false;
         }
 
@@ -442,23 +479,23 @@ class Application extends Model
 
     protected function scheduleTelegramReminderNotification(): void
     {
-        if (! $this->status_id) {
+        if (!$this->status_id) {
             return;
         }
 
         $status = $this->status;
 
-        if (! $status || $status->getKey() !== $this->status_id) {
+        if (!$status || $status->getKey() !== $this->status_id) {
             $status = ApplicationStatus::find($this->status_id);
         }
 
-        if (! $this->shouldNotifyTelegramOnStatus($status)) {
+        if (!$this->shouldNotifyTelegramOnStatus($status)) {
             return;
         }
 
         $appointmentDateTime = $this->appointment_datetime;
 
-        if (! $appointmentDateTime instanceof Carbon) {
+        if (!$appointmentDateTime instanceof Carbon) {
             return;
         }
 
@@ -471,13 +508,13 @@ class Application extends Model
 
         $appointmentUtcIso = $appointmentDateTime
             ->copy()
-            ->setTimezone('UTC')
+            ->setTimezone("UTC")
             ->toIso8601String();
 
         if ($reminderTime->lessThanOrEqualTo($now)) {
             SendAppointmentReminderNotification::dispatch(
                 $this->getKey(),
-                $appointmentUtcIso
+                $appointmentUtcIso,
             );
 
             return;
@@ -485,7 +522,7 @@ class Application extends Model
 
         SendAppointmentReminderNotification::dispatch(
             $this->getKey(),
-            $appointmentUtcIso
+            $appointmentUtcIso,
         )->delay($reminderTime);
     }
 
@@ -496,11 +533,11 @@ class Application extends Model
     {
         static $cache = [];
 
-        if (! $slug) {
+        if (!$slug) {
             return null;
         }
 
-        if (! array_key_exists($slug, $cache)) {
+        if (!array_key_exists($slug, $cache)) {
             $cache[$slug] = ApplicationStatus::getBySlug($slug)?->id;
         }
 
@@ -511,11 +548,11 @@ class Application extends Model
     {
         static $cache = [];
 
-        if (! array_key_exists($name, $cache)) {
+        if (!array_key_exists($name, $cache)) {
             $cache[$name] = ApplicationStatus::query()
-                ->where('type', 'appointment')
-                ->where('name', $name)
-                ->value('id');
+                ->where("type", "appointment")
+                ->where("name", $name)
+                ->value("id");
         }
 
         return $cache[$name];
@@ -526,7 +563,7 @@ class Application extends Model
      */
     public function autoCompleteIfSlotExpired(): bool
     {
-        if (! $this->shouldAutoCompleteBecauseSlotExpired()) {
+        if (!$this->shouldAutoCompleteBecauseSlotExpired()) {
             return false;
         }
 
@@ -537,19 +574,19 @@ class Application extends Model
 
     protected function shouldAutoCompleteBecauseSlotExpired(): bool
     {
-        if (! $this->isScheduled()) {
+        if (!$this->isScheduled()) {
             return false;
         }
 
         $appointmentDateTime = $this->appointment_datetime;
 
-        if (! $appointmentDateTime instanceof Carbon) {
+        if (!$appointmentDateTime instanceof Carbon) {
             return false;
         }
 
         $now = now($appointmentDateTime->getTimezone());
 
-        if (! $now->greaterThan($appointmentDateTime)) {
+        if (!$now->greaterThan($appointmentDateTime)) {
             return false;
         }
 
@@ -566,19 +603,19 @@ class Application extends Model
         $this->fillStatusFromSlug(
             [
                 self::STATUS_SLUG_APPOINTMENT_COMPLETED,
-                'appointment-completed',
-                'appointment_done',
-                'completed',
+                "appointment-completed",
+                "appointment_done",
+                "completed",
             ],
             [
-                'Прием проведен',
-                'Приём проведен',
-                'Приём проведён',
-                'Прием завершен',
-            ]
+                "Прием проведен",
+                "Приём проведен",
+                "Приём проведён",
+                "Прием завершен",
+            ],
         );
 
-        $this->unsetRelation('status');
+        $this->unsetRelation("status");
     }
 
     /**
@@ -586,8 +623,8 @@ class Application extends Model
      */
     public function scopeWithStatus($query, string $slug)
     {
-        return $query->whereHas('status', function ($q) use ($slug) {
-            $q->where('slug', $slug);
+        return $query->whereHas("status", function ($q) use ($slug) {
+            $q->where("slug", $slug);
         });
     }
 
@@ -596,8 +633,8 @@ class Application extends Model
      */
     public function scopeWithActiveStatus($query)
     {
-        return $query->whereHas('status', function ($q) {
-            $q->where('is_active', true);
+        return $query->whereHas("status", function ($q) {
+            $q->where("is_active", true);
         });
     }
 }

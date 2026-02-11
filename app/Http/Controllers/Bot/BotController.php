@@ -9,9 +9,9 @@ use BotMan\BotMan\BotMan;
 use BotMan\BotMan\BotManFactory;
 use BotMan\BotMan\Cache\FileCache;
 use BotMan\BotMan\Drivers\DriverManager;
+use BotMan\BotMan\Messages\Attachments\Contact;
 use BotMan\BotMan\Storages\Drivers\FileStorage;
 use BotMan\Drivers\Telegram\TelegramDriver;
-use BotMan\BotMan\Messages\Attachments\Contact;
 use Illuminate\Http\Request;
 
 /**
@@ -24,7 +24,7 @@ class BotController extends Controller
      * Главный метод обработки входящих сообщений от Telegram
      * Вызывается при каждом webhook-запросе от Telegram API
      *
-     * @param Request $request - HTTP запрос с данными сообщения от Telegram
+     * @param  Request  $request  - HTTP запрос с данными сообщения от Telegram
      * @return \Illuminate\Http\Response|void
      */
     public function handle(Request $request)
@@ -55,9 +55,9 @@ class BotController extends Controller
             $botman->listen();
         } catch (\Exception $e) {
             // Логируем любые ошибки для отладки
-            \Log::error('Bot handle error: ' . $e->getMessage(), [
+            \Log::error('Bot handle error: '.$e->getMessage(), [
                 'exception' => $e,
-                'request' => $request->all()
+                'request' => $request->all(),
             ]);
 
             // Возвращаем 200 OK чтобы Telegram не повторял запрос
@@ -70,15 +70,14 @@ class BotController extends Controller
      * Настройка обработчиков команд и сообщений бота
      * Определяет как бот будет реагировать на различные команды
      *
-     * @param BotMan $botman - экземпляр бота для регистрации обработчиков
+     * @param  BotMan  $botman  - экземпляр бота для регистрации обработчиков
      */
     private function setupBotHandlers(BotMan $botman)
     {
 
-
         // Обработчик команды /start для запуска WebApp-диалога
         $botman->hears('/start.*', function (BotMan $bot) {
-            $bot->startConversation(new ApplicationConversation());
+            $bot->startConversation(new ApplicationConversation);
         });
 
         $botman->receivesContact(function (BotMan $bot, Contact $contact) {
@@ -101,7 +100,7 @@ class BotController extends Controller
         $user = $bot->getUser();
         $userId = $user?->getId();
 
-        if (!$userId) {
+        if (! $userId) {
             return;
         }
 
@@ -170,7 +169,7 @@ class BotController extends Controller
         $user = $bot->getUser();
         $message = $bot->getMessage();
 
-        $baseUrl = rtrim((string) config('services.telegram.web_app_url', 'https://adminzrenie.ru/app'), '/');
+        $baseUrl = rtrim((string) config('services.telegram.web_app_url', 'https://app.fondzrenie.ru'), '/');
 
         $query = [
             'tg_user_id' => $user?->getId(),
@@ -182,31 +181,31 @@ class BotController extends Controller
             $query['phone'] = $sanitizedPhone;
         }
 
-        return $baseUrl . '?' . http_build_query($query);
+        return $baseUrl.'?'.http_build_query($query);
     }
 
     private function normalizePhone(?string $phone): ?string
     {
-        if (!$phone) {
+        if (! $phone) {
             return null;
         }
 
         $digits = preg_replace('/\D+/', '', $phone);
 
-        if (!$digits) {
+        if (! $digits) {
             return null;
         }
 
         if (strlen($digits) === 11 && str_starts_with($digits, '8')) {
-            $digits = '7' . substr($digits, 1);
+            $digits = '7'.substr($digits, 1);
         }
 
-        return '+' . $digits;
+        return '+'.$digits;
     }
 
     private function sanitizePhoneForQuery(?string $phone): ?string
     {
-        if (!$phone) {
+        if (! $phone) {
             return null;
         }
 

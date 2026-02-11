@@ -7,7 +7,6 @@ use App\Models\DoctorShift;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Get;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Config;
@@ -30,14 +29,14 @@ class CabinetScheduleWidget extends BaseDoctorShiftScheduleWidget
 
     public function boot(): void
     {
-        if (!$this->cabinetId) {
+        if (! $this->cabinetId) {
             $this->cabinetId = (int) (request()->route('record') ?? 0) ?: null;
         }
     }
 
     public function mount(): void
     {
-        if (!$this->cabinetId) {
+        if (! $this->cabinetId) {
             $this->cabinetId = (int) (request()->route('record') ?? 0) ?: null;
         }
     }
@@ -72,13 +71,13 @@ class CabinetScheduleWidget extends BaseDoctorShiftScheduleWidget
     {
         $cabinetId = $this->getCabinetIdFromContext();
 
-        if (!$cabinetId) {
+        if (! $cabinetId) {
             return null;
         }
 
-        if (!$this->cachedCabinet || $this->cachedCabinet->id !== $cabinetId) {
+        if (! $this->cachedCabinet || $this->cachedCabinet->id !== $cabinetId) {
             $query = Cabinet::query();
-            if (!empty($relations)) {
+            if (! empty($relations)) {
                 $query->with($relations);
             }
 
@@ -87,7 +86,7 @@ class CabinetScheduleWidget extends BaseDoctorShiftScheduleWidget
             return $this->cachedCabinet;
         }
 
-        if (!empty($relations)) {
+        if (! empty($relations)) {
             $this->cachedCabinet->loadMissing($relations);
         }
 
@@ -98,7 +97,7 @@ class CabinetScheduleWidget extends BaseDoctorShiftScheduleWidget
     {
         $cabinet = $this->getCabinetModel(['branch']);
 
-        if (!$cabinet || !$cabinet->branch) {
+        if (! $cabinet || ! $cabinet->branch) {
             return '00:30:00';
         }
 
@@ -113,7 +112,7 @@ class CabinetScheduleWidget extends BaseDoctorShiftScheduleWidget
     public static function canView(): bool
     {
         $route = request()->route();
-        if (!$route) {
+        if (! $route) {
             return false;
         }
 
@@ -130,7 +129,7 @@ class CabinetScheduleWidget extends BaseDoctorShiftScheduleWidget
 
         $quickActionsJs = '';
 
-        if (!$isDoctor) {
+        if (! $isDoctor) {
             $quickActionsJs = <<<'JS'
             const container = el.querySelector('.fc-event-main-frame') || el;
             if (container) {
@@ -300,7 +299,7 @@ class CabinetScheduleWidget extends BaseDoctorShiftScheduleWidget
     {
         $cabinetId = $this->getCabinetIdFromContext();
 
-        if (!$cabinetId) {
+        if (! $cabinetId) {
             return [];
         }
 
@@ -323,7 +322,7 @@ class CabinetScheduleWidget extends BaseDoctorShiftScheduleWidget
             $query->where('doctor_id', $user->doctor_id);
         } elseif ($user->isPartner()) {
             $cabinet = $this->getCabinetModel(['branch']);
-            if (!$cabinet || $cabinet->branch->clinic_id !== $user->clinic_id) {
+            if (! $cabinet || $cabinet->branch->clinic_id !== $user->clinic_id) {
                 return [];
             }
         }
@@ -369,7 +368,7 @@ class CabinetScheduleWidget extends BaseDoctorShiftScheduleWidget
                 ->options(function () {
                     $cabinet = $this->getCabinetModel(['branch.doctors']);
 
-                    if (!$cabinet || !$cabinet->branch) {
+                    if (! $cabinet || ! $cabinet->branch) {
                         return [];
                     }
 
@@ -430,7 +429,7 @@ class CabinetScheduleWidget extends BaseDoctorShiftScheduleWidget
                 ->action(function (array $data) {
                     $cabinetId = $this->record->cabinet_id ?? $this->getCabinetIdFromContext();
 
-                    if (!$cabinetId) {
+                    if (! $cabinetId) {
                         Notification::make()
                             ->title('Ошибка')
                             ->body('Не удалось определить кабинет смены')
@@ -484,12 +483,13 @@ class CabinetScheduleWidget extends BaseDoctorShiftScheduleWidget
                 ->action(function (array $data) {
                     $cabinetId = $this->getCabinetIdFromContext();
 
-                    if (!$cabinetId) {
+                    if (! $cabinetId) {
                         Notification::make()
                             ->title('Ошибка')
                             ->body('Не указан ID кабинета')
                             ->danger()
                             ->send();
+
                         return;
                     }
 
@@ -502,7 +502,7 @@ class CabinetScheduleWidget extends BaseDoctorShiftScheduleWidget
 
     protected function getAdditionalMountFormFillData(): array
     {
-        if (!$this->record instanceof DoctorShift) {
+        if (! $this->record instanceof DoctorShift) {
             return [];
         }
 

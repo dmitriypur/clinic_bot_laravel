@@ -403,25 +403,35 @@ class BidResource extends Resource
                     ->successNotificationMessage("Файл готов к скачиванию!"),
             ])
             ->columns([
-                TextColumn::make("clinic.name")->label("Клиника")->searchable()->sortable(),
+                TextColumn::make("clinic.name")
+                ->label("Клиника")
+                ->searchable()
+                ->toggleable(),
                 TextColumn::make("branch.name")
                     ->label("Филиал")
                     ->searchable()
-                    ->sortable()
+                    ->toggleable()
                     ->formatStateUsing(function ($record) {
                         return $record->branch ? $record->branch->name : "-";
                     }),
                 TextColumn::make("full_name")
                     ->label("Имя ребенка")
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(),
+                TextColumn::make('full_name_parent')
+                    ->label('ФИО родителя')
+                    ->searchable()
+                    ->toggleable(),
+                TextColumn::make('created_at')
+                    ->label('Дата создания')
+                    ->dateTime('d.m.Y H:i')
+                    ->sortable()
+                    ->toggleable(),
                 TextColumn::make("appointment_datetime")
                     ->label("Дата и время приема")
                     ->dateTime("d.m.Y H:i")
-                    ->sortable(),
-                TextColumn::make("promo_code")
-                    ->label("Промокод")
-                    ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(),
                 TextColumn::make("status.name")
                     ->label("Статус")
                     ->badge()
@@ -430,52 +440,10 @@ class BidResource extends Resource
                             Color::Gray,
                     )
                     ->searchable()
+                    ->toggleable()
                     ->sortable(),
             ])
-            ->filters([
-                Tables\Filters\SelectFilter::make('clinic')
-                    ->relationship('clinic', 'name')
-                    ->label('Клиника')
-                    ->searchable()
-                    ->preload(),
-                Tables\Filters\SelectFilter::make('branch')
-                    ->relationship('branch', 'name')
-                    ->label('Филиал')
-                    ->searchable()
-                    ->preload(),
-                Tables\Filters\Filter::make('appointment_datetime')
-                    ->form([
-                        DatePicker::make('from')->label('Дата приема с'),
-                        DatePicker::make('until')->label('Дата приема по'),
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when(
-                                $data['from'],
-                                fn (Builder $query, $date) => $query->whereDate('appointment_datetime', '>=', $date),
-                            )
-                            ->when(
-                                $data['until'],
-                                fn (Builder $query, $date) => $query->whereDate('appointment_datetime', '<=', $date),
-                            );
-                    }),
-                Tables\Filters\Filter::make('promo_code')
-                    ->form([
-                        TextInput::make('value')->label('Промокод'),
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when(
-                                $data['value'],
-                                fn (Builder $query, $code) => $query->where('promo_code', 'like', "%{$code}%"),
-                            );
-                    }),
-                Tables\Filters\SelectFilter::make('status')
-                    ->relationship('status', 'name', fn (Builder $query) => $query->where('type', 'bid'))
-                    ->label('Статус')
-                    ->searchable()
-                    ->preload(),
-            ])
+            ->filters([])
             ->actions([Tables\Actions\EditAction::make()])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

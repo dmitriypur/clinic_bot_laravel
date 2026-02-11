@@ -3,320 +3,175 @@
 namespace App\Services;
 
 use App\Models\Application;
-use App\Models\DoctorShift;
+use App\Models\Clinic;
 use App\Models\User;
-use App\Traits\HasCalendarOptimizations;
+use App\Services\Slots\SlotData;
+use App\Services\Slots\SlotProviderFactory;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 class CalendarEventService
 {
-    use HasCalendarOptimizations;
-    
-    protected CalendarFilterService $filterService;
-    
-    public function __construct(CalendarFilterService $filterService)
-    {
-        $this->filterService = $filterService;
-    }
+    public function __construct(
+        private readonly SlotProviderFactory $slotProviderFactory,
+    ) {}
 
-    /**
-     * Генерирует события для календаря на основе смен врачей
-     */
     public function generateEvents(array $fetchInfo, array $filters, User $user): array
     {
-        $events = [];
-
         $appTimezone = config('app.timezone', 'UTC');
+
         $rangeStart = Carbon::parse($fetchInfo['start'], $appTimezone)->setTimezone('UTC');
         $rangeEnd = Carbon::parse($fetchInfo['end'], $appTimezone)->setTimezone('UTC');
 
-        // Получаем смены с применением фильтров и оптимизаций
-        $shiftsQuery = DoctorShift::query()
-            ->with(['doctor', 'cabinet.branch.clinic', 'cabinet.branch.city'])
-            ->optimizedDateRange($rangeStart, $rangeEnd);
-            
-        $this->filterService->applyShiftFilters($shiftsQuery, $filters, $user);
-        $shifts = $shiftsQuery->get();
+        $clinics = $this->resolveClinics($filters, $user);
 
-
-        // Обрабатываем каждую смену
-        foreach ($shifts as $shift) {
-            $events = array_merge($events, $this->generateShiftEvents($shift, $user));
-        }
-
-        return $events;
-    }
-
-    /**
-     * Генерирует события для одной смены
-     */
-    private function generateShiftEvents(DoctorShift $shift, User $user): array
-    {
         $events = [];
-        $slots = $shift->getTimeSlots();
-        
-        foreach ($slots as $slot) {
-            $isOccupied = $this->isSlotOccupied($shift->cabinet_id, $slot['start'], $user);
-            $application = $this->getSlotApplication($shift->cabinet_id, $slot['start'], $user);
-            
-            $events[] = $this->createEventData($shift, $slot, $isOccupied, $application);
-        }
-        
-        return $events;
-    }
 
-    /**
-     * Проверяет занятость слота
-     */
-    private function isSlotOccupied(int $cabinetId, Carbon $slotStart, User $user): bool
-    {
-        $slotStartUtc = $slotStart->copy()->setTimezone('UTC')->format('Y-m-d H:i:s');
-        
-        $application = Application::query()
-            ->where('cabinet_id', $cabinetId)
-            ->where('appointment_datetime', $slotStartUtc)
-            ->first();
-            
-        if (!$application) {
-            return false;
-        }
-        
-        // Проверяем права доступа
-        if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
-            return false; // Партнер не видит заявки из других клиник
-        } elseif ($user->isDoctor() && $application->doctor_id !== $user->doctor_id) {
-            return false; // Врач не видит заявки других врачей
-        }
-        
-        return true;
-    }
+        foreach ($clinics as $clinic) {
+            $provider = $this->slotProviderFactory->make($clinic);
 
-    /**
-     * Получает заявку в слоте
-     */
-    private function getSlotApplication(int $cabinetId, Carbon $slotStart, User $user): ?Application
-    {
-        $slotStartUtc = $slotStart->copy()->setTimezone('UTC')->format('Y-m-d H:i:s');
-        
-        $query = Application::query()
-            ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
-            ->where('cabinet_id', $cabinetId)
-            ->where('appointment_datetime', $slotStartUtc);
-            
-        // Сначала ищем заявку без фильтрации по ролям
-        $application = $query->first();
-        
-        \Log::info('Поиск заявки в слоте', [
-            'cabinet_id' => $cabinetId,
-            'slot_start_utc' => $slotStart,
-            'slot_start_for_query' => $slotStartUtc,
-            'database_type' => config('database.default'),
-            'user_id' => $user->id,
-            'user_role' => $user->getRoleNames()->first(),
-            'found_application_id' => $application ? $application->id : null,
-            'sql_query' => $query->toSql(),
-            'sql_bindings' => $query->getBindings()
-        ]);
-        
-        if ($application) {
-            // Проверяем права доступа после нахождения заявки
-            if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
-                return null; // Партнер не имеет доступа к заявке из другой клиники
-            } elseif ($user->isDoctor() && $application->doctor_id !== $user->doctor_id) {
-                return null; // Врач не имеет доступа к заявке другого врача
+            $slots = $provider->getSlots($rangeStart, $rangeEnd, $filters, $user);
+
+            foreach ($slots as $slot) {
+                [$isOccupied, $application] = $this->resolveSlotState($slot, $user);
+
+                $events[] = $this->createEventData($slot, $isOccupied, $application);
             }
         }
-        
-        return $application;
+
+        return $events;
     }
 
-    /**
-     * Создает данные события для календаря
-     */
-    private function createEventData(DoctorShift $shift, array $slot, bool $isOccupied, ?Application $application): array
+    private function resolveSlotState(SlotData $slot, User $user): array
+    {
+        $occupied = $slot->externallyOccupied;
+        $application = $this->findSlotApplication($slot, $user);
+
+        if ($application) {
+            $occupied = true;
+        }
+
+        return [$occupied, $application];
+    }
+
+    private function findSlotApplication(SlotData $slot, User $user): ?Application
+    {
+        $slotStartUtc = $slot->start->copy()->setTimezone('UTC')->format('Y-m-d H:i:s');
+
+        $query = Application::query()
+            ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
+            ->where('clinic_id', $slot->clinicId)
+            ->where('appointment_datetime', $slotStartUtc);
+
+        if ($slot->cabinetId) {
+            $query->where('cabinet_id', $slot->cabinetId);
+        }
+
+        if ($slot->doctorId) {
+            $query->where('doctor_id', $slot->doctorId);
+        }
+
+        if ($user->isPartner()) {
+            $query->where('clinic_id', $user->clinic_id);
+        }
+
+        if ($user->isDoctor()) {
+            $query->where('doctor_id', $user->doctor_id);
+        }
+
+        return $query->first();
+    }
+
+    private function createEventData(SlotData $slot, bool $isOccupied, ?Application $application): array
     {
         $config = config('calendar');
         $appTimezone = config('app.timezone', 'UTC');
 
-        $slotStart = $slot['start'] instanceof Carbon
-            ? $slot['start']->copy()
-            : Carbon::parse($slot['start'], $appTimezone);
+        $slotStartApp = $slot->start->copy()->setTimezone($appTimezone);
+        $slotEndApp = $slot->end->copy()->setTimezone($appTimezone);
 
-        $slotEnd = $slot['end'] instanceof Carbon
-            ? $slot['end']->copy()
-            : Carbon::parse($slot['end'], $appTimezone);
-
-        $slotStartApp = $slotStart->copy()->setTimezone($appTimezone);
-        $slotEndApp = $slotEnd->copy()->setTimezone($appTimezone);
-        $slotStartUtc = $slotStartApp->copy()->setTimezone('UTC');
-        $slotEndUtc = $slotEndApp->copy()->setTimezone('UTC');
-        
-        // Проверяем, прошло ли время
         $isPast = $slotStartApp->isPast();
-        
-        
-        // Определяем цвета в зависимости от времени, занятости и статуса приема
+
         if ($isPast) {
-            // Для прошедших слотов используем серые цвета
-            $backgroundColor = $isOccupied ? '#6B7280' : '#9CA3AF'; // темно-серый для занятых, светло-серый для свободных
+            $backgroundColor = $isOccupied ? '#6B7280' : '#9CA3AF';
         } else {
-            // Для текущих/будущих слотов используем цвета в зависимости от статуса приема
             if ($isOccupied && $application) {
-                switch ($application->appointment_status) {
-                    case \App\Models\Application::STATUS_IN_PROGRESS:
-                        $backgroundColor = '#3B82F6'; // Синий для приема в процессе
-                        break;
-                    case \App\Models\Application::STATUS_COMPLETED:
-                        $backgroundColor = '#4a7b6c'; // Темно-зеленый для завершенного приема
-                        break;
-                    case \App\Models\Application::STATUS_SCHEDULED:
-                    default:
-                        $backgroundColor = $config['colors']['occupied_slot']; // Стандартный цвет для запланированного
-                        break;
-                }
+                $backgroundColor = match ($application->appointment_status) {
+                    Application::STATUS_IN_PROGRESS => '#3B82F6',
+                    Application::STATUS_COMPLETED => '#4a7b6c',
+                    default => $config['colors']['occupied_slot'],
+                };
+            } elseif ($isOccupied && ! $application) {
+                $backgroundColor = $config['colors']['occupied_slot'];
             } else {
-                $backgroundColor = $config['colors']['free_slot']; // Цвет для свободных слотов
+                $backgroundColor = $config['colors']['free_slot'];
             }
         }
-        
-        $title = $isOccupied ? ($application ? $application->full_name : 'Занят') : 'Свободен';
-        
-        // Отладочная информация для занятых слотов
-        if ($isOccupied && $application) {
-            \Log::info('Создаем событие для занятого слота', [
-                'application_id' => $application->id,
-                'cabinet_id' => $shift->cabinet_id,
-                'slot_start' => $slot['start'],
-                'application_clinic_id' => $application->clinic_id,
-                'application_doctor_id' => $application->doctor_id,
-                'application_appointment_datetime' => $application->appointment_datetime
-            ]);
-        } elseif ($isOccupied && !$application) {
-            \Log::warning('Слот помечен как занятый, но заявка не найдена', [
-                'cabinet_id' => $shift->cabinet_id,
-                'slot_start' => $slot['start'],
-                'shift_id' => $shift->id
-            ]);
+
+        $title = $isOccupied ? ($application?->full_name ?? 'Занят') : 'Свободен';
+
+        $extendedProps = [
+            'slot_id' => $slot->id,
+            'slot_start' => $slotStartApp->toIso8601String(),
+            'slot_end' => $slotEndApp->toIso8601String(),
+            'slot_start_utc' => $slot->start->toIso8601String(),
+            'slot_end_utc' => $slot->end->toIso8601String(),
+            'is_past' => $isPast,
+            'is_occupied' => $isOccupied,
+            'clinic_id' => $slot->clinicId,
+            'clinic_name' => $slot->meta['clinic_name'] ?? null,
+            'branch_id' => $slot->branchId ?? ($slot->meta['branch_id'] ?? null),
+            'branch_name' => $slot->meta['branch_name'] ?? null,
+            'cabinet_id' => $slot->cabinetId ?? ($slot->meta['cabinet_id'] ?? null),
+            'cabinet_name' => $slot->meta['cabinet_name'] ?? null,
+            'doctor_id' => $slot->doctorId,
+            'doctor_name' => $slot->meta['doctor_name'] ?? null,
+            'speciality' => $slot->meta['speciality'] ?? null,
+            'city_id' => $slot->meta['city_id'] ?? null,
+            'city_name' => $slot->meta['city_name'] ?? null,
+            'source' => $slot->source,
+            'externally_occupied' => $slot->externallyOccupied,
+            'booking_uuid' => $slot->meta['booking_uuid'] ?? null,
+            'is_local_booking' => $slot->meta['is_local_booking'] ?? false,
+            'shift_id' => $slot->meta['shift_id'] ?? null,
+            'onec_slot_id' => $slot->meta['onec_slot_id'] ?? null,
+            'raw' => $slot->meta['raw_payload'] ?? null,
+        ];
+
+        if ($application) {
+            $extendedProps['application_id'] = $application->id;
+            $extendedProps['patient_name'] = $application->full_name;
+            $extendedProps['appointment_status'] = $application->appointment_status;
+            $extendedProps['clinic_name'] ??= $application->clinic?->name;
+            $extendedProps['branch_name'] ??= $application->branch?->name;
+            $extendedProps['cabinet_name'] ??= $application->cabinet?->name;
+            $extendedProps['doctor_name'] ??= $application->doctor?->full_name;
         }
-        
-        // Создаем текст подсказки
-        $tooltipText = $shift->cabinet->name . "\n" .
-                      "Филиал: " . ($shift->cabinet->branch->name ?? "Не указан") . "\n" .
-                      "Клиника: " . ($shift->cabinet->branch->clinic->name ?? "Не указана") . "\n" .
-                      "Врач: " . ($shift->doctor->full_name ?? "Не назначен");
-        
-        $eventData = [
-            'id' => 'slot_' . $shift->id . '_' . $slotStartApp->format('Y-m-d_H-i') . ($application ? '_app_' . $application->id : ''),
+
+        return [
+            'id' => $slot->id,
             'title' => $title,
             'start' => $slotStartApp->toIso8601String(),
             'end' => $slotEndApp->toIso8601String(),
             'backgroundColor' => $backgroundColor,
-            'borderColor' => $backgroundColor,
-            'classNames' => $isPast ? ['past-appointment'] : ['active-appointment'],
-            'tooltip' => $tooltipText,
-            'extendedProps' => [
-                'shift_id' => $shift->id,
-                'cabinet_id' => $shift->cabinet_id,
-                'doctor_id' => $shift->doctor_id,
-                'doctor_name' => $shift->doctor->full_name ?? 'Врач не назначен',
-                'cabinet_name' => $shift->cabinet->name ?? 'Кабинет не указан',
-                'branch_name' => $shift->cabinet->branch->name ?? 'Филиал не указан',
-                'clinic_name' => $shift->cabinet->branch->clinic->name ?? 'Клиника не указана',
-                'city_id' => $shift->cabinet->branch->city_id ?? null,
-                'is_occupied' => $isOccupied,
-                'is_past' => $isPast,
-                'slot_start' => $slotStartApp->toIso8601String(),
-                'slot_end' => $slotEndApp->toIso8601String(),
-                'slot_start_utc' => $slotStartUtc->toIso8601String(),
-                'slot_end_utc' => $slotEndUtc->toIso8601String(),
-                'application_id' => $application ? $application->id : null,
-                'application_status' => $application ? $application->appointment_status : null,
-                'application_data' => $application ? [
-                    'full_name' => $application->full_name,
-                    'phone' => $application->phone,
-                    'full_name_parent' => $application->full_name_parent,
-                    'birth_date' => $application->birth_date,
-                    'promo_code' => $application->promo_code,
-                    'appointment_status' => $application->appointment_status,
-                    'status_label' => $application->getStatusLabel(),
-                ] : null,
-            ]
-        ];
-        
-        // Отладочная информация для занятых слотов
-        if ($isOccupied && $application) {
-                    \Log::info('Создано событие с extendedProps', [
-            'event_id' => $eventData['id'],
-            'application_id' => $eventData['extendedProps']['application_id'],
-            'cabinet_id' => $eventData['extendedProps']['cabinet_id'],
-            'slot_start' => $eventData['extendedProps']['slot_start']
-        ]);
-        
-        // Дополнительное логирование для отладки
-        \Log::info('Полные данные события', [
-            'event_data' => $eventData
-        ]);
-        
-        // Дополнительное логирование для отладки application_id
-        if ($application) {
-            \Log::info('Отладка application_id в событии', [
-                'application_id_from_db' => $application->id,
-                'application_id_in_event' => $eventData['extendedProps']['application_id'],
-                'event_id' => $eventData['id'],
-                'slot_start' => $slot['start']->format('Y-m-d H:i:s')
-            ]);
-        }
-        }
-        
-        return $eventData;
-    }
-
-    /**
-     * Получает статистику по событиям
-     */
-    public function getEventStats(array $events): array
-    {
-        $totalSlots = count($events);
-        $occupiedSlots = collect($events)->where('extendedProps.is_occupied', true)->count();
-        $freeSlots = $totalSlots - $occupiedSlots;
-        
-        return [
-            'total' => $totalSlots,
-            'occupied' => $occupiedSlots,
-            'free' => $freeSlots,
-            'occupancy_rate' => $totalSlots > 0 ? round(($occupiedSlots / $totalSlots) * 100, 2) : 0,
+            'extendedProps' => $extendedProps,
         ];
     }
 
-    /**
-     * Группирует события по дням
-     */
-    public function groupEventsByDay(array $events): array
+    private function resolveClinics(array $filters, User $user): Collection
     {
-        return collect($events)
-            ->groupBy(function ($event) {
-                return Carbon::parse($event['start'])->format('Y-m-d');
-            })
-            ->map(function ($dayEvents) {
-                return [
-                    'date' => Carbon::parse($dayEvents->first()['start'])->format('Y-m-d'),
-                    'events' => $dayEvents->toArray(),
-                    'stats' => $this->getEventStats($dayEvents->toArray()),
-                ];
-            })
-            ->toArray();
-    }
+        $query = Clinic::query()->with('branches.integrationEndpoint');
 
-    /**
-     * Фильтрует события по типу (занятые/свободные)
-     */
-    public function filterEventsByType(array $events, string $type): array
-    {
-        return collect($events)
-            ->filter(function ($event) use ($type) {
-                return $type === 'occupied' ? $event['extendedProps']['is_occupied'] : !$event['extendedProps']['is_occupied'];
-            })
-            ->toArray();
+        if (! empty($filters['clinic_ids'])) {
+            $query->whereIn('id', (array) $filters['clinic_ids']);
+        } elseif ($user->isPartner() && $user->clinic_id) {
+            $query->where('id', $user->clinic_id);
+        } elseif ($user->isDoctor() && $user->doctor_id) {
+            $query->whereHas('branches.doctors', function ($q) use ($user) {
+                $q->where('doctors.id', $user->doctor_id);
+            });
+        }
+
+        return $query->get();
     }
 }

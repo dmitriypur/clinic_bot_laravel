@@ -34,7 +34,7 @@ class CityController extends Controller
 
         $latestUpdate = City::query()->max('updated_at');
         $versionStamp = $latestUpdate ? (string) strtotime((string) $latestUpdate) : '0';
-        $cacheKey = 'cities:index:' . md5($request->fullUrl() . '|' . $versionStamp);
+        $cacheKey = 'cities:index:'.md5($request->fullUrl().'|'.$versionStamp);
 
         if ($cached = Cache::get($cacheKey)) {
             return response()->json($cached);

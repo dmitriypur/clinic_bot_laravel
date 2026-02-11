@@ -4,11 +4,10 @@ namespace App\Policies;
 
 use App\Models\DoctorShift;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
 
 /**
  * Политика авторизации для смен врачей
- * 
+ *
  * Определяет права доступа к сменам врачей для разных ролей пользователей:
  * - super_admin: полный доступ ко всем сменам
  * - partner: доступ только к сменам в кабинетах филиалов своих клиник
@@ -34,17 +33,17 @@ class DoctorShiftPolicy
         if ($user->isSuperAdmin()) {
             return true;  // Super admin видит все смены
         }
-        
+
         if ($user->isPartner()) {
             // Partner видит только смены в кабинетах филиалов своих клиник
             return $doctorShift->cabinet->branch->clinic_id === $user->clinic_id;
         }
-        
+
         if ($user->isDoctor()) {
             // Doctor видит только свои смены
             return $doctorShift->doctor_id === $user->doctor_id;
         }
-        
+
         return false;
     }
 
@@ -67,12 +66,12 @@ class DoctorShiftPolicy
         if ($user->isSuperAdmin()) {
             return true;  // Super admin может редактировать все
         }
-        
+
         if ($user->isPartner()) {
             // Partner может редактировать только смены в кабинетах филиалов своих клиник
             return $doctorShift->cabinet->branch->clinic_id === $user->clinic_id;
         }
-        
+
         // Врач не может редактировать смены
         return false;
     }
@@ -87,12 +86,12 @@ class DoctorShiftPolicy
         if ($user->isSuperAdmin()) {
             return true;  // Super admin может удалять все
         }
-        
+
         if ($user->isPartner()) {
             // Partner может удалять только смены в кабинетах филиалов своих клиник
             return $doctorShift->cabinet->branch->clinic_id === $user->clinic_id;
         }
-        
+
         // Врач не может удалять смены
         return false;
     }
@@ -107,12 +106,12 @@ class DoctorShiftPolicy
         if ($user->isSuperAdmin()) {
             return true;  // Super admin может восстанавливать все
         }
-        
+
         if ($user->isPartner()) {
             // Partner может восстанавливать только смены в кабинетах филиалов своих клиник
             return $doctorShift->cabinet->branch->clinic_id === $user->clinic_id;
         }
-        
+
         // Врач не может восстанавливать смены
         return false;
     }
@@ -127,12 +126,12 @@ class DoctorShiftPolicy
         if ($user->isSuperAdmin()) {
             return true;  // Super admin может окончательно удалять все
         }
-        
+
         if ($user->isPartner()) {
             // Partner может окончательно удалять только смены в кабинетах филиалов своих клиник
             return $doctorShift->cabinet->branch->clinic_id === $user->clinic_id;
         }
-        
+
         // Врач не может окончательно удалять смены
         return false;
     }

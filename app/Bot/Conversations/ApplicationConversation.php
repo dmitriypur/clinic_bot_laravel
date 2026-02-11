@@ -16,6 +16,7 @@ use BotMan\Drivers\Telegram\Extensions\KeyboardButton;
 class ApplicationConversation extends Conversation
 {
     public const BUTTON_SHARE_PHONE = '📱 Использовать мой номер телефона';
+
     public const BUTTON_SKIP_PHONE = '🔓 Открыть приложение без номера';
 
     /**
@@ -39,7 +40,7 @@ class ApplicationConversation extends Conversation
             ->where('tg_user_id', $user->getId())
             ->first();
 
-        if ($storedContact && (!$storedContact->tg_chat_id || (string) $storedContact->tg_chat_id !== (string) $chatId)) {
+        if ($storedContact && (! $storedContact->tg_chat_id || (string) $storedContact->tg_chat_id !== (string) $chatId)) {
             $storedContact->tg_chat_id = $chatId;
             $storedContact->save();
         }
@@ -101,7 +102,7 @@ class ApplicationConversation extends Conversation
         $user = $this->bot->getUser();
         $message = $this->bot->getMessage();
 
-        $baseUrl = rtrim((string) config('services.telegram.web_app_url', 'https://adminzrenie.ru/app'), '/');
+        $baseUrl = rtrim((string) config('services.telegram.web_app_url', 'https://app.fondzrenie.ru'), '/');
 
         $query = [
             'tg_user_id' => $user->getId(),
@@ -113,7 +114,7 @@ class ApplicationConversation extends Conversation
             $query['phone'] = $sanitizedPhone;
         }
 
-        return $baseUrl . '?' . http_build_query($query);
+        return $baseUrl.'?'.http_build_query($query);
     }
 
     /**
@@ -121,7 +122,7 @@ class ApplicationConversation extends Conversation
      */
     protected function sanitizePhoneForQuery(?string $phone): ?string
     {
-        if (!$phone) {
+        if (! $phone) {
             return null;
         }
 

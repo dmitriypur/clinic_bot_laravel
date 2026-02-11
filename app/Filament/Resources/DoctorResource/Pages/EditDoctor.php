@@ -21,6 +21,7 @@ class EditDoctor extends EditRecord
     {
         // Загружаем текущие филиалы врача для отображения в форме
         $data['branch_ids'] = $this->record->branches()->pluck('branches.id')->toArray();
+
         return $data;
     }
 
@@ -35,6 +36,7 @@ class EditDoctor extends EditRecord
     {
         // Убираем branch_ids из основных данных, чтобы избежать ошибок
         unset($data['branch_ids']);
+
         return $data;
     }
 }

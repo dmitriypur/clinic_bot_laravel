@@ -2,20 +2,19 @@
 
 namespace App\Filament\Widgets;
 
-use App\Models\DoctorShift;
 use App\Models\Cabinet;
+use App\Models\DoctorShift;
 use App\Services\CalendarFilterService;
+use Carbon\Carbon;
+use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Get;
 use Filament\Notifications\Notification;
-use Filament\Actions\Action;
-use Carbon\Carbon;
-use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Config;
 
 /**
  * Виджет календаря расписания для всех кабинетов
- * 
+ *
  * Отображает календарь с расписанием врачей по всем кабинетам.
  * Позволяет создавать, редактировать и удалять смены врачей.
  * Включает фильтрацию по ролям пользователей и выбор кабинета при создании смены.
@@ -23,8 +22,8 @@ use Illuminate\Support\Facades\Config;
 class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
 {
     // Модель для работы с данными
-    public \Illuminate\Database\Eloquent\Model | string | null $model = DoctorShift::class;
-    
+    public \Illuminate\Database\Eloquent\Model|string|null $model = DoctorShift::class;
+
     /**
      * Фильтры для календаря смен врачей
      * Сохраняют состояние фильтрации по врачам и датам
@@ -34,22 +33,23 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
         'date_from' => null,
         'date_to' => null,
     ];
-    
+
     /**
      * Слушатели событий для обновления календаря
      */
     protected $listeners = ['refetchEvents', 'shiftFiltersUpdated', '$refresh'];
-    
+
     /**
      * Сервис для работы с фильтрами
      */
     protected ?CalendarFilterService $filterService = null;
-    
+
     public function getFilterService(): CalendarFilterService
     {
         if ($this->filterService === null) {
             $this->filterService = app(CalendarFilterService::class);
         }
+
         return $this->filterService;
     }
 
@@ -61,7 +61,6 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
         $this->filters = $filters;
         $this->refreshRecords();
     }
-
 
     /**
      * Конфигурация календаря
@@ -90,44 +89,44 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
         $user = auth()->user();
         $rangeStart = Carbon::parse($fetchInfo['start'])->setTimezone('UTC');
         $rangeEnd = Carbon::parse($fetchInfo['end'])->setTimezone('UTC');
-        
+
         // Базовый запрос смен в указанном диапазоне дат
         $query = DoctorShift::query()
             ->whereBetween('start_time', [$rangeStart, $rangeEnd])
             ->with(['doctor', 'cabinet.branch']);
-        
+
         // Дополнительно загружаем смены для текущего дня, если они не попадают в диапазон
         $todayStartLocal = now()->startOfDay();
         $todayEndLocal = now()->endOfDay();
         $todayStart = $todayStartLocal->copy()->setTimezone('UTC');
         $todayEnd = $todayEndLocal->copy()->setTimezone('UTC');
-        
+
         $todayQuery = DoctorShift::query()
             ->whereBetween('start_time', [$todayStart, $todayEnd])
             ->with(['doctor', 'cabinet.branch']);
-        
+
         // Применяем пользовательские фильтры к основному запросу
         $this->getFilterService()->applyShiftFilters($query, $this->filters, $user);
-        
+
         // Применяем пользовательские фильтры к запросу для текущего дня
         $this->getFilterService()->applyShiftFilters($todayQuery, $this->filters, $user);
-        
+
         // Объединяем результаты
         $allShifts = $query->get()->merge($todayQuery->get())->unique('id');
-        
+
         // Преобразуем смены в формат FullCalendar
         return $allShifts
             ->map(function (DoctorShift $shift) {
                 $appTimezone = Config::get('app.timezone', 'UTC');
                 $shiftStart = Carbon::parse($shift->getRawOriginal('start_time'), 'UTC')->setTimezone($appTimezone);
                 $shiftEnd = Carbon::parse($shift->getRawOriginal('end_time'), 'UTC')->setTimezone($appTimezone);
-                
+
                 // Проверяем, прошла ли дата
                 $isPast = $shiftStart->isPast();
-                
+
                 return [
                     'id' => $shift->id,
-                    'title' => ($shift->doctor->full_name ?? 'Врач не назначен') . ' - ' . ($shift->cabinet->name ?? 'Кабинет не указан'),
+                    'title' => ($shift->doctor->full_name ?? 'Врач не назначен').' - '.($shift->cabinet->name ?? 'Кабинет не указан'),
                     'start' => $shiftStart->toIso8601String(),
                     'end' => $shiftEnd->toIso8601String(),
                     'backgroundColor' => $this->getShiftColor($shift),
@@ -142,7 +141,7 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
                         'city_id' => $shift->cabinet->branch->city_id ?? null,
                         'is_past' => $isPast,
                         'shift_start_time' => $shiftStart->format('Y-m-d H:i:s'),
-                    ]
+                    ],
                 ];
             })
             ->toArray();
@@ -181,7 +180,7 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
                     }
 
                     return $query->get()->mapWithKeys(function ($cabinet) {
-                        return [$cabinet->id => $cabinet->branch->name . ' - ' . $cabinet->name];
+                        return [$cabinet->id => $cabinet->branch->name.' - '.$cabinet->name];
                     })->toArray();
                 }),
 
@@ -191,13 +190,13 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
                 ->searchable()
                 ->options(function (Get $get) {
                     $cabinetId = $get('cabinet_id');
-                    if (!$cabinetId) {
+                    if (! $cabinetId) {
                         return [];
                     }
 
                     $cabinet = Cabinet::with('branch.doctors')->find($cabinetId);
 
-                    if (!$cabinet || !$cabinet->branch) {
+                    if (! $cabinet || ! $cabinet->branch) {
                         return [];
                     }
 
@@ -214,7 +213,7 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
     {
         $appTimezone = Config::get('app.timezone', 'UTC');
         $shiftStart = Carbon::parse($shift->getRawOriginal('start_time'), 'UTC')->setTimezone($appTimezone);
-        
+
         if ($shiftStart->isPast()) {
             // Для прошедших смен используем серые цвета
             $pastColors = [
@@ -223,11 +222,12 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
                 '#4B5563', // еще темнее
                 '#374151', // очень темный
             ];
-            
+
             $cabinetId = $shift->cabinet_id ?? 0;
+
             return $pastColors[$cabinetId % count($pastColors)];
         }
-        
+
         // Цвета для активных смен
         $colors = [
             '#3B82F6', // синий
@@ -239,20 +239,21 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
             '#84CC16', // лайм
             '#F97316', // оранжевый
         ];
-        
+
         $cabinetId = $shift->cabinet_id ?? 0;
+
         return $colors[$cabinetId % count($colors)];
     }
 
     protected function modalActions(): array
     {
         $user = auth()->user();
-        
+
         // Врач может только просматривать
         if ($user->isDoctor()) {
             return [];
         }
-        
+
         return [
             \Saade\FilamentFullCalendar\Actions\EditAction::make()
                 ->mountUsing($this->buildMountCallback())
@@ -260,18 +261,18 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
                     $cabinetId = $data['cabinet_id'] ?? $this->record->cabinet_id;
                     $this->updateShiftRecord($data, (int) $cabinetId);
                 }),
-                
+
             \Saade\FilamentFullCalendar\Actions\DeleteAction::make()
                 ->mountUsing($this->buildMountCallback())
                 ->action(function () {
                     $this->record->delete();
-                    
+
                     Notification::make()
                         ->title('Смена удалена')
                         ->body('Смена врача удалена из расписания')
                         ->success()
                         ->send();
-                        
+
                     $this->refreshRecords();
                 }),
 
@@ -282,7 +283,7 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
     {
         $user = auth()->user();
         $actions = [];
-        
+
         // Добавляем кнопку фильтров
         $actions[] = \Filament\Actions\Action::make('filters')
             ->label('Фильтры')
@@ -295,24 +296,24 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
                             ->label('Дата с')
                             ->displayFormat('d.m.Y')
                             ->native(false),
-                            
+
                         \Filament\Forms\Components\DatePicker::make('date_to')
                             ->label('Дата по')
                             ->displayFormat('d.m.Y')
                             ->native(false),
-                            
+
                         \Filament\Forms\Components\Select::make('doctor_ids')
                             ->label('Врачи')
                             ->multiple()
                             ->searchable()
-                            ->options(fn() => $this->getFilterService()->getAvailableDoctorsForShifts(auth()->user())),
+                            ->options(fn () => $this->getFilterService()->getAvailableDoctorsForShifts(auth()->user())),
                     ]),
             ])
             ->fillForm($this->filters)
             ->action(function (array $data) {
                 $this->filters = $data;
                 $this->refreshRecords();
-                
+
                 Notification::make()
                     ->title('Фильтры применены')
                     ->success()
@@ -328,48 +329,25 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
                             'date_from' => null,
                             'date_to' => null,
                         ];
-                        
+
                         $this->refreshRecords();
-                        
+
                         Notification::make()
                             ->title('Фильтры очищены')
                             ->success()
                             ->send();
-                    })
+                    }),
             ])
             ->closeModalByClickingAway(false)
             ->modalSubmitActionLabel('Применить')
             ->modalCancelActionLabel('Отмена');
-        
-        // Врач не может создавать смены
-        if (!$user->isDoctor()) {
-            $actions[] = \Saade\FilamentFullCalendar\Actions\CreateAction::make()
-                ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {
-                    $form->fill([
-                        'start_time' => $arguments['start'] ?? null,
-                        'end_time' => $arguments['end'] ?? null,
-                    ]);
-                })
-                ->action(function (array $data) {
-                    if (empty($data['cabinet_id'])) {
-                        Notification::make()
-                            ->title('Ошибка')
-                            ->body('Не выбран кабинет')
-                            ->danger()
-                            ->send();
-                        return;
-                    }
 
-                    $this->createShiftSeries($data, (int) $data['cabinet_id']);
-                });
-        }
-        
         return $actions;
     }
 
     protected function getAdditionalMountFormFillData(): array
     {
-        if (!$this->record instanceof DoctorShift) {
+        if (! $this->record instanceof DoctorShift) {
             return [];
         }
 
@@ -378,5 +356,4 @@ class AllCabinetsScheduleWidget extends BaseDoctorShiftScheduleWidget
             'doctor_id' => $this->record->doctor_id,
         ];
     }
-
 }

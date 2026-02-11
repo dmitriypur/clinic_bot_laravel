@@ -2,7 +2,7 @@
 
 /**
  * Конфигурация BotMan framework для Telegram бота
- * 
+ *
  * Этот файл настраивает:
  * - Подключение к Telegram API
  * - Файловое хранилище для состояний диалогов
@@ -10,6 +10,11 @@
  */
 
 return [
+    'telegram' => [
+        'token' => env('TELEGRAM_TOKEN'),
+        'username' => env('TELEGRAM_BOT_USERNAME', 'medical_center_test_bot'),
+        'webhook_url' => env('TELEGRAM_WEBHOOK_URL'),
+    ],
     /*
     |--------------------------------------------------------------------------
     | Драйверы мессенджеров

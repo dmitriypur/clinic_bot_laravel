@@ -5,7 +5,6 @@ namespace App\Filament\Resources\AppointmentResource\Pages;
 use App\Filament\Resources\AppointmentResource;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
-use Filament\Forms;
 
 class EditAppointment extends EditRecord
 {
@@ -23,7 +22,7 @@ class EditAppointment extends EditRecord
         // Обновляем календарь после изменения статуса приема
         $this->dispatch('refetchEvents');
     }
-    
+
     protected function mutateFormDataBeforeFill(array $data): array
     {
         // Загружаем данные заявки при редактировании
@@ -44,7 +43,7 @@ class EditAppointment extends EditRecord
                     'doctor' => $application->doctor?->name,
                     'cabinet' => $application->cabinet?->name,
                 ];
-                
+
                 // Заполняем поля только для чтения
                 $data['patient_full_name'] = $application->full_name;
                 $data['patient_parent'] = $application->full_name_parent;
@@ -58,7 +57,7 @@ class EditAppointment extends EditRecord
                 $data['appointment_cabinet'] = $application->cabinet?->name;
             }
         }
-        
+
         return $data;
     }
 }

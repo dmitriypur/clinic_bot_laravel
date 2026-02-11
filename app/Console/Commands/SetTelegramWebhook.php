@@ -16,10 +16,11 @@ class SetTelegramWebhook extends Command
     public function handle()
     {
         $token = config('botman.telegram.token');
-        
-        if (!$token) {
+
+        if (! $token) {
             $this->error('TELEGRAM_TOKEN не найден в конфигурации');
             $this->info('Добавьте TELEGRAM_TOKEN=your_bot_token в .env файл');
+
             return 1;
         }
 
@@ -28,12 +29,13 @@ class SetTelegramWebhook extends Command
         }
 
         $url = $this->argument('url') ?: config('botman.telegram.webhook_url');
-        
-        if (!$url) {
+
+        if (! $url) {
             $this->error('URL webhook не указан');
             $this->info('Использование:');
             $this->info('  php artisan telegram:webhook https://your-domain.com/botman');
             $this->info('  или добавьте TELEGRAM_WEBHOOK_URL в .env');
+
             return 1;
         }
 
@@ -54,13 +56,16 @@ class SetTelegramWebhook extends Command
             $data = $response->json();
             if ($data['ok']) {
                 $this->info('✅ Webhook успешно установлен!');
+
                 return 0;
             } else {
-                $this->error('❌ Ошибка: ' . $data['description']);
+                $this->error('❌ Ошибка: '.$data['description']);
+
                 return 1;
             }
         } else {
-            $this->error('❌ Ошибка HTTP: ' . $response->status());
+            $this->error('❌ Ошибка HTTP: '.$response->status());
+
             return 1;
         }
     }
@@ -75,13 +80,16 @@ class SetTelegramWebhook extends Command
             $data = $response->json();
             if ($data['ok']) {
                 $this->info('✅ Webhook удален!');
+
                 return 0;
             } else {
-                $this->error('❌ Ошибка: ' . $data['description']);
+                $this->error('❌ Ошибка: '.$data['description']);
+
                 return 1;
             }
         } else {
-            $this->error('❌ Ошибка HTTP: ' . $response->status());
+            $this->error('❌ Ошибка HTTP: '.$response->status());
+
             return 1;
         }
     }

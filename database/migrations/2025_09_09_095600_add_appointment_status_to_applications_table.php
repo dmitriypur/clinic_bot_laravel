@@ -13,9 +13,9 @@ return new class extends Migration
     {
         Schema::table('applications', function (Blueprint $table) {
             $table->enum('appointment_status', ['scheduled', 'in_progress', 'completed'])
-                  ->default('scheduled')
-                  ->after('send_to_1c')
-                  ->comment('Статус приема: scheduled - запланирован, in_progress - в процессе, completed - завершен');
+                ->default('scheduled')
+                ->after('send_to_1c')
+                ->comment('Статус приема: scheduled - запланирован, in_progress - в процессе, completed - завершен');
         });
     }
 

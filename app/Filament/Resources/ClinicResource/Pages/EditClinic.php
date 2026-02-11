@@ -10,7 +10,7 @@ class EditClinic extends EditRecord
 {
     protected static string $resource = ClinicResource::class;
 
-    public function mount(int | string $record): void
+    public function mount(int|string $record): void
     {
         parent::mount($record);
 

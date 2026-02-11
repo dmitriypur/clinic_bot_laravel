@@ -2,17 +2,15 @@
 
 namespace App\Filament\Resources\BranchResource\RelationManagers;
 
-use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class CabinetsRelationManager extends RelationManager
 {
     protected static string $relationship = 'cabinets';
+
     protected static ?string $title = 'Кабинеты';
 
     public function form(Form $form): Form
@@ -30,7 +28,7 @@ class CabinetsRelationManager extends RelationManager
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->label('Название'),
-                    
+
                 Tables\Columns\IconColumn::make('status')
                     ->label('Статус')
                     ->boolean()

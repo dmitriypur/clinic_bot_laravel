@@ -13,7 +13,7 @@ class AmoCrmNotifier extends AbstractHttpNotifier
         $hook = Arr::get($settings, 'webhook_url');
         $token = Arr::get($settings, 'token');
 
-        if (!$hook || !$token) {
+        if (! $hook || ! $token) {
             return new CrmNotificationResult(false, error: 'Не указаны webhook_url или token для AmoCRM.');
         }
 
@@ -22,7 +22,7 @@ class AmoCrmNotifier extends AbstractHttpNotifier
             : null;
 
         $payload = [
-            'name' => Arr::get($settings, 'lead_prefix', 'Заявка') . ' #' . $application->id,
+            'name' => Arr::get($settings, 'lead_prefix', 'Заявка').' #'.$application->id,
             'price' => Arr::get($settings, 'price', 0),
             'status_id' => Arr::get($settings, 'status_id'),
             'custom_fields_values' => [

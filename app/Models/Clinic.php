@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\IntegrationMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Models\CrmIntegrationLog;
 
 class Clinic extends Model
 {
@@ -17,6 +17,7 @@ class Clinic extends Model
         'crm_provider',
         'crm_settings',
         'dashboard_calendar_enabled',
+        'integration_mode',
     ];
 
     protected $casts = [
@@ -24,6 +25,7 @@ class Clinic extends Model
         'slot_duration' => 'integer',
         'crm_settings' => 'array',
         'dashboard_calendar_enabled' => 'boolean',
+        'integration_mode' => IntegrationMode::class,
     ];
 
     public function cities(): BelongsToMany
@@ -51,18 +53,41 @@ class Clinic extends Model
         return $this->hasMany(Branch::class);
     }
 
+    public function externalMappings(): HasMany
+    {
+        return $this->hasMany(ExternalMapping::class);
+    }
+
+    public function onecSlots(): HasMany
+    {
+        return $this->hasMany(OnecSlot::class);
+    }
+
     public function crmIntegrationLogs(): HasMany
     {
         return $this->hasMany(CrmIntegrationLog::class);
     }
 
-    /**
-     * Получить эффективную длительность слота для клиники
-     * Если у клиники не задана длительность, используется значение по умолчанию (30 минут)
-     */
     public function getEffectiveSlotDuration(): int
     {
         return $this->slot_duration ?? 30;
     }
 
+    public function integrationMode(): IntegrationMode
+    {
+        return $this->integration_mode ?? IntegrationMode::LOCAL;
+    }
+
+    public function isOnecPushMode(): bool
+    {
+        return $this->integrationMode() === IntegrationMode::ONEC_PUSH;
+    }
+
+    /**
+     * @deprecated Используйте integrationMode()/isOnecPushMode()
+     */
+    public function usesOneCIntegration(): bool
+    {
+        return $this->isOnecPushMode();
+    }
 }

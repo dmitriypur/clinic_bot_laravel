@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::table('applications', function (Blueprint $table) {
             // Добавляем новое поле status_id
             $table->foreignId('status_id')->nullable()->after('source')->constrained('application_statuses');
-            
+
             // Добавляем индекс для быстрого поиска по статусу
             $table->index('status_id');
         });

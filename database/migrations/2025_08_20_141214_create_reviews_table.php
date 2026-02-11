@@ -19,7 +19,7 @@ return new class extends Migration
             $table->foreignId('doctor_id')->constrained('doctors');
             $table->integer('status');
             $table->timestamps();
-            
+
             $table->index('user_id');
             $table->index('doctor_id');
             $table->index('status');

@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasTable('crm_integration_logs')) {
+        if (! Schema::hasTable('crm_integration_logs')) {
             Schema::create('crm_integration_logs', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('clinic_id')->constrained()->cascadeOnDelete();

@@ -17,13 +17,12 @@ class MassShiftCreator
 {
     public function __construct(
         protected ShiftService $shiftService
-    ) {
-    }
+    ) {}
 
     /**
      * Создает одну или несколько смен в зависимости от диапазона и параметров перерыва.
      *
-     * @param array $data входные данные формы (doctor_id, cabinet_id, start_time, end_time, slot_duration, has_break, break_start_time, break_end_time, workday_start, workday_end, excluded_weekdays)
+     * @param  array  $data  входные данные формы (doctor_id, cabinet_id, start_time, end_time, slot_duration, has_break, break_start_time, break_end_time, workday_start, workday_end, excluded_weekdays)
      * @return Collection созданные смены
      *
      * @throws ValidationException
@@ -38,11 +37,11 @@ class MassShiftCreator
         $workdayStartTemplate = null;
         $workdayEndTemplate = null;
 
-        if (!empty($data['workday_start'])) {
+        if (! empty($data['workday_start'])) {
             $workdayStartTemplate = $this->parseTimeOnly($data['workday_start'], $start, 'workday_start', 'Неверный формат времени начала рабочего дня.');
         }
 
-        if (!empty($data['workday_end'])) {
+        if (! empty($data['workday_end'])) {
             $workdayEndTemplate = $this->parseTimeOnly($data['workday_end'], $end, 'workday_end', 'Неверный формат времени конца рабочего дня.');
         }
 
@@ -70,7 +69,7 @@ class MassShiftCreator
             $period = CarbonPeriod::create($start->copy()->startOfDay(), $end->copy()->startOfDay());
 
             foreach ($period as $day) {
-                if (!empty($excludedWeekdays) && in_array($day->isoWeekday(), $excludedWeekdays, true)) {
+                if (! empty($excludedWeekdays) && in_array($day->isoWeekday(), $excludedWeekdays, true)) {
                     continue;
                 }
 
@@ -129,8 +128,6 @@ class MassShiftCreator
     /**
      * Преобразует входные данные перерыва в границы по времени.
      *
-     * @param array $data
-     * @param CarbonInterface $base
      * @return array{start: CarbonInterface, end: CarbonInterface}
      *
      * @throws ValidationException
@@ -140,7 +137,7 @@ class MassShiftCreator
         $breakStartRaw = $data['break_start_time'] ?? null;
         $breakEndRaw = $data['break_end_time'] ?? null;
 
-        if (!$breakStartRaw || !$breakEndRaw) {
+        if (! $breakStartRaw || ! $breakEndRaw) {
             throw ValidationException::withMessages([
                 'break_start_time' => 'Укажите начало перерыва.',
                 'break_end_time' => 'Укажите конец перерыва.',
@@ -165,14 +162,11 @@ class MassShiftCreator
     /**
      * Строит временные сегменты для создания смен.
      *
-     * @param CarbonInterface $segmentStart
-     * @param CarbonInterface $segmentEnd
-     * @param array|null $break
      * @return array<int, array{start: CarbonInterface, end: CarbonInterface}>
      */
     protected function buildSegments(CarbonInterface $segmentStart, CarbonInterface $segmentEnd, ?array $break): array
     {
-        if (!$break) {
+        if (! $break) {
             return [['start' => $segmentStart, 'end' => $segmentEnd]];
         }
 
@@ -197,15 +191,10 @@ class MassShiftCreator
 
     /**
      * Возвращает перерыв, применимый для конкретного дня.
-     *
-     * @param CarbonInterface $segmentStart
-     * @param CarbonInterface $segmentEnd
-     * @param array|null $breakBounds
-     * @return array|null
      */
     protected function resolveDailyBreak(CarbonInterface $segmentStart, CarbonInterface $segmentEnd, ?array $breakBounds): ?array
     {
-        if (!$breakBounds) {
+        if (! $breakBounds) {
             return null;
         }
 
@@ -245,11 +234,6 @@ class MassShiftCreator
     /**
      * Преобразует строку времени в Carbon с базовой датой.
      *
-     * @param mixed $value
-     * @param CarbonInterface $base
-     * @param string $field
-     * @param string $errorMessage
-     * @return Carbon
      *
      * @throws ValidationException
      */
@@ -292,11 +276,6 @@ class MassShiftCreator
 
     /**
      * Применяет временной шаблон к конкретному дню.
-     *
-     * @param CarbonInterface $day
-     * @param CarbonInterface|null $template
-     * @param CarbonInterface $fallback
-     * @return CarbonInterface
      */
     protected function applyTemplateToDay(CarbonInterface $day, ?CarbonInterface $template, CarbonInterface $fallback): CarbonInterface
     {

@@ -12,7 +12,7 @@ enum AppointmentStatus: string
      */
     public function getLabel(): string
     {
-        return match($this) {
+        return match ($this) {
             self::IN_PROGRESS => 'В процессе',
             self::COMPLETED => 'Завершен',
         };
@@ -23,7 +23,7 @@ enum AppointmentStatus: string
      */
     public function getColor(): string
     {
-        return match($this) {
+        return match ($this) {
             self::IN_PROGRESS => 'warning',
             self::COMPLETED => 'success',
         };
@@ -34,7 +34,7 @@ enum AppointmentStatus: string
      */
     public function getIcon(): string
     {
-        return match($this) {
+        return match ($this) {
             self::IN_PROGRESS => 'heroicon-o-clock',
             self::COMPLETED => 'heroicon-o-check-circle',
         };
@@ -46,7 +46,7 @@ enum AppointmentStatus: string
     public static function options(): array
     {
         return collect(self::cases())
-            ->mapWithKeys(fn($status) => [$status->value => $status->getLabel()])
+            ->mapWithKeys(fn ($status) => [$status->value => $status->getLabel()])
             ->toArray();
     }
 }

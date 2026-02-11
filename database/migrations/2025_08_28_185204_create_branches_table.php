@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('phone', 50)->nullable();
             $table->integer('status')->default(1);
             $table->timestamps();
-            
+
             $table->index(['clinic_id', 'city_id']);
             $table->index('status');
             $table->index('name');

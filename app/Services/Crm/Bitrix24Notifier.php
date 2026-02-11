@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Services\Crm;
 
 use App\Models\Application;
@@ -11,7 +12,7 @@ class Bitrix24Notifier extends AbstractHttpNotifier
     {
         $baseUrl = $this->normalizeBaseUrl(Arr::get($settings, 'webhook_url'));
 
-        if (!$baseUrl) {
+        if (! $baseUrl) {
             return new CrmNotificationResult(false, error: 'Не указан корректный webhook_url для Bitrix24.');
         }
 
@@ -29,13 +30,13 @@ class Bitrix24Notifier extends AbstractHttpNotifier
 
         $contactId = $this->resolveContactId($baseUrl, $application, $comment);
 
-        if (!$contactId) {
+        if (! $contactId) {
             return new CrmNotificationResult(false, error: 'Не удалось создать контакт в Bitrix24.');
         }
 
         $dealPayload = [
             'fields' => [
-                'TITLE' => Arr::get($settings, 'title_prefix', 'Заявка') . ' #' . $application->id,
+                'TITLE' => Arr::get($settings, 'title_prefix', 'Заявка').' #'.$application->id,
                 'CONTACT_ID' => $contactId,
                 'COMMENTS' => $comment,
             ],
@@ -113,16 +114,16 @@ class Bitrix24Notifier extends AbstractHttpNotifier
     {
         $baseUrl = rtrim($baseUrl, '/');
 
-        if (!str_ends_with($method, '.json')) {
+        if (! str_ends_with($method, '.json')) {
             $method .= '.json';
         }
 
-        return $baseUrl . '/' . $method;
+        return $baseUrl.'/'.$method;
     }
 
     protected function normalizeBaseUrl(?string $url): ?string
     {
-        if (!$url) {
+        if (! $url) {
             return null;
         }
 

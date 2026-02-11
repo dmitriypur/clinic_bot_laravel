@@ -3,10 +3,10 @@
 namespace App\Filament\Exports;
 
 use App\Models\Application;
+use Filament\Actions\Exports\Enums\ExportFormat;
 use Filament\Actions\Exports\ExportColumn;
 use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
-use Filament\Actions\Exports\Enums\ExportFormat;
 
 class ApplicationExporter extends Exporter
 {
@@ -50,7 +50,7 @@ class ApplicationExporter extends Exporter
     {
         $successfulRows = $export->successful_rows;
         $rowsWord = $successfulRows === 1 ? 'запись' : ($successfulRows < 5 ? 'записи' : 'записей');
-        
+
         // Определяем тип экспорта по контексту
         $exportType = 'заявок';
         if (request()->is('admin/applications*')) {
@@ -58,7 +58,7 @@ class ApplicationExporter extends Exporter
         } elseif (request()->is('admin/bids*')) {
             $exportType = 'заявок';
         }
-        
+
         $body = "Экспорт {$exportType} завершен. Экспортировано {$successfulRows} {$rowsWord}.";
 
         $failedRowsCount = $export->getFailedRowsCount();

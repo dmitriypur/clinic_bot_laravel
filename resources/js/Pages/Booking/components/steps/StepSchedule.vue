@@ -64,13 +64,22 @@
             </p>
         </div>
 
+        <p v-if="slotValidationError" class="text-sm text-red-600">
+            {{ slotValidationError }}
+        </p>
+        <p v-if="isValidatingSlot" class="text-sm text-gray-500">
+            Проверяем выбранный слот в 1С...
+        </p>
+
         <BaseButton
             v-if="selectedSlot"
             class="w-full py-2"
             variant="primary"
+            type="button"
+            :disabled="isValidatingSlot"
             @click="$emit('next')"
         >
-            Продолжить
+            {{ isValidatingSlot ? 'Подождите...' : 'Продолжить' }}
         </BaseButton>
         <BaseButton
             v-else-if="!isLoadingSlots && (slots.length === 0 || !hasAvailableSlots)"
@@ -144,6 +153,14 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    slotValidationError: {
+        type: String,
+        default: '',
+    },
+    isValidatingSlot: {
+        type: Boolean,
+        default: false,
+    },
 })
 
 const emits = defineEmits(['update:selectedDate', 'change-date', 'select-slot', 'next', 'skip', 'back'])
@@ -159,24 +176,24 @@ const internalDate = computed({
 <style scoped>
 
 :deep(.booking-picker) {
-    width: 100%;
-    flex-direction: column;
+  width: 100%;
+  flex-direction: column;
 
     div{
         width: 100%;
     }
 
-    .dp__theme_light{
-        --dp-background-color: #fff8e6;
-        --dp-text-color: #1f2937;
-        --dp-primary-color: #f59e0b !important;
-        --dp-hover-color: #fde68a;
-        --dp-highlight-color: #f97316;
-        --dp-active-text-color: #0f172a;
-        --dp-border-radius: 12px;
-        --dp-input-padding: 12px;
-    }
-
+  .dp__theme_light{
+    --dp-background-color: #fff8e6;
+    --dp-text-color: #1f2937;
+    --dp-primary-color: #f59e0b !important;
+    --dp-hover-color: #fde68a;
+    --dp-highlight-color: #f97316;
+    --dp-active-text-color: #0f172a;
+    --dp-border-radius: 12px;
+    --dp-input-padding: 12px;
+  }
+  
 }
 
 </style>

@@ -416,11 +416,11 @@ export function useBooking() {
 
         try {
             const branches = await request
-            branchesCache.set(cacheKey, branches)
-            state.branchesByClinic = {
-                ...state.branchesByClinic,
-                [clinicId]: branches.slice(),
-            }
+        branchesCache.set(cacheKey, branches)
+        state.branchesByClinic = {
+            ...state.branchesByClinic,
+            [clinicId]: branches.slice(),
+        }
         } catch (error) {
             console.error('Не удалось загрузить филиалы', error)
             state.branchesByClinic = {

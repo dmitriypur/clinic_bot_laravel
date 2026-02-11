@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('link', 2048);
             $table->string('secret', 4096);
             $table->timestamps();
-            
+
             $table->index('user_id');
         });
     }

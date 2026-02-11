@@ -3,16 +3,13 @@
 namespace App\Filament\Filters;
 
 use App\Services\CalendarFilterService;
-use Filament\Forms;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Select;
 use Filament\Tables\Filters\Filter;
 use Illuminate\Database\Eloquent\Builder;
 
 class ApplicationFilters extends Filter
 {
-
     public static function make(?string $name = null): static
     {
         return parent::make($name ?? 'application_filters')
@@ -22,12 +19,12 @@ class ApplicationFilters extends Filter
                     ->label('Дата с')
                     ->displayFormat('d.m.Y')
                     ->native(false),
-                    
+
                 DatePicker::make('date_to')
                     ->label('Дата по')
                     ->displayFormat('d.m.Y')
                     ->native(false),
-                    
+
                 Select::make('clinic_ids')
                     ->label('Клиники')
                     ->multiple()
@@ -35,6 +32,7 @@ class ApplicationFilters extends Filter
                     ->reactive()
                     ->options(function () {
                         $filterService = app(CalendarFilterService::class);
+
                         return $filterService->getAvailableClinics(auth()->user());
                     })
                     ->afterStateUpdated(function ($state, callable $set) {
@@ -52,12 +50,13 @@ class ApplicationFilters extends Filter
                             return [];
                         }
                         $filterService = app(CalendarFilterService::class);
+
                         return $filterService->getAvailableBranches(auth()->user(), $clinicIds);
                     })
                     ->afterStateUpdated(function ($state, callable $set) {
                         $set('doctor_ids', []);
                     }),
-                    
+
                 Select::make('doctor_ids')
                     ->label('Врачи')
                     ->multiple()
@@ -69,9 +68,10 @@ class ApplicationFilters extends Filter
                             return [];
                         }
                         $filterService = app(CalendarFilterService::class);
+
                         return $filterService->getAvailableDoctors(auth()->user(), $branchIds);
                     }),
-                    
+
                 Select::make('status_ids')
                     ->label('Статусы')
                     ->multiple()
@@ -93,6 +93,7 @@ class ApplicationFilters extends Filter
                     'doctor_ids' => $data['doctor_ids'] ?? [],
                     'status_ids' => $data['status_ids'] ?? [],
                 ];
+
                 return $filterService->applyApplicationFilters($query, $filters, $user);
             });
     }

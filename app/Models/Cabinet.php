@@ -5,14 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Models\Branch;
-use App\Models\Application;
-use App\Models\DoctorShift;
 use Illuminate\Support\Facades\Cache;
 
 /**
  * Модель кабинета
- * 
+ *
  * Кабинет - это физическое помещение в филиале клиники, где принимает врач.
  * Каждый кабинет принадлежит одному филиалу и может иметь множество смен врачей.
  * Также к кабинету привязываются заявки на прием.
@@ -26,6 +23,7 @@ class Cabinet extends Model
         'branch_id',    // ID филиала, к которому принадлежит кабинет
         'name',         // Название кабинета (например, "Кабинет 101", "Процедурный кабинет")
         'status',       // Статус кабинета: 1 - активный, 0 - неактивный
+        'external_id',  // Внешний идентификатор кабинета в 1С
     ];
 
     /**
@@ -65,11 +63,11 @@ class Cabinet extends Model
     {
         // Очищаем все ключи кэша календаря
         $keys = Cache::get('calendar_cache_keys', []);
-        
+
         foreach ($keys as $key) {
             Cache::forget($key);
         }
-        
+
         // Очищаем ключ со списком ключей
         Cache::forget('calendar_cache_keys');
     }

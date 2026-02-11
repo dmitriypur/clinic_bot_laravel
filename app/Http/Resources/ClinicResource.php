@@ -13,12 +13,12 @@ class ClinicResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            "id" => $this->id,
-            "name" => $this->name,
-            "branches" => $this->branches->map(function ($branch) {
+            'id' => $this->id,
+            'name' => $this->name,
+            'branches' => $this->branches->map(function ($branch) {
                 return [
-                    "id" => $branch->id,
-                    "name" => $branch->name,
+                    'id' => $branch->id,
+                    'name' => $branch->name,
                 ];
             }),
         ];

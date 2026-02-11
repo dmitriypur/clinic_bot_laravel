@@ -34,7 +34,7 @@ class City extends Model
     public static function updateValidationRules(int $id): array
     {
         return [
-            'name' => 'required|string|max:255|unique:cities,name,' . $id,
+            'name' => 'required|string|max:255|unique:cities,name,'.$id,
             'status' => 'required|integer|in:0,1',
         ];
     }
@@ -67,5 +67,4 @@ class City extends Model
             $q->where('city_id', $this->id);
         })->distinct();
     }
-
 }

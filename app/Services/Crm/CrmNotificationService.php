@@ -11,7 +11,7 @@ class CrmNotificationService
     {
         $clinic = $application->clinic;
 
-        if (!$clinic) {
+        if (! $clinic) {
             return;
         }
 

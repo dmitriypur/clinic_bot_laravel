@@ -3,17 +3,17 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
-use Filament\Models\Contracts\FilamentUser;
-use Filament\Panel;
 
 class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasRoles;
+    use HasFactory, HasRoles, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -111,13 +111,13 @@ class User extends Authenticatable implements FilamentUser
         }
 
         if ($this->isPartner()) {
-            return \App\Models\Cabinet::whereHas('branch', function($query) {
+            return \App\Models\Cabinet::whereHas('branch', function ($query) {
                 $query->where('clinic_id', $this->clinic_id);
             })->get();
         }
 
         if ($this->isDoctor()) {
-            return \App\Models\Cabinet::whereHas('branch.doctors', function($query) {
+            return \App\Models\Cabinet::whereHas('branch.doctors', function ($query) {
                 $query->where('doctor_id', $this->doctor_id);
             })->get();
         }
@@ -135,7 +135,7 @@ class User extends Authenticatable implements FilamentUser
         }
 
         if ($this->isPartner()) {
-            return \App\Models\DoctorShift::whereHas('cabinet.branch', function($query) {
+            return \App\Models\DoctorShift::whereHas('cabinet.branch', function ($query) {
                 $query->where('clinic_id', $this->clinic_id);
             })->get();
         }
@@ -146,5 +146,4 @@ class User extends Authenticatable implements FilamentUser
 
         return collect();
     }
-
 }

@@ -22,10 +22,10 @@ class ClinicSeeder extends Seeder
         ];
 
         $cities = City::all();
-        
+
         foreach ($clinics as $clinicData) {
             $clinic = Clinic::create($clinicData);
-            
+
             // Привязываем каждую клинику к случайным городам
             $randomCities = $cities->random(rand(2, 4));
             $clinic->cities()->attach($randomCities->pluck('id'));

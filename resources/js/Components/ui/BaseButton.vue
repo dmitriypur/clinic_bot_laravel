@@ -2,6 +2,7 @@
     <button
         :type="type"
         :class="computedClasses"
+        :disabled="disabled"
         v-bind="$attrs"
     >
         <slot />

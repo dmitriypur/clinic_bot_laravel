@@ -19,7 +19,7 @@ return new class extends Migration
             $table->integer('sort_order')->default(0); // Порядок сортировки
             $table->boolean('is_active')->default(true); // Активен ли статус
             $table->timestamps();
-            
+
             $table->index(['is_active', 'sort_order']);
         });
     }

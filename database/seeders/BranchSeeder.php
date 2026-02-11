@@ -6,7 +6,6 @@ use App\Models\Branch;
 use App\Models\City;
 use App\Models\Clinic;
 use App\Models\Doctor;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class BranchSeeder extends Seeder
@@ -23,6 +22,7 @@ class BranchSeeder extends Seeder
 
         if ($clinics->isEmpty() || $cities->isEmpty()) {
             echo "Нет клиник или городов для создания филиалов\n";
+
             return;
         }
 
@@ -71,7 +71,7 @@ class BranchSeeder extends Seeder
 
         foreach ($branches as $branchData) {
             $branch = Branch::create($branchData);
-            
+
             // Привязываем случайных врачей к филиалу
             if ($doctors->isNotEmpty()) {
                 $randomDoctors = $doctors->random(min(3, $doctors->count()));
@@ -79,6 +79,6 @@ class BranchSeeder extends Seeder
             }
         }
 
-        echo "Создано " . count($branches) . " филиалов\n";
+        echo 'Создано '.count($branches)." филиалов\n";
     }
 }

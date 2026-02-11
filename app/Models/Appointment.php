@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\AppointmentStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use App\Enums\AppointmentStatus;
 
 class Appointment extends Model
 {
@@ -65,7 +65,7 @@ class Appointment extends Model
                             'Прием завершен',
                         ]);
                         // Автоматически заполняем время завершения приема
-                        if (!$appointment->completed_at) {
+                        if (! $appointment->completed_at) {
                             $appointment->completed_at = now();
                             $appointment->saveQuietly();
                         }
@@ -122,8 +122,10 @@ class Appointment extends Model
         if ($this->isInProgress()) {
             $this->status = AppointmentStatus::COMPLETED;
             $this->completed_at = now();
+
             return $this->save();
         }
+
         return false;
     }
 
@@ -133,7 +135,7 @@ class Appointment extends Model
     public function getPatientData(): array
     {
         $application = $this->application;
-        if (!$application) {
+        if (! $application) {
             return [];
         }
 
@@ -159,6 +161,7 @@ class Appointment extends Model
         if ($this->started_at && $this->completed_at) {
             return (int) $this->started_at->diffInMinutes($this->completed_at);
         }
+
         return null;
     }
 

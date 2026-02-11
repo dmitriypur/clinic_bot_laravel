@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\CityResource;
 use App\Http\Resources\ClinicResource;
 use App\Models\City;
 use App\Models\Clinic;
@@ -24,7 +23,7 @@ class ClinicController extends Controller
 
         if ($cities->isEmpty()) {
             return response()->json([
-                'error' => 'Clinic not found'
+                'error' => 'Clinic not found',
             ], 404);
         }
 
@@ -35,7 +34,7 @@ class ClinicController extends Controller
     {
         $latestUpdate = $city->clinics()->max('clinics.updated_at');
         $versionStamp = $latestUpdate ? (string) strtotime((string) $latestUpdate) : '0';
-        $cacheKey = 'clinics:by-city:' . $city->id . ':' . md5($request->fullUrl() . '|' . $versionStamp);
+        $cacheKey = 'clinics:by-city:'.$city->id.':'.md5($request->fullUrl().'|'.$versionStamp);
 
         if ($cached = Cache::get($cacheKey)) {
             return response()->json($cached);
@@ -71,7 +70,7 @@ class ClinicController extends Controller
 
         $latestUpdate = $branchesQuery->max('updated_at');
         $versionStamp = $latestUpdate ? (string) strtotime((string) $latestUpdate) : '0';
-        $cacheKey = 'clinics:branches:' . $clinic->id . ':' . ($cityId ?: 'any') . ':' . $versionStamp;
+        $cacheKey = 'clinics:branches:'.$clinic->id.':'.($cityId ?: 'any').':'.$versionStamp;
 
         if ($cached = Cache::get($cacheKey)) {
             return response()->json($cached);
@@ -98,5 +97,4 @@ class ClinicController extends Controller
 
         return response()->json($payload);
     }
-
 }

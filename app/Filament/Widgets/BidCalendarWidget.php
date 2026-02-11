@@ -3,23 +3,16 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Application;
-use App\Models\DoctorShift;
+use App\Models\Branch;
 use App\Models\Cabinet;
 use App\Models\Doctor;
-use App\Models\Branch;
-use App\Models\Clinic;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Grid;
-use Filament\Forms\Get;
-use Filament\Forms\Set;
-use Filament\Notifications\Notification;
+use App\Models\DoctorShift;
 use Carbon\Carbon;
+use Filament\Notifications\Notification;
 
 /**
  * Виджет календаря для BidResource
- * 
+ *
  * Адаптированная версия AppointmentCalendarWidget для работы в формах создания/редактирования заявок.
  * Основные особенности:
  * - Отображает календарь смен врачей с временными слотами
@@ -35,15 +28,15 @@ class BidCalendarWidget extends BaseAppointmentCalendarWidget
      * Получаются из родительского компонента (страницы формы)
      */
     public array $formData = [];
-    
+
     /**
      * Слушатели событий для обновления календаря
      */
     protected $listeners = ['refetchEvents', 'formDataUpdated', 'slotSelected', 'updateApplicationFromSlot'];
-    
+
     /**
      * Конфигурация календаря FullCalendar
-     * 
+     *
      * Настройки отображения и поведения календаря:
      * - Интерфейс на русском языке
      * - Рабочие часы с 8:00 до 20:00
@@ -148,15 +141,15 @@ class BidCalendarWidget extends BaseAppointmentCalendarWidget
 
     /**
      * Получить события для календаря
-     * 
+     *
      * Основная логика:
      * 1. Получаем смены врачей в запрошенном диапазоне дат
      * 2. Фильтруем по данным формы (клиника, филиал, врач, кабинет)
      * 3. Для каждой смены генерируем временные слоты
      * 4. Проверяем занятость каждого слота
      * 5. Формируем события для календаря с цветовой индикацией
-     * 
-     * @param array $fetchInfo Массив с датами начала и конца периода
+     *
+     * @param  array  $fetchInfo  Массив с датами начала и конца периода
      * @return array Массив событий для календаря
      */
     public function fetchEvents(array $fetchInfo): array
@@ -190,22 +183,22 @@ class BidCalendarWidget extends BaseAppointmentCalendarWidget
         ];
 
         // Если выбран город
-        if (!empty($this->formData['city_id'])) {
+        if (! empty($this->formData['city_id'])) {
             $filters['city_ids'] = [$this->formData['city_id']];
         }
 
         // Если выбрана клиника
-        if (!empty($this->formData['clinic_id'])) {
+        if (! empty($this->formData['clinic_id'])) {
             $filters['clinic_ids'] = [$this->formData['clinic_id']];
         }
 
         // Если выбран филиал
-        if (!empty($this->formData['branch_id'])) {
+        if (! empty($this->formData['branch_id'])) {
             $filters['branch_ids'] = [$this->formData['branch_id']];
         }
 
         // Если выбран врач
-        if (!empty($this->formData['doctor_id'])) {
+        if (! empty($this->formData['doctor_id'])) {
             $filters['doctor_ids'] = [$this->formData['doctor_id']];
         }
 
@@ -214,35 +207,37 @@ class BidCalendarWidget extends BaseAppointmentCalendarWidget
 
     /**
      * Обработка клика по событию в календаре
-     * 
+     *
      * Основная логика:
      * 1. Определяет тип слота (занятый или свободный)
      * 2. Для занятых слотов - показывает информацию о записи
      * 3. Для свободных слотов - передает данные в форму для заполнения поля appointment_datetime
      * 4. Проверяет права доступа пользователя
      * 5. Проверяет, не прошла ли запись
-     * 
-     * @param array $data Данные события календаря
+     *
+     * @param  array  $data  Данные события календаря
      */
     public function onEventClick(array $data): void
     {
         $user = auth()->user();
         $event = $data;
         $extendedProps = $event['extendedProps'] ?? [];
-        
+
         // Проверяем, не прошла ли запись
-        if (isset($extendedProps['is_past']) && $extendedProps['is_past']) {
+        if ((bool) ($extendedProps['is_past'] ?? false)) {
             Notification::make()
                 ->title('Прошедшая запись')
                 ->body('Нельзя выбрать прошедшие записи')
                 ->warning()
                 ->send();
+
             return;
         }
-        
+
         // Если слот занят - показываем информацию о записи
-        if (isset($extendedProps['is_occupied']) && $extendedProps['is_occupied']) {
+        if ((bool) ($extendedProps['is_occupied'] ?? false)) {
             $this->onOccupiedSlotClick($extendedProps);
+
             return;
         }
 
@@ -252,47 +247,111 @@ class BidCalendarWidget extends BaseAppointmentCalendarWidget
 
     /**
      * Обработка клика по свободному слоту
-     * 
+     *
      * Автоматически создает заявку со статусом "Запись на прием"
-     * 
-     * @param array $data Данные слота с информацией о кабинете и времени
+     *
+     * @param  array  $data  Данные слота с информацией о кабинете и времени
      */
     public function onFreeSlotClick(array $data): void
     {
-        // Находим смену врача по ID из данных события
-        $shift = DoctorShift::with(['cabinet.branch.clinic', 'cabinet.branch.city', 'doctor'])
-            ->find($data['shift_id']);
+        $slotStart = $data['slot_start'] ?? null;
+        if (is_string($slotStart)) {
+            $slotStart = Carbon::parse($slotStart);
+        }
 
-        if (!$shift) {
+        $clinicId = $data['clinic_id'] ?? null;
+        $branchId = $data['branch_id'] ?? null;
+        $cabinetId = $data['cabinet_id'] ?? null;
+        $doctorId = $data['doctor_id'] ?? null;
+
+        $clinicName = $data['clinic_name'] ?? null;
+        $branchName = $data['branch_name'] ?? null;
+        $cabinetName = $data['cabinet_name'] ?? null;
+        $doctorName = $data['doctor_name'] ?? null;
+        $cityId = $data['city_id'] ?? null;
+
+        if (($data['source'] ?? null) === 'onec') {
+            if ($branchId) {
+                $branch = Branch::with(['city', 'clinic'])->find($branchId);
+                if ($branch) {
+                    $cityId = $branch->city_id;
+                    $branchName = $branch->name;
+                    $clinicId = $branch->clinic_id;
+                    $clinicName = $branch->clinic?->name ?? $clinicName;
+                }
+            }
+
+            if ($cabinetId) {
+                $cabinet = Cabinet::find($cabinetId);
+                $cabinetName = $cabinet?->name ?? $cabinetName;
+            }
+
+            if ($doctorId) {
+                $doctor = Doctor::find($doctorId);
+                $doctorName = $doctor?->full_name ?? $doctorName;
+            }
+
+            if (! $cityId && isset($branch) && $branch) {
+                $cityId = $branch->city_id;
+            }
+
+            if (! $slotStart instanceof Carbon) {
+                $slotStart = Carbon::parse($data['slot_start'] ?? now());
+            }
+
+            $slotStartInCity = $slotStart->copy()->setTimezone(config('app.timezone', 'Europe/Moscow'));
+
+            $this->dispatch('updateApplicationFromSlot', [
+                'city_id' => $cityId,
+                'clinic_id' => $clinicId,
+                'clinic_name' => $clinicName,
+                'branch_id' => $branchId,
+                'branch_name' => $branchName,
+                'cabinet_id' => $cabinetId,
+                'cabinet_name' => $cabinetName,
+                'doctor_id' => $doctorId,
+                'doctor_name' => $doctorName,
+                'appointment_datetime' => $slotStartInCity->format('Y-m-d H:i:s'),
+                'onec_slot_id' => $data['onec_slot_id'] ?? $data['slot_id'] ?? null,
+                'slot_source' => 'onec',
+            ]);
+
+            return;
+        }
+
+        $shift = DoctorShift::with(['cabinet.branch.clinic', 'cabinet.branch.city', 'doctor'])
+            ->find($data['shift_id'] ?? null);
+
+        if (! $shift) {
             Notification::make()
                 ->title('Ошибка')
                 ->body('Смена врача не найдена')
                 ->danger()
                 ->send();
+
             return;
         }
 
-        
-        // Сохраняем данные слота в свойстве виджета для передачи в форму
-        $slotStart = $data['slot_start'];
-        if (is_string($slotStart)) {
-            $slotStart = \Carbon\Carbon::parse($slotStart);
+        if (! $slotStart instanceof Carbon) {
+            $slotStart = Carbon::parse($data['slot_start'] ?? now());
         }
-        
-        // Конвертируем время в часовой пояс приложения (Europe/Moscow)
-        $cityId = $shift->cabinet->branch->city_id;
-        $slotStartInCity = $slotStart->setTimezone(config('app.timezone', 'Europe/Moscow'));
-        
-        // Отправляем событие для обновления заявки данными слота
+
+        $slotStartInCity = $slotStart->copy()->setTimezone(config('app.timezone', 'Europe/Moscow'));
+
         $this->dispatch('updateApplicationFromSlot', [
-            'city_id' => $cityId,
+            'city_id' => $shift->cabinet->branch->city_id,
             'clinic_id' => $shift->cabinet->branch->clinic_id,
+            'clinic_name' => $shift->cabinet->branch->clinic->name,
             'branch_id' => $shift->cabinet->branch_id,
+            'branch_name' => $shift->cabinet->branch->name,
             'cabinet_id' => $shift->cabinet_id,
+            'cabinet_name' => $shift->cabinet->name,
             'doctor_id' => $shift->doctor_id,
+            'doctor_name' => $shift->doctor->full_name,
             'appointment_datetime' => $slotStartInCity->format('Y-m-d H:i:s'),
+            'slot_source' => 'local',
         ]);
-        
+
         // Отладочная информация
         \Log::info('BidCalendarWidget: Slot selected', [
             'original_slot_start' => $slotStart->format('Y-m-d H:i:s'),
@@ -305,32 +364,33 @@ class BidCalendarWidget extends BaseAppointmentCalendarWidget
 
     /**
      * Обработка клика по занятому слоту
-     * 
+     *
      * Показывает информацию о существующей записи
-     * 
-     * @param array $data Данные слота с информацией о кабинете и времени
+     *
+     * @param  array  $data  Данные слота с информацией о кабинете и времени
      */
     public function onOccupiedSlotClick(array $data): void
     {
         $user = auth()->user();
         $extendedProps = $data;
-        
+
         // Проверяем, есть ли данные заявки в событии
         if (isset($extendedProps['application_id']) && $extendedProps['application_id']) {
-            
+
             // Используем данные из события, но загружаем полную модель для просмотра
             $application = Application::with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
                 ->find($extendedProps['application_id']);
-                
-            if (!$application) {
+
+            if (! $application) {
                 Notification::make()
                     ->title('Ошибка')
                     ->body('Заявка не найдена')
                     ->danger()
                     ->send();
+
                 return;
             }
-            
+
             // Проверяем права доступа
             if ($user->isPartner() && $application->clinic_id !== $user->clinic_id) {
                 Notification::make()
@@ -338,6 +398,7 @@ class BidCalendarWidget extends BaseAppointmentCalendarWidget
                     ->body('Вы можете просматривать только заявки своей клиники')
                     ->danger()
                     ->send();
+
                 return;
             } elseif ($user->isDoctor() && $application->doctor_id !== $user->doctor_id) {
                 Notification::make()
@@ -345,6 +406,7 @@ class BidCalendarWidget extends BaseAppointmentCalendarWidget
                     ->body('Вы можете просматривать только свои заявки')
                     ->danger()
                     ->send();
+
                 return;
             }
 
@@ -359,19 +421,19 @@ class BidCalendarWidget extends BaseAppointmentCalendarWidget
 
     /**
      * Действия в заголовке виджета
-     * 
+     *
      * Календарь не имеет собственных действий - фильтрация происходит через поля формы
-     * 
+     *
      * @return array Пустой массив действий
      */
     protected function headerActions(): array
     {
         return [];
     }
-    
+
     /**
      * Обработчик события обновления календаря
-     * 
+     *
      * Вызывается при необходимости принудительного обновления событий календаря.
      * Например, после создания, редактирования или удаления заявки.
      * Использует Livewire dispatch для обновления компонента.
@@ -381,7 +443,7 @@ class BidCalendarWidget extends BaseAppointmentCalendarWidget
         // Принудительно обновляем события календаря
         $this->dispatch('$refresh');
     }
-    
+
     /**
      * Принудительное обновление календаря
      */
@@ -389,11 +451,11 @@ class BidCalendarWidget extends BaseAppointmentCalendarWidget
     {
         // Очищаем кэш календаря
         $this->clearCalendarCache();
-        
+
         // Принудительно обновляем события календаря
         $this->dispatch('$refresh');
     }
-    
+
     /**
      * Очистка кэша календаря
      */
@@ -401,11 +463,11 @@ class BidCalendarWidget extends BaseAppointmentCalendarWidget
     {
         // Очищаем все ключи кэша календаря
         $keys = \Illuminate\Support\Facades\Cache::get('calendar_cache_keys', []);
-        
+
         foreach ($keys as $key) {
             \Illuminate\Support\Facades\Cache::forget($key);
         }
-        
+
         // Очищаем ключ со списком ключей
         \Illuminate\Support\Facades\Cache::forget('calendar_cache_keys');
     }

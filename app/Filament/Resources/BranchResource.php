@@ -2,16 +2,25 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\IntegrationMode;
 use App\Filament\Resources\BranchResource\Pages;
 use App\Filament\Resources\BranchResource\RelationManagers;
 use App\Models\Branch;
+use App\Models\IntegrationEndpoint;
 use Filament\Forms;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\Auth;
 
 class BranchResource extends Resource
 {
@@ -20,11 +29,17 @@ class BranchResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-building-office';
 
     protected static ?string $modelLabel = 'Филиал';
+
     protected static ?string $pluralModelLabel = 'Филиалы';
+
     protected static ?string $navigationLabel = 'Филиалы';
+
     protected static ?string $pluralLabel = 'Филиалы';
+
     protected static ?string $label = 'Филиал';
+
     protected static ?string $navigationGroup = 'Клиники';
+
     protected static ?int $navigationSort = 3;
 
     public static function getEloquentQuery(): Builder
@@ -32,7 +47,7 @@ class BranchResource extends Resource
         $query = parent::getEloquentQuery();
 
         // Получаем текущего пользователя
-        $user = auth()->user();
+        $user = Auth::user();
 
         // Если пользователь с ролью 'doctor' — не показываем ничего
         if ($user && $user->hasRole('doctor')) {
@@ -48,12 +63,12 @@ class BranchResource extends Resource
 
     public static function form(Form $form): Form
     {
-        $user = auth()->user();
+        $user = Auth::user();
         $isPartner = $user && $user->hasRole('partner');
 
         return $form
             ->schema([
-                Forms\Components\Select::make('clinic_id')
+                Select::make('clinic_id')
                     ->relationship(
                         'clinic',
                         'name',
@@ -68,13 +83,13 @@ class BranchResource extends Resource
                     ->dehydrated() // keep the value when the field is disabled for partners
                     ->disabled($isPartner)
                     ->afterStateUpdated(fn (callable $set) => $set('city_id', null)),
-                Forms\Components\Select::make('city_id')
+                Select::make('city_id')
                     ->label('Город')
                     ->required()
                     ->searchable()
                     ->options(function (callable $get) {
                         $clinicId = $get('clinic_id');
-                        if (!$clinicId) {
+                        if (! $clinicId) {
                             return [];
                         }
 
@@ -83,19 +98,23 @@ class BranchResource extends Resource
                             ->pluck('name', 'id')
                             ->toArray() ?? [];
                     })
-                    ->disabled(fn (callable $get): bool => !$get('clinic_id')),
-                Forms\Components\TextInput::make('name')
+                    ->disabled(fn (callable $get): bool => ! $get('clinic_id')),
+                TextInput::make('name')
                     ->required()
                     ->label('Название филиала')
                     ->maxLength(500),
                 Forms\Components\Textarea::make('address')
                     ->label('Адрес')
                     ->columnSpanFull(),
-                Forms\Components\TextInput::make('phone')
+                TextInput::make('phone')
                     ->label('Телефон')
                     ->tel()
                     ->maxLength(50),
-                Forms\Components\Select::make('status')
+                TextInput::make('external_id')
+                    ->label('External ID (GUID филиала в 1С)')
+                    ->helperText('Используется для сопоставления филиала с 1С.')
+                    ->maxLength(191),
+                Select::make('status')
                     ->label('Статус')
                     ->options([
                         1 => 'Активный',
@@ -103,7 +122,7 @@ class BranchResource extends Resource
                     ])
                     ->required()
                     ->default(1),
-                Forms\Components\Select::make('slot_duration')
+                Select::make('slot_duration')
                     ->label('Длительность слота (минуты)')
                     ->options([
                         10 => '10 минут',
@@ -123,6 +142,61 @@ class BranchResource extends Resource
                     ->default(30)
                     ->helperText('Если не указано, будет использоваться настройка клиники')
                     ->nullable(),
+                Select::make('integration_mode')
+                    ->label('Режим интеграции')
+                    ->options(IntegrationMode::options())
+                    ->placeholder('Как у клиники')
+                    ->nullable()
+                    ->helperText('Оставьте пустым, чтобы использовать режим клиники.'),
+                Section::make('Интеграция с 1С')
+                    ->description('Настройки подключения филиала к своей 1С.')
+                    ->relationship('integrationEndpoint')
+                    ->collapsible()
+                    ->schema([
+                        Hidden::make('type')->default(IntegrationEndpoint::TYPE_ONEC),
+                        Toggle::make('is_active')->label('Интеграция включена')->default(true),
+                        TextInput::make('base_url')
+                            ->label('Базовый URL API 1С')
+                            ->url()
+                            ->placeholder('https://web.1c-luxoptic.ru/nUNF/hs/integration/')
+                            ->required(fn (Get $get) => (bool) $get('is_active')),
+                        TextInput::make('credentials.manual_booking_path')
+                            ->label('Путь для записи')
+                            ->placeholder('events?action=newrecord')
+                            ->default('events?action=newrecord')
+                            ->required(fn (Get $get) => (bool) $get('is_active'))
+                            ->helperText('Добавляется к базовому URL. Обычно: events?action=newrecord'),
+                        TextInput::make('credentials.cancel_booking_path')
+                            ->label('Путь для отмены записи')
+                            ->placeholder('events?action=cancelrecord')
+                            ->default('events?action=cancelrecord')
+                            ->required(fn (Get $get) => (bool) $get('is_active'))
+                            ->helperText('Добавляется к базовому URL. Обычно: events?action=cancelrecord'),
+                        TextInput::make('credentials.manual_booking_authorization')
+                            ->label('Значение заголовка Authorization')
+                            ->placeholder('123543543')
+                            ->required(fn (Get $get) => (bool) $get('is_active'))
+                            ->helperText('Полное значение заголовка Authorization, выданное 1С.'),
+                        TextInput::make('credentials.timeout')
+                            ->numeric()
+                            ->label('Таймаут запроса (сек.)')
+                            ->default(15),
+                        Toggle::make('credentials.verify_ssl')
+                            ->label('Проверять SSL сертификат')
+                            ->default(true),
+                        TextInput::make('credentials.webhook_secret')
+                            ->label('Секрет для вебхуков')
+                            ->helperText('Используется для проверки запросов от 1С.'),
+                        Placeholder::make('last_success_at')
+                            ->label('Последняя успешная синхронизация')
+                            ->content(fn (?IntegrationEndpoint $record) => $record?->last_success_at?->format('d.m.Y H:i') ?? '—'),
+                        Placeholder::make('last_error_at')
+                            ->label('Последняя ошибка')
+                            ->content(fn (?IntegrationEndpoint $record) => $record?->last_error_at?->format('d.m.Y H:i') ?? '—'),
+                        Placeholder::make('last_error_message')
+                            ->label('Сообщение об ошибке')
+                            ->content(fn (?IntegrationEndpoint $record) => $record?->last_error_message ?? '—'),
+                    ]),
             ]);
     }
 
@@ -149,23 +223,16 @@ class BranchResource extends Resource
                 Tables\Columns\TextColumn::make('phone')
                     ->label('Телефон')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('slot_duration')
-                    ->label('Длительность слота')
-                    ->formatStateUsing(fn ($state) => $state ? $state . ' мин' : 'По умолчанию')
-                    ->sortable(),
-                Tables\Columns\BadgeColumn::make('status')
-                    ->label('Статус')
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        '1' => 'Активный',
-                        '0' => 'Неактивный',
-                        default => $state,
-                    })
-                    ->color(fn (string $state): string => match ($state) {
-                        '1' => 'success',
-                        '0' => 'danger',
-                        default => 'gray',
-                    })
-                    ->sortable(),
+                Tables\Columns\TextColumn::make('integration_mode')
+                    ->label('Режим')
+                    ->badge()
+                    ->formatStateUsing(function ($state) {
+                        $mode = $state instanceof IntegrationMode
+                            ? $state
+                            : IntegrationMode::tryFrom((string) $state);
+
+                        return $mode?->label() ?? 'Как у клиники';
+                    }),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('clinic_id')
@@ -184,6 +251,9 @@ class BranchResource extends Resource
                         1 => 'Активный',
                         0 => 'Неактивный',
                     ]),
+                Tables\Filters\SelectFilter::make('integration_mode')
+                    ->label('Режим интеграции')
+                    ->options(IntegrationMode::options()),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
@@ -211,7 +281,7 @@ class BranchResource extends Resource
         ];
 
         // Только не-doctor пользователи могут создавать и редактировать филиалы
-        if (!$user || !$user->hasRole('doctor')) {
+        if (! $user || ! $user->hasRole('doctor')) {
             $pages['create'] = Pages\CreateBranch::route('/create');
             $pages['edit'] = Pages\EditBranch::route('/{record}/edit');
         }

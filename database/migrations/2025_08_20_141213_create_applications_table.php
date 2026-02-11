@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        if (!Schema::hasTable('applications')) {
+        if (! Schema::hasTable('applications')) {
             Schema::create('applications', function (Blueprint $table) {
                 $table->id(); // Это автоматически создает bigInteger('id')->primary()->autoIncrement()
                 $table->foreignId('city_id')->constrained('cities');
@@ -26,7 +26,7 @@ return new class extends Migration
                 $table->bigInteger('tg_chat_id')->nullable();
                 $table->boolean('send_to_1c')->default(false);
                 $table->timestamps();
-                
+
                 $table->index('city_id');
                 $table->index('clinic_id');
                 $table->index('doctor_id');

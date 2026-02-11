@@ -1,6 +1,6 @@
 <template>
     <div class="space-y-4">
-        <h3 class="text-xl font-semibold text-gray-800">Дата рождения (необязательно)</h3>
+        <h3 class="text-xl font-semibold text-gray-800">Дата рождения</h3>
         <Datepicker
             v-model="internalValue"
             class="booking-picker"
@@ -14,11 +14,13 @@
             :month-change-on-scroll="false"
         />
         <div class="flex gap-2">
-            <BaseButton class="flex-1 py-2" variant="primary" @click="$emit('next')">
+            <BaseButton
+                class="flex-1 py-2"
+                variant="primary"
+                :disabled="!internalValue"
+                @click="$emit('next')"
+            >
                 Продолжить
-            </BaseButton>
-            <BaseButton class="flex-1 py-2" variant="secondary" @click="$emit('skip')">
-                Пропустить
             </BaseButton>
         </div>
         <BaseButton variant="ghost" class="text-sm" @click="$emit('back')">
@@ -55,24 +57,24 @@ const internalValue = computed({
 <style scoped>
 
 :deep(.booking-picker) {
-    width: 100%;
-    flex-direction: column;
+  width: 100%;
+  flex-direction: column;
 
     div{
         width: 100%;
     }
 
-    .dp__theme_light{
-        --dp-background-color: #fff8e6;
-        --dp-text-color: #1f2937;
-        --dp-primary-color: #f59e0b !important;
-        --dp-hover-color: #fde68a;
-        --dp-highlight-color: #f97316;
-        --dp-active-text-color: #0f172a;
-        --dp-border-radius: 12px;
-        --dp-input-padding: 12px;
-    }
-
+  .dp__theme_light{
+    --dp-background-color: #fff8e6;
+    --dp-text-color: #1f2937;
+    --dp-primary-color: #f59e0b !important;
+    --dp-hover-color: #fde68a;
+    --dp-highlight-color: #f97316;
+    --dp-active-text-color: #0f172a;
+    --dp-border-radius: 12px;
+    --dp-input-padding: 12px;
+  }
+  
 }
 
 </style>

@@ -2,49 +2,51 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Exports\ApplicationExporter;
 use App\Filament\Filters\ApplicationFilters;
 use App\Filament\Resources\ApplicationResource\Pages;
-use App\Filament\Resources\ApplicationResource\RelationManagers;
 use App\Filament\Widgets\AppointmentCalendarWidget;
 use App\Models\Application;
+use App\Models\ApplicationStatus;
 use App\Models\Clinic;
 use Carbon\Carbon;
+use Filament\Actions\Exports\Enums\ExportFormat;
 use Filament\Forms;
-use Filament\Forms\Components\Actions as FormActions;
 use Filament\Forms\Components\Actions\Action as FormAction;
+use Filament\Forms\Components\Actions as FormActions;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Notifications\Notification;
+use Filament\Resources\Resource;
+use Filament\Support\Colors\Color;
 use Filament\Tables;
-use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Actions\ExportAction;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Models\ApplicationStatus;
-use Filament\Tables\Actions\ExportAction;
-use Filament\Actions\Exports\Enums\ExportFormat;
-use App\Filament\Exports\ApplicationExporter;
-use Filament\Support\Colors\Color;
 
 class ApplicationResource extends Resource
 {
     protected static ?string $model = Application::class;
 
     protected static ?string $navigationLabel = 'Журнал приемов';
+
     protected static ?string $pluralNavigationLabel = 'Журнал приемов';
+
     protected static ?string $pluralLabel = 'Журнал приемов';
+
     protected static ?string $label = 'Журнал приемов';
+
     protected static ?string $navigationGroup = 'Журнал приемов';
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
+
     protected static ?int $navigationSort = 6;
 
     public static function getEloquentQuery(): Builder
@@ -67,7 +69,6 @@ class ApplicationResource extends Resource
                 ->orWhere('slug', 'appointment');
         });
 
-
         return $query;
     }
 
@@ -88,6 +89,8 @@ class ApplicationResource extends Resource
                     ->required(),
                 TextInput::make('promo_code')
                     ->label('Промокод'),
+                Hidden::make('onec_slot_id')
+                    ->dehydrated(true),
                 Select::make('city_id')
                     ->label('Город')
                     ->reactive()
@@ -100,6 +103,7 @@ class ApplicationResource extends Resource
                             if ($clinic) {
                                 return $clinic->cities->pluck('name', 'id');
                             }
+
                             return [];
                         }
 
@@ -117,7 +121,7 @@ class ApplicationResource extends Resource
                     ->reactive()
                     ->options(function (callable $get) {
                         $cityId = $get('city_id');
-                        if (!$cityId) {
+                        if (! $cityId) {
                             return [];
                         }
 
@@ -129,6 +133,7 @@ class ApplicationResource extends Resource
                             if ($clinic && $clinic->cities->contains('id', $cityId)) {
                                 return [$clinic->id => $clinic->name];
                             }
+
                             return [];
                         }
 
@@ -150,7 +155,7 @@ class ApplicationResource extends Resource
                         $cityId = $get('city_id');
                         $clinicId = $get('clinic_id');
 
-                        if (!$cityId) {
+                        if (! $cityId) {
                             return [];
                         }
 
@@ -165,9 +170,10 @@ class ApplicationResource extends Resource
                                     ->where('clinic_id', $clinic->id);
 
                                 return $query->get()->mapWithKeys(function ($branch) use ($clinic) {
-                                    return [$branch->id => $clinic->name . ' - ' . $branch->name];
+                                    return [$branch->id => $clinic->name.' - '.$branch->name];
                                 });
                             }
+
                             return [];
                         }
 
@@ -182,8 +188,9 @@ class ApplicationResource extends Resource
 
                         return $query->get()->mapWithKeys(function ($branch) {
                             if ($branch->clinic) {
-                                return [$branch->id => $branch->clinic->name . ' - ' . $branch->name];
+                                return [$branch->id => $branch->clinic->name.' - '.$branch->name];
                             }
+
                             return [$branch->id => $branch->name];
                         });
                     })
@@ -232,7 +239,7 @@ class ApplicationResource extends Resource
                     ->reactive()
                     ->options(function (callable $get) {
                         $branchId = $get('branch_id');
-                        if (!$branchId) {
+                        if (! $branchId) {
                             return [];
                         }
 
@@ -249,10 +256,14 @@ class ApplicationResource extends Resource
                     ->rules([
                         function () {
                             return function (string $attribute, $value, \Closure $fail) {
-                                if (!$value) return;
+                                if (! $value) {
+                                    return;
+                                }
 
                                 $cabinetId = data_get(request()->all(), 'data.cabinet_id') ?? request()->input('cabinet_id');
-                                if (!$cabinetId) return;
+                                if (! $cabinetId) {
+                                    return;
+                                }
 
                                 try {
                                     $timezone = config('app.timezone', 'UTC');
@@ -281,7 +292,7 @@ class ApplicationResource extends Resource
                                     $fail('Этот временной слот уже занят.');
                                 }
                             };
-                        }
+                        },
                     ]),
 
                 TextInput::make('tg_user_id')
@@ -452,75 +463,43 @@ class ApplicationResource extends Resource
                 TextColumn::make('clinic.name')
                     ->label('Клиника')
                     ->searchable()
-                    ->sortable(),
+                    ->toggleable(),
                 TextColumn::make('branch.name')
                     ->label('Филиал')
                     ->searchable()
-                    ->sortable()
+                    ->toggleable()
                     ->formatStateUsing(function ($record) {
                         return $record->branch ? $record->branch->name : '-';
                     }),
                 TextColumn::make('full_name')
                     ->label('Имя ребенка')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(),
+                TextColumn::make('full_name_parent')
+                    ->label('ФИО родителя')
+                    ->searchable()
+                    ->toggleable(),
+                TextColumn::make('created_at')
+                    ->label('Дата создания')
+                    ->dateTime('d.m.Y H:i')
+                    ->sortable()
+                    ->toggleable(),
                 TextColumn::make('appointment_datetime')
                     ->label('Дата и время приема')
                     ->dateTime('d.m.Y H:i')
-                    ->sortable(),
-                TextColumn::make("promo_code")
-                    ->label("Промокод")
-                    ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(),
+
                 TextColumn::make('status.name')
                     ->label('Статус')
                     ->badge()
                     ->color(fn ($record) => $record->status?->getBadgeColor() ?? Color::Gray)
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('clinic')
-                    ->relationship('clinic', 'name')
-                    ->label('Клиника')
-                    ->searchable()
-                    ->preload(),
-                Tables\Filters\SelectFilter::make('branch')
-                    ->relationship('branch', 'name')
-                    ->label('Филиал')
-                    ->searchable()
-                    ->preload(),
-                Tables\Filters\Filter::make('appointment_datetime')
-                    ->form([
-                        DatePicker::make('from')->label('Дата приема с'),
-                        DatePicker::make('until')->label('Дата приема по'),
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when(
-                                $data['from'],
-                                fn (Builder $query, $date) => $query->whereDate('appointment_datetime', '>=', $date),
-                            )
-                            ->when(
-                                $data['until'],
-                                fn (Builder $query, $date) => $query->whereDate('appointment_datetime', '<=', $date),
-                            );
-                    }),
-                Tables\Filters\Filter::make('promo_code')
-                    ->form([
-                        TextInput::make('value')->label('Промокод'),
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when(
-                                $data['value'],
-                                fn (Builder $query, $code) => $query->where('promo_code', 'like', "%{$code}%"),
-                            );
-                    }),
-                Tables\Filters\SelectFilter::make('status')
-                    ->relationship('status', 'name', fn (Builder $query) => $query->where('type', 'appointment'))
-                    ->label('Статус')
-                    ->searchable()
-                    ->preload(),
+                ApplicationFilters::make(),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

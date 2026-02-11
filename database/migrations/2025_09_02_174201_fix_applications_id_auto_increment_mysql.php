@@ -1,9 +1,8 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -14,7 +13,7 @@ return new class extends Migration
     {
         // Исправляем поле id для MySQL - добавляем AUTO_INCREMENT
         if (Schema::getConnection()->getDriverName() === 'mysql') {
-            DB::statement('ALTER TABLE applications MODIFY id BIGINT AUTO_INCREMENT');
+            DB::statement('ALTER TABLE applications MODIFY id BIGINT UNSIGNED AUTO_INCREMENT');
         }
     }
 
@@ -25,7 +24,7 @@ return new class extends Migration
     {
         // Откатываем изменения для MySQL
         if (Schema::getConnection()->getDriverName() === 'mysql') {
-            DB::statement('ALTER TABLE applications MODIFY id BIGINT');
+            DB::statement('ALTER TABLE applications MODIFY id BIGINT UNSIGNED');
         }
     }
 };

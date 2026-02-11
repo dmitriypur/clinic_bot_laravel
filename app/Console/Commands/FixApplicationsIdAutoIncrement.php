@@ -30,26 +30,29 @@ class FixApplicationsIdAutoIncrement extends Command
         $this->info('Проверка и исправление AUTO_INCREMENT для таблицы applications...');
 
         // Проверяем что таблица существует
-        if (!Schema::hasTable('applications')) {
+        if (! Schema::hasTable('applications')) {
             $this->error('Таблица applications не существует!');
+
             return 1;
         }
 
         // Проверяем драйвер базы данных
         $driver = DB::connection()->getDriverName();
-        
+
         if ($driver !== 'mysql') {
             $this->warn("Текущий драйвер: {$driver}. Эта команда предназначена для MySQL.");
             $this->info('Для SQLite AUTO_INCREMENT добавляется автоматически.');
+
             return 0;
         }
 
         try {
             // Проверяем текущее состояние поля id
             $columnInfo = DB::select("SHOW COLUMNS FROM applications LIKE 'id'");
-            
+
             if (empty($columnInfo)) {
                 $this->error('Поле id не найдено в таблице applications!');
+
                 return 1;
             }
 
@@ -59,6 +62,7 @@ class FixApplicationsIdAutoIncrement extends Command
             // Проверяем есть ли уже AUTO_INCREMENT
             if (str_contains($column->Extra, 'auto_increment')) {
                 $this->info('AUTO_INCREMENT уже установлен для поля id.');
+
                 return 0;
             }
 
@@ -69,20 +73,23 @@ class FixApplicationsIdAutoIncrement extends Command
             // Проверяем результат
             $columnInfoAfter = DB::select("SHOW COLUMNS FROM applications LIKE 'id'");
             $columnAfter = $columnInfoAfter[0];
-            
+
             $this->info("Новое состояние поля id: {$columnAfter->Field} {$columnAfter->Type} {$columnAfter->Null} {$columnAfter->Key} {$columnAfter->Default} {$columnAfter->Extra}");
 
             if (str_contains($columnAfter->Extra, 'auto_increment')) {
                 $this->info('✅ AUTO_INCREMENT успешно добавлен к полю id!');
                 $this->info('Теперь можно создавать заявки без указания id.');
+
                 return 0;
             } else {
                 $this->error('❌ Не удалось добавить AUTO_INCREMENT к полю id.');
+
                 return 1;
             }
 
         } catch (\Exception $e) {
             $this->error("Ошибка при исправлении AUTO_INCREMENT: {$e->getMessage()}");
+
             return 1;
         }
     }

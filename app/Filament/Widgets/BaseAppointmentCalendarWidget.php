@@ -10,7 +10,7 @@ use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 
 abstract class BaseAppointmentCalendarWidget extends FullCalendarWidget
 {
-    public \Illuminate\Database\Eloquent\Model | string | null $model = Application::class;
+    public \Illuminate\Database\Eloquent\Model|string|null $model = Application::class;
 
     /**
      * Данные выбранного слота, переиспользуются дочерними виджетами.
@@ -86,7 +86,7 @@ abstract class BaseAppointmentCalendarWidget extends FullCalendarWidget
     {
         $user = $user ?: Auth::user();
 
-        if (!$user) {
+        if (! $user) {
             return [];
         }
 

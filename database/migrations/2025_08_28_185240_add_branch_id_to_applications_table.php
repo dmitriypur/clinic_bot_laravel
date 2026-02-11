@@ -24,6 +24,7 @@ return new class extends Migration
     {
         Schema::table('applications', function (Blueprint $table) {
             $table->dropForeign(['branch_id']);
+            $table->dropIndex('applications_branch_id_index');
             $table->dropColumn('branch_id');
         });
     }

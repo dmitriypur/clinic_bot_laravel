@@ -2,11 +2,14 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\IntegrationMode;
 use App\Filament\Resources\ClinicResource\Pages;
 use App\Filament\Resources\ClinicResource\RelationManagers;
 use App\Models\Clinic;
 use Filament\Forms;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
@@ -22,9 +25,13 @@ class ClinicResource extends Resource
     protected static ?string $model = Clinic::class;
 
     protected static ?string $navigationLabel = 'Клиники';
+
     protected static ?string $pluralNavigationLabel = 'Клиника';
+
     protected static ?string $pluralLabel = 'Клиники';
+
     protected static ?string $label = 'Клиника';
+
     protected static ?string $navigationGroup = 'Клиники';
 
     protected static ?string $navigationIcon = 'heroicon-o-plus';
@@ -50,7 +57,7 @@ class ClinicResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Основные данные')
+                Section::make('Основные данные')
                     ->schema([
                         TextInput::make('name')
                             ->label('Название')
@@ -93,13 +100,19 @@ class ClinicResource extends Resource
                             ->default(30)
                             ->helperText('Используется для всех филиалов, если у них не задана своя длительность')
                             ->required(),
+                        Select::make('integration_mode')
+                            ->label('Режим интеграции')
+                            ->options(IntegrationMode::options())
+                            ->default(IntegrationMode::LOCAL->value)
+                            ->required()
+                            ->helperText('Определяет источник расписания: локально или push из 1С.'),
                         Toggle::make('dashboard_calendar_enabled')
                             ->label('Виджет календаря заявок')
                             ->helperText('Управляет отображением календаря заявок и расписания для партнеров этой клиники.')
                             ->default(true)
                             ->visible(fn () => auth()->user()?->isSuperAdmin()),
                     ])->columns(2),
-                Forms\Components\Section::make('CRM интеграция')
+                Section::make('CRM интеграция')
                     ->schema([
                         Select::make('crm_provider')
                             ->label('CRM-система')
@@ -157,7 +170,7 @@ class ClinicResource extends Resource
                                     ->numeric()
                                     ->dehydrated(fn (Forms\Get $get) => $get('crm_provider') === 'amo_crm'),
                             ]),
-                        Forms\Components\Textarea::make('crm_settings.notes')
+                        Textarea::make('crm_settings.notes')
                             ->label('Примечания')
                             ->rows(2)
                             ->dehydrated(fn (Forms\Get $get) => $get('crm_provider') !== 'none')
@@ -182,8 +195,18 @@ class ClinicResource extends Resource
                     ->sortable(),
                 TextColumn::make('slot_duration')
                     ->label('Длительность слота')
-                    ->formatStateUsing(fn ($state) => $state . ' мин')
+                    ->formatStateUsing(fn ($state) => $state.' мин')
                     ->sortable(),
+                TextColumn::make('integration_mode')
+                    ->label('Режим')
+                    ->badge()
+                    ->formatStateUsing(function ($state) {
+                        $mode = $state instanceof IntegrationMode
+                            ? $state
+                            : IntegrationMode::tryFrom((string) $state);
+
+                        return $mode?->label() ?? '—';
+                    }),
                 IconColumn::make('status')
                     ->label('Статус')
                     ->boolean(),

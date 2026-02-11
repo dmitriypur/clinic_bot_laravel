@@ -24,6 +24,7 @@ class Doctor extends Model
         'count_ratings',
         'uuid',
         'review_link',
+        'external_id',
     ];
 
     protected $casts = [
@@ -40,7 +41,7 @@ class Doctor extends Model
     protected static function boot()
     {
         parent::boot();
-        
+
         static::creating(function ($model) {
             if (empty($model->uuid)) {
                 $model->uuid = (string) Str::uuid();
@@ -78,12 +79,12 @@ class Doctor extends Model
         if ($this->count_ratings == 0) {
             return 0;
         }
-        
+
         return round($this->sum_ratings / $this->count_ratings, 1);
     }
 
     public function getFullNameAttribute(): string
     {
-        return trim($this->last_name . ' ' . $this->first_name . ' ' . $this->second_name);
+        return trim($this->last_name.' '.$this->first_name.' '.$this->second_name);
     }
 }

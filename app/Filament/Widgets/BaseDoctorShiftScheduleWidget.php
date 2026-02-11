@@ -23,13 +23,13 @@ use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 
 abstract class BaseDoctorShiftScheduleWidget extends FullCalendarWidget
 {
-    public \Illuminate\Database\Eloquent\Model | string | null $model = DoctorShift::class;
+    public \Illuminate\Database\Eloquent\Model|string|null $model = DoctorShift::class;
 
     public function eventContent(): string
     {
         $user = auth()->user();
 
-        if ($user && !$user->isDoctor()) {
+        if ($user && ! $user->isDoctor()) {
             return <<<'JS'
 function(arg) {
     const wrapper = document.createElement('div');
@@ -148,7 +148,7 @@ JS;
     {
         $user = auth()->user();
 
-        if ($user && !$user->isDoctor()) {
+        if ($user && ! $user->isDoctor()) {
             return <<<'JS'
 function(info) {
     const el = info.el;
@@ -245,18 +245,19 @@ JS;
 
     public function openShiftEditModal(array $event): void
     {
-        if (!$this->ensureCanManageShifts('Редактирование смен недоступно для врача.')) {
+        if (! $this->ensureCanManageShifts('Редактирование смен недоступно для врача.')) {
             return;
         }
 
         $shift = $this->findShiftRecord((int) ($event['id'] ?? 0));
 
-        if (!$shift) {
+        if (! $shift) {
             Notification::make()
                 ->title('Смена не найдена')
                 ->body('Не удалось открыть смену для редактирования.')
                 ->danger()
                 ->send();
+
             return;
         }
 
@@ -270,18 +271,19 @@ JS;
 
     public function openShiftDeleteModal(array $event): void
     {
-        if (!$this->ensureCanManageShifts('Удаление смен недоступно для врача.')) {
+        if (! $this->ensureCanManageShifts('Удаление смен недоступно для врача.')) {
             return;
         }
 
         $shift = $this->findShiftRecord((int) ($event['id'] ?? 0));
 
-        if (!$shift) {
+        if (! $shift) {
             Notification::make()
                 ->title('Смена не найдена')
                 ->body('Не удалось открыть смену для удаления.')
                 ->danger()
                 ->send();
+
             return;
         }
 
@@ -297,7 +299,7 @@ JS;
     {
         $user = auth()->user();
 
-        if ($user && !$user->isDoctor()) {
+        if ($user && ! $user->isDoctor()) {
             return true;
         }
 
@@ -312,7 +314,7 @@ JS;
 
     protected function findShiftRecord(int $shiftId): ?DoctorShift
     {
-        if (!$shiftId) {
+        if (! $shiftId) {
             return null;
         }
 
@@ -335,12 +337,12 @@ JS;
             'extendedProps' => (array) ($event['extendedProps'] ?? []),
         ];
 
-        if (!$payload['start'] && $this->record instanceof DoctorShift) {
+        if (! $payload['start'] && $this->record instanceof DoctorShift) {
             $start = $this->normalizeEventTime($this->record->getRawOriginal('start_time'), true);
             $payload['start'] = $start ? $start->toIso8601String() : null;
         }
 
-        if (!$payload['end'] && $this->record instanceof DoctorShift) {
+        if (! $payload['end'] && $this->record instanceof DoctorShift) {
             $end = $this->normalizeEventTime($this->record->getRawOriginal('end_time'), true);
             $payload['end'] = $end ? $end->toIso8601String() : null;
         }
@@ -351,7 +353,7 @@ JS;
     protected function buildMountCallback(): \Closure
     {
         return function (?Form $form, array $arguments) {
-            if (!$form) {
+            if (! $form) {
                 return;
             }
 
@@ -485,9 +487,11 @@ JS;
             ]);
         } catch (ValidationException $exception) {
             $this->notifyValidationErrors($exception, 'Не удалось создать смены');
+
             return false;
         } catch (\Throwable $throwable) {
             $this->notifyGenericError($throwable, 'Не удалось создать смены');
+
             return false;
         }
 
@@ -567,7 +571,7 @@ JS;
 
     protected function normalizeEventTime(mixed $value, bool $fromDatabase = false): ?Carbon
     {
-        if (!$value) {
+        if (! $value) {
             return null;
         }
 
@@ -599,7 +603,7 @@ JS;
 
     protected function extractTimeComponent(mixed $value): ?string
     {
-        if (!$value) {
+        if (! $value) {
             return null;
         }
 
@@ -635,9 +639,9 @@ JS;
             ],
             'initialView' => 'dayGridMonth',
             'navLinks' => true,
-            'editable' => !$isDoctor,
-            'selectable' => !$isDoctor,
-            'selectMirror' => !$isDoctor,
+            'editable' => ! $isDoctor,
+            'selectable' => ! $isDoctor,
+            'selectMirror' => ! $isDoctor,
             'dayMaxEvents' => true,
             'weekends' => true,
             'locale' => 'ru',
@@ -668,7 +672,7 @@ JS;
     }
 
     /**
-     * @param iterable<int, mixed>|Collection|array $created
+     * @param  iterable<int, mixed>|Collection|array  $created
      */
     protected function notifySeriesCreated(iterable $created): void
     {
@@ -689,15 +693,16 @@ JS;
     {
         Notification::make()
             ->title($title)
-            ->body('Произошла непредвиденная ошибка. ' . $throwable->getMessage())
+            ->body('Произошла непредвиденная ошибка. '.$throwable->getMessage())
             ->danger()
             ->send();
     }
 
     protected function notifyValidationErrors(\Throwable $exception, string $title = 'Не удалось выполнить операцию'): void
     {
-        if (!method_exists($exception, 'errors')) {
+        if (! method_exists($exception, 'errors')) {
             $this->notifyGenericError($exception, $title);
+
             return;
         }
 
@@ -711,5 +716,4 @@ JS;
             ->danger()
             ->send();
     }
-
 }

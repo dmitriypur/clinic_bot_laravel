@@ -17,7 +17,7 @@ class DoctorSeeder extends Seeder
         $doctors = [
             [
                 'last_name' => 'Иванов',
-                'first_name' => 'Алексей', 
+                'first_name' => 'Алексей',
                 'second_name' => 'Петрович',
                 'experience' => 15,
                 'age' => 42,
@@ -78,13 +78,13 @@ class DoctorSeeder extends Seeder
         ];
 
         $clinics = Clinic::all();
-        
+
         foreach ($doctors as $doctorData) {
             $doctorData['uuid'] = (string) Str::uuid();
-            $doctorData['review_link'] = 'https://t.me/kidsbot?start=review_' . $doctorData['uuid'];
-            
+            $doctorData['review_link'] = 'https://t.me/kidsbot?start=review_'.$doctorData['uuid'];
+
             $doctor = Doctor::create($doctorData);
-            
+
             // Привязываем каждого врача к случайным клиникам
             $randomClinics = $clinics->random(rand(1, 3));
             $doctor->clinics()->attach($randomClinics->pluck('id'));

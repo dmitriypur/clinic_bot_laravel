@@ -1,31 +1,31 @@
 <?php
+
 namespace App\Jobs;
 
 use App\Models\Application;
 use App\Services\TelegramService;
+use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
-class SendAppointmentReminderNotification implements ShouldQueue, ShouldBeUnique
+class SendAppointmentReminderNotification implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public function __construct(
         private readonly int $applicationId,
         private readonly string $appointmentDatetimeIso
-    ) {
-    }
+    ) {}
 
     public function uniqueId(): string
     {
-        return $this->applicationId . ':' . $this->appointmentDatetimeIso;
+        return $this->applicationId.':'.$this->appointmentDatetimeIso;
     }
 
     public function getApplicationId(): int
@@ -101,8 +101,8 @@ class SendAppointmentReminderNotification implements ShouldQueue, ShouldBeUnique
 
         if ($datetime) {
             $lines[] = '';
-            $lines[] = 'Дата: ' . $datetime->format('d.m.Y');
-            $lines[] = 'Время: ' . $datetime->format('H:i');
+            $lines[] = 'Дата: '.$datetime->format('d.m.Y');
+            $lines[] = 'Время: '.$datetime->format('H:i');
         }
 
         $doctorName = trim(
@@ -110,27 +110,27 @@ class SendAppointmentReminderNotification implements ShouldQueue, ShouldBeUnique
         );
 
         if ($doctorName !== '') {
-            $lines[] = 'Врач: ' . $doctorName;
+            $lines[] = 'Врач: '.$doctorName;
         }
 
         $clinicName = $application->clinic?->name;
         if ($clinicName) {
-            $lines[] = 'Клиника: ' . $clinicName;
+            $lines[] = 'Клиника: '.$clinicName;
         }
 
         $branchName = $application->branch?->name;
         if ($branchName) {
-            $lines[] = 'Филиал: ' . $branchName;
+            $lines[] = 'Филиал: '.$branchName;
         }
 
         $branchAddress = $application->branch?->address;
         if ($branchAddress) {
-            $lines[] = 'Адрес: ' . $branchAddress;
+            $lines[] = 'Адрес: '.$branchAddress;
         }
 
         $cabinetName = $application->cabinet?->name;
         if ($cabinetName) {
-            $lines[] = 'Кабинет: ' . $cabinetName;
+            $lines[] = 'Кабинет: '.$cabinetName;
         }
 
         $lines = array_filter($lines, static fn ($line) => Str::of($line)->trim()->isNotEmpty());

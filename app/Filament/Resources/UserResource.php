@@ -3,11 +3,10 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;
-use App\Filament\Resources\UserResource\RelationManagers;
+use App\Models\Doctor;
 use App\Models\User;
-use Filament\Forms;
-use Filament\Forms\Components\Section;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
@@ -17,22 +16,24 @@ use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
-use App\Models\Doctor;
 
 class UserResource extends Resource
 {
     protected static ?string $model = User::class;
 
     protected static ?string $navigationLabel = 'Пользователи';
+
     protected static ?string $pluralNavigationLabel = 'Пользователь';
+
     protected static ?string $pluralLabel = 'Пользователи';
+
     protected static ?string $label = 'Пользователь';
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
+
     protected static ?int $navigationSort = 7;
 
     public static function form(Form $form): Form
@@ -109,6 +110,7 @@ class UserResource extends Resource
                         ->visible(function (Get $get): bool {
                             $roleIds = $get('roles') ?? [];
                             $partnerRole = Role::where('name', 'partner')->first();
+
                             return $partnerRole && in_array($partnerRole->id, $roleIds);
                         })
                         ->live(),
@@ -121,6 +123,7 @@ class UserResource extends Resource
                         ->visible(function (Get $get): bool {
                             $roleIds = $get('roles') ?? [];
                             $doctorRole = Role::where('name', 'doctor')->first();
+
                             return $doctorRole && in_array($doctorRole->id, $roleIds);
                         })
                         ->live(),
@@ -178,12 +181,21 @@ class UserResource extends Resource
                     }),
             ])
             ->filters([
-                //
+                Tables\Filters\SelectFilter::make('clinic_id')
+                    ->relationship('clinic', 'name')
+                    ->label('Клиника')
+                    ->searchable()
+                    ->preload(),
+                Tables\Filters\SelectFilter::make('roles')
+                    ->label('Роль')
+                    ->relationship('roles', 'name')
+                    ->multiple()
+                    ->preload(),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
                     ->visible(fn (User $record): bool => auth()->user()?->can('update_user') ?? false
-                    || auth()->id() === $record->id),
+                        || auth()->id() === $record->id),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -221,4 +233,19 @@ class UserResource extends Resource
 
         return $query;
     }
+
+    // public static function canCreate(): bool
+    // {
+    //     return auth()->user()?->hasRole('super_admin') ?? false;
+    // }
+
+    // public static function canDelete(Model $record): bool
+    // {
+    //     return auth()->user()?->hasRole('super_admin') ?? false;
+    // }
+
+    // public static function canDeleteAny(): bool
+    // {
+    //     return auth()->user()?->hasRole('super_admin') ?? false;
+    // }
 }

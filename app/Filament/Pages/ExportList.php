@@ -36,7 +36,13 @@ class ExportList extends Page implements HasTable
 
                 $user = Auth::user();
 
-                if ($user && ! $user->hasRole("super_admin")) {
+                if (
+                    $user &&
+                    ! (
+                        $user->hasRole("super_admin") ||
+                        $user->hasRole("admin")
+                    )
+                ) {
                     $query->where("user_id", $user->id);
                 }
 

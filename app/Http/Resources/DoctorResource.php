@@ -26,6 +26,7 @@ class DoctorResource extends JsonResource
             'age_admission_to' => $this->age_admission_to,
             'uuid' => $this->uuid,
             'review_link' => $this->review_link,
+            'external_id' => $this->external_id,
         ];
     }
 }

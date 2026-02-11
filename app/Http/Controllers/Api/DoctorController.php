@@ -37,6 +37,7 @@ class DoctorController extends Controller
                 'age_admission_to',
                 'uuid',
                 'review_link',
+                'external_id',
             ])
             ->orderBy('created_at', 'desc')
             ->paginate(15);
@@ -87,6 +88,7 @@ class DoctorController extends Controller
                 'doctors.age_admission_from',
                 'doctors.age_admission_to',
                 'doctors.uuid',
+                'doctors.external_id',
                 'doctors.review_link'
             )
             ->orderBy('doctors.last_name')
@@ -136,6 +138,7 @@ class DoctorController extends Controller
                 'doctors.age_admission_from',
                 'doctors.age_admission_to',
                 'doctors.uuid',
+                'doctors.external_id',
                 'doctors.review_link'
             )
             ->orderBy('doctors.last_name')

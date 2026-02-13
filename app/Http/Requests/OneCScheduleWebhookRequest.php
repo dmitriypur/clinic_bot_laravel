@@ -14,6 +14,13 @@ class OneCScheduleWebhookRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        // TEMP: сохраняем сырой payload от 1С для диагностики недостающих филиалов/врачей.
+        file_put_contents(
+            storage_path('logs/onec-incoming-raw.log'),
+            now()->toDateTimeString().' '.$this->getContent().PHP_EOL,
+            FILE_APPEND
+        );
+
         $payload = $this->all();
 
         if (! isset($payload['slots']) && is_array($payload) && array_is_list($payload)) {

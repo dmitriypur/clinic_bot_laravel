@@ -67,6 +67,12 @@ class IntegrationWebhookController extends Controller
      */
     public function handleSchedule(OneCScheduleWebhookRequest $request, Clinic $clinic): JsonResponse
     {
+        // TEMP: диагностический лог входящего payload расписания 1С.
+        \Log::channel('daily')->info('1C schedule payload', [
+            'clinic_id' => $clinic->id,
+            'payload' => $request->all(),
+        ]);
+
         if (! $clinic->isOnecPushMode()) {
             abort(Response::HTTP_CONFLICT, 'Клиника работает в локальном режиме расписания.');
         }

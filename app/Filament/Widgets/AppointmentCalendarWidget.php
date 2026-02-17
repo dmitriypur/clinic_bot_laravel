@@ -9,6 +9,7 @@ use App\Models\Cabinet;
 use App\Models\Doctor;
 use App\Models\Branch;
 use App\Models\Clinic;
+use App\Modules\OnecSync\Contracts\CancellationConflictResolver;
 use App\Services\Admin\AdminApplicationService;
 use App\Services\OneC\Exceptions\OneCBookingException;
 use Filament\Forms\Components\Select;
@@ -57,6 +58,25 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
      * Слушатели событий для обновления календаря
      */
     protected $listeners = ['refetchEvents', 'filtersUpdated'];
+
+    /**
+     * Кэши для уменьшения повторных запросов в рамках жизненного цикла Livewire-компонента.
+     *
+     * @var array<int, array<int, string>>
+     */
+    protected array $doctorOptionsByBranchCache = [];
+
+    /** @var array<int, int|null> */
+    protected array $branchIdByCabinetCache = [];
+
+    /** @var array<int, string|null> */
+    protected array $doctorNameByIdCache = [];
+
+    /** @var array<string, int|null> */
+    protected array $doctorIdByExternalCache = [];
+
+    /** @var array<string, int|null> */
+    protected array $doctorIdByFullNameCache = [];
     
     /**
      * Конфигурация календаря FullCalendar
@@ -177,14 +197,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->disabled() // Отключено для редактирования
                         ->dehydrated(false) // Не сохраняется в форме
                         ->searchable() // Поиск по ФИО врача
-                        ->options(function (Get $get) {
-                            // Получаем врачей только для выбранного кабинета
-                            $cabinetId = $get('cabinet_id');
-                            if (!$cabinetId) return [];
-                            $cabinet = \App\Models\Cabinet::with('branch.doctors')->find($cabinetId);
-                            if (!$cabinet || !$cabinet->branch) return [];
-                            return $cabinet->branch->doctors->pluck('full_name', 'id')->toArray();
-                        }),
+                        ->options(fn (Get $get) => $this->resolveDoctorOptions($get)),
                     
                     DateTimePicker::make('appointment_datetime')
                         ->label('Дата и время приема')
@@ -293,16 +306,8 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                             ->send();
                         return;
                     }
-                    
-                    $this->record->delete();
-                    
-                    Notification::make()
-                        ->title('Заявка удалена')
-                        ->body('Заявка удалена из календаря')
-                        ->success()
-                        ->send();
-                        
-                    $this->refreshRecords();
+
+                    $this->deleteCurrentRecordWithOneCHandling();
                 }),
         ];
     }
@@ -467,8 +472,11 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             
             $applicationQuery = Application::query()
                 ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
-                ->where('cabinet_id', $extendedProps['cabinet_id'])
-                ->where('appointment_datetime', $slotStartForQuery);
+                ->where('appointment_datetime', $slotStartForQuery)
+                ->when(isset($extendedProps['cabinet_id']) && $extendedProps['cabinet_id'] !== null, fn ($query) => $query->where('cabinet_id', $extendedProps['cabinet_id']))
+                ->when(isset($extendedProps['doctor_id']) && $extendedProps['doctor_id'] !== null, fn ($query) => $query->where('doctor_id', $extendedProps['doctor_id']))
+                ->when(isset($extendedProps['branch_id']) && $extendedProps['branch_id'] !== null, fn ($query) => $query->where('branch_id', $extendedProps['branch_id']))
+                ->when(isset($extendedProps['clinic_id']) && $extendedProps['clinic_id'] !== null, fn ($query) => $query->where('clinic_id', $extendedProps['clinic_id']));
             
             // Сначала ищем заявку без фильтрации по ролям
             $application = $applicationQuery->first();
@@ -505,15 +513,15 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
         $this->slotData = [
             'application_id' => $application->id,
             'city_id' => $application->city_id,
-            'city_name' => $application->city->name,
+            'city_name' => $application->city?->name,
             'clinic_id' => $application->clinic_id,
-            'clinic_name' => $application->clinic->name,
+            'clinic_name' => $application->clinic?->name,
             'branch_id' => $application->branch_id,
-            'branch_name' => $application->branch->name,
+            'branch_name' => $application->branch?->name,
             'cabinet_id' => $application->cabinet_id,
-            'cabinet_name' => $application->cabinet->name,
+            'cabinet_name' => $application->cabinet?->name ?? ($extendedProps['cabinet_name'] ?? null),
             'doctor_id' => $application->doctor_id,
-            'doctor_name' => $application->doctor->full_name,
+            'doctor_name' => $application->doctor?->full_name ?? ($extendedProps['doctor_name'] ?? null),
             'appointment_datetime' => $this->normalizeEventTime($application->appointment_datetime),
             'full_name' => $application->full_name,
             'phone' => $application->phone,
@@ -602,13 +610,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                                     ->label('Врач')
                                     ->disabled()
                                     ->dehydrated(false)
-                                    ->options(function (Get $get) {
-                                        $cabinetId = $get('cabinet_id');
-                                        if (!$cabinetId) return [];
-                                        $cabinet = \App\Models\Cabinet::with('branch.doctors')->find($cabinetId);
-                                        if (!$cabinet || !$cabinet->branch) return [];
-                                        return $cabinet->branch->doctors->pluck('full_name', 'id')->toArray();
-                                    }),
+                                    ->options(fn (Get $get) => $this->resolveDoctorOptions($get)),
                                 
                                 DateTimePicker::make('appointment_datetime')
                                     ->label('Дата и время приема')
@@ -888,16 +890,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                             ->modalDescription('Вы уверены, что хотите удалить эту заявку? Это действие нельзя отменить.')
                             ->action(function () {
                                 if ($this->record) {
-                                    $this->record->delete();
-                                    
-                                    Notification::make()
-                                        ->title('Заявка удалена')
-                                        ->body('Заявка удалена из календаря')
-                                        ->success()
-                                        ->send();
-                                    
-                                    $this->refreshRecords();
-                                    $this->mountedAction = null;
+                                    $this->deleteCurrentRecordWithOneCHandling(true);
                                 }
                             }),
                         
@@ -1042,13 +1035,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                                 ->label('Врач')
                                 ->disabled()
                                 ->dehydrated(false)
-                                ->options(function (Get $get) {
-                                    $cabinetId = $get('cabinet_id');
-                                    if (!$cabinetId) return [];
-                                    $cabinet = \App\Models\Cabinet::with('branch.doctors')->find($cabinetId);
-                                    if (!$cabinet || !$cabinet->branch) return [];
-                                    return $cabinet->branch->doctors->pluck('full_name', 'id')->toArray();
-                                }),
+                                ->options(fn (Get $get) => $this->resolveDoctorOptions($get)),
                             
                             DateTimePicker::make('appointment_datetime')
                                 ->label('Дата и время приема')
@@ -1294,13 +1281,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                                 ->label('Врач')
                                 ->disabled()
                                 ->dehydrated(false)
-                                ->options(function (Get $get) {
-                                    $cabinetId = $get('cabinet_id');
-                                    if (!$cabinetId) return [];
-                                    $cabinet = \App\Models\Cabinet::with('branch.doctors')->find($cabinetId);
-                                    if (!$cabinet || !$cabinet->branch) return [];
-                                    return $cabinet->branch->doctors->pluck('full_name', 'id')->toArray();
-                                }),
+                                ->options(fn (Get $get) => $this->resolveDoctorOptions($get)),
                             
                             DateTimePicker::make('appointment_datetime')
                                 ->label('Дата и время приема')
@@ -1594,16 +1575,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->modalDescription('Вы уверены, что хотите удалить эту заявку? Это действие нельзя отменить.')
                         ->action(function () {
                             if ($this->record) {
-                                $this->record->delete();
-                                
-                                Notification::make()
-                                    ->title('Заявка удалена')
-                                    ->body('Заявка удалена из календаря')
-                                    ->success()
-                                    ->send();
-                                
-                                $this->refreshRecords();
-                                $this->mountedAction = null;
+                                $this->deleteCurrentRecordWithOneCHandling(true);
                             }
                         }),
                     
@@ -1623,6 +1595,54 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
 
             return ! in_array($name, ['createAppointment', 'viewAppointment'], true);
         }));
+    }
+
+    protected function deleteCurrentRecordWithOneCHandling(bool $closeModal = false): void
+    {
+        if (! $this->record) {
+            return;
+        }
+
+        if (
+            $this->record->integration_type === Application::INTEGRATION_TYPE_ONEC
+            && filled($this->record->external_appointment_id)
+        ) {
+            try {
+                app(AdminApplicationService::class)->cancelOneCBooking($this->record);
+            } catch (OneCBookingException $exception) {
+                $conflict = app(CancellationConflictResolver::class)->buildConflictPayload($exception);
+
+                if ($conflict && ($conflict['can_force_delete'] ?? false)) {
+                    Notification::make()
+                        ->title('Запись уже удалена в 1С')
+                        ->body($conflict['message'] ?? 'Удаляем запись только локально.')
+                        ->warning()
+                        ->send();
+                } else {
+                    Notification::make()
+                        ->title('Не удалось удалить запись в 1С')
+                        ->body($exception->getMessage())
+                        ->danger()
+                        ->send();
+
+                    return;
+                }
+            }
+        }
+
+        $this->record->delete();
+
+        Notification::make()
+            ->title('Заявка удалена')
+            ->body('Заявка удалена из календаря')
+            ->success()
+            ->send();
+
+        $this->refreshRecords();
+
+        if ($closeModal) {
+            $this->mountedAction = null;
+        }
     }
     
 
@@ -1741,11 +1761,167 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
     }
 
     /**
+     * Возвращает список врачей для readonly-форм.
+     * В onec_push слот может приходить без кабинета, поэтому используем fallback через филиал/doctor_id.
+     */
+    protected function resolveDoctorOptions(Get $get): array
+    {
+        $doctorId = $get('doctor_id') ? (int) $get('doctor_id') : null;
+        $cabinetId = $get('cabinet_id') ? (int) $get('cabinet_id') : null;
+        $branchId = $get('branch_id') ? (int) $get('branch_id') : null;
+
+        if (! $branchId && $cabinetId) {
+            $branchId = $this->resolveBranchIdByCabinet($cabinetId);
+        }
+
+        $options = $branchId ? $this->getDoctorOptionsByBranch($branchId) : [];
+
+        if ($doctorId && ! array_key_exists($doctorId, $options)) {
+            $doctorName = $this->resolveDoctorNameById($doctorId);
+            if ($doctorName) {
+                $options[$doctorId] = $doctorName;
+            }
+        }
+
+        return $options;
+    }
+
+    protected function resolveBranchIdByCabinet(int $cabinetId): ?int
+    {
+        if (array_key_exists($cabinetId, $this->branchIdByCabinetCache)) {
+            return $this->branchIdByCabinetCache[$cabinetId];
+        }
+
+        $branchId = Cabinet::query()->whereKey($cabinetId)->value('branch_id');
+
+        return $this->branchIdByCabinetCache[$cabinetId] = $branchId ? (int) $branchId : null;
+    }
+
+    protected function getDoctorOptionsByBranch(int $branchId): array
+    {
+        if (array_key_exists($branchId, $this->doctorOptionsByBranchCache)) {
+            return $this->doctorOptionsByBranchCache[$branchId];
+        }
+
+        $doctors = Doctor::query()
+            ->select(['doctors.id', 'doctors.last_name', 'doctors.first_name', 'doctors.second_name'])
+            ->whereHas('branches', fn ($query) => $query->where('branches.id', $branchId))
+            ->orderBy('doctors.last_name')
+            ->orderBy('doctors.first_name')
+            ->orderBy('doctors.second_name')
+            ->get();
+
+        $options = $doctors
+            ->mapWithKeys(function (Doctor $doctor): array {
+                $fullName = $doctor->full_name;
+                $this->doctorNameByIdCache[$doctor->id] = $fullName;
+
+                return [$doctor->id => $fullName];
+            })
+            ->toArray();
+
+        return $this->doctorOptionsByBranchCache[$branchId] = $options;
+    }
+
+    protected function resolveDoctorNameById(int $doctorId): ?string
+    {
+        if (array_key_exists($doctorId, $this->doctorNameByIdCache)) {
+            return $this->doctorNameByIdCache[$doctorId];
+        }
+
+        $doctor = Doctor::query()
+            ->select(['id', 'last_name', 'first_name', 'second_name'])
+            ->find($doctorId);
+
+        return $this->doctorNameByIdCache[$doctorId] = $doctor?->full_name;
+    }
+
+    /**
+     * Пытается определить локального врача для слота 1С.
+     */
+    protected function resolveOnecDoctorId(array $extendedProps): ?int
+    {
+        $doctorId = $extendedProps['doctor_id'] ?? null;
+
+        if ($doctorId) {
+            return (int) $doctorId;
+        }
+
+        $doctorExternalId = Arr::get($extendedProps, 'raw.doctor.external_id')
+            ?? Arr::get($extendedProps, 'raw.doctor_external_id')
+            ?? Arr::get($extendedProps, 'raw.doctor_id');
+
+        if ($doctorExternalId) {
+            $externalKey = (string) $doctorExternalId;
+
+            if (! array_key_exists($externalKey, $this->doctorIdByExternalCache)) {
+                $foundId = Doctor::query()
+                    ->where('external_id', $externalKey)
+                    ->value('id');
+                $this->doctorIdByExternalCache[$externalKey] = $foundId ? (int) $foundId : null;
+            }
+
+            $doctorIdByExternal = $this->doctorIdByExternalCache[$externalKey];
+
+            if ($doctorIdByExternal) {
+                return (int) $doctorIdByExternal;
+            }
+        }
+
+        $doctorName = trim((string) (
+            $extendedProps['doctor_name']
+            ?? Arr::get($extendedProps, 'raw.doctor.efio')
+            ?? Arr::get($extendedProps, 'raw.doctor.name')
+            ?? ''
+        ));
+
+        if ($doctorName === '') {
+            return null;
+        }
+
+        if (array_key_exists($doctorName, $this->doctorIdByFullNameCache)) {
+            return $this->doctorIdByFullNameCache[$doctorName];
+        }
+
+        $parts = preg_split('/\s+/', $doctorName);
+        $lastName = $parts[0] ?? null;
+        $firstName = $parts[1] ?? null;
+        $secondName = $parts[2] ?? null;
+
+        if (! $lastName || ! $firstName) {
+            return $this->doctorIdByFullNameCache[$doctorName] = null;
+        }
+
+        $query = Doctor::query()
+            ->where('last_name', $lastName)
+            ->where('first_name', $firstName);
+
+        if ($secondName) {
+            $query->where('second_name', $secondName);
+        } else {
+            $query->where(function ($q) {
+                $q->whereNull('second_name')
+                    ->orWhere('second_name', '');
+            });
+        }
+
+        $doctorIdByName = $query->value('id');
+
+        return $this->doctorIdByFullNameCache[$doctorName] = $doctorIdByName ? (int) $doctorIdByName : null;
+    }
+
+    /**
      * Собираем данные слота из extendedProps для форм создания/просмотра.
      */
     protected function buildOnecSlotData(array $extendedProps, bool $forView = false): array
     {
         $slotStart = $this->normalizeEventTime($extendedProps['slot_start'] ?? null);
+        $doctorId = $this->resolveOnecDoctorId($extendedProps);
+        $doctorName = $extendedProps['doctor_name'] ?? null;
+
+        if (! $doctorName && $doctorId) {
+            $doctorName = $this->resolveDoctorNameById((int) $doctorId);
+        }
 
         return [
             'city_id' => $extendedProps['city_id'] ?? null,
@@ -1756,8 +1932,8 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             'branch_name' => $extendedProps['branch_name'] ?? null,
             'cabinet_id' => $extendedProps['cabinet_id'] ?? null,
             'cabinet_name' => $extendedProps['cabinet_name'] ?? null,
-            'doctor_id' => $extendedProps['doctor_id'] ?? null,
-            'doctor_name' => $extendedProps['doctor_name'] ?? null,
+            'doctor_id' => $doctorId,
+            'doctor_name' => $doctorName,
             'appointment_datetime' => $slotStart,
             'onec_slot_id' => $extendedProps['onec_slot_id'] ?? null,
             'source' => 'onec',

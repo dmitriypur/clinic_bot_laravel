@@ -60,7 +60,7 @@ class OneCBookingService
 
         $extraPayload['appointment_id'] = $appointmentId;
 
-        $payload = $this->buildBookingPayload(
+        $slotBookingPayload = $this->buildBookingPayload(
             $application,
             $slot,
             $branch,
@@ -69,13 +69,25 @@ class OneCBookingService
             ])
         );
 
+        $legacyPayload = $this->buildManualBookingPayload(
+            $application,
+            $doctor->external_id,
+            $slot->start_at->copy(),
+            $extraPayload
+        );
+
+        $useLegacyManualBooking = $this->shouldUseLegacyManualSlotBooking($endpoint);
+        $payload = $useLegacyManualBooking ? $legacyPayload : $slotBookingPayload;
+
         try {
             Log::info('OneC booking request', [
                 'endpoint_id' => $endpoint->id,
                 'payload' => $payload,
             ]);
 
-            $response = $this->apiClient->bookSlot($endpoint, $payload);
+            $response = $useLegacyManualBooking
+                ? $this->apiClient->createManualBooking($endpoint, $payload)
+                : $this->apiClient->bookSlot($endpoint, $payload);
 
             Log::info('OneC booking response', [
                 'endpoint_id' => $endpoint->id,
@@ -94,12 +106,10 @@ class OneCBookingService
             ], 0, $exception);
         }
 
-        $this->markEndpointSuccess($endpoint);
-
         $statusCode = (int) Arr::get($response, 'status_code', 200);
         $status = strtolower((string) Arr::get($response, 'status', 'success'));
 
-        if ($statusCode >= 400 || $status === 'fail') {
+        if ($statusCode >= 400 || in_array($status, ['fail', 'failed', 'error'], true)) {
             $message = Arr::get($response, 'detail')
                 ?? Arr::get($response, 'message')
                 ?? '1С отклонила запись.';
@@ -112,6 +122,8 @@ class OneCBookingService
                 'response' => $response,
             ]);
         }
+
+        $this->markEndpointSuccess($endpoint);
 
         $externalAppointmentId = (string) Arr::get($response, 'claim_id', Arr::get($response, 'appointment_id', $appointmentId));
         $integrationStatus = Arr::get($response, 'status', 'booked');
@@ -164,7 +176,21 @@ class OneCBookingService
         $endpoint = $this->validateEndpoint($branch);
 
         try {
+            Log::info('OneC cancel request', [
+                'endpoint_id' => $endpoint->id,
+                'application_id' => $application->id,
+                'external_appointment_id' => $application->external_appointment_id,
+                'payload' => $extraPayload,
+            ]);
+
             $response = $this->apiClient->cancelBooking($endpoint, $application->external_appointment_id, $extraPayload);
+
+            Log::info('OneC cancel response', [
+                'endpoint_id' => $endpoint->id,
+                'application_id' => $application->id,
+                'external_appointment_id' => $application->external_appointment_id,
+                'response' => $response,
+            ]);
         } catch (OneCApiException $exception) {
             $this->markEndpointFailed($endpoint, $exception);
 
@@ -176,9 +202,24 @@ class OneCBookingService
             ], 0, $exception);
         }
 
-        $this->markEndpointSuccess($endpoint);
-
+        $statusCode = (int) Arr::get($response, 'status_code', 200);
         $status = (string) Arr::get($response, 'status', 'cancelled');
+        $statusNormalized = strtolower($status);
+
+        if ($statusCode >= 400 || in_array($statusNormalized, ['fail', 'failed', 'error'], true)) {
+            $message = Arr::get($response, 'detail')
+                ?? Arr::get($response, 'message')
+                ?? '1С не подтвердила отмену записи.';
+
+            throw new OneCBookingException($message, [
+                'application_id' => $application->id,
+                'branch_id' => $branch->id,
+                'status_code' => $statusCode,
+                'response' => $response,
+            ]);
+        }
+
+        $this->markEndpointSuccess($endpoint);
 
         $application->forceFill([
             'integration_status' => $status,
@@ -349,7 +390,7 @@ class OneCBookingService
         $statusCode = (int) Arr::get($response, 'status_code', 200);
         $status = strtolower((string) Arr::get($response, 'status', 'success'));
 
-        if ($statusCode >= 400 || $status === 'fail') {
+        if ($statusCode >= 400 || in_array($status, ['fail', 'failed', 'error'], true)) {
             $message = Arr::get($response, 'detail')
                 ?? Arr::get($response, 'message')
                 ?? '1С отклонила запись.';
@@ -492,5 +533,20 @@ class OneCBookingService
         }
 
         return $exception->getMessage();
+    }
+
+    protected function shouldUseLegacyManualSlotBooking(IntegrationEndpoint $endpoint): bool
+    {
+        $credentials = $endpoint->credentials ?? [];
+
+        $hasSlotBookingConfig = ! empty($credentials['booking_path'])
+            || ! empty($credentials['booking_authorization'])
+            || ! empty($credentials['booking_token']);
+
+        $hasLegacyManualConfig = ! empty($credentials['manual_booking_path'])
+            || ! empty($credentials['manual_booking_authorization'])
+            || ! empty($credentials['manual_booking_token']);
+
+        return ! $hasSlotBookingConfig && $hasLegacyManualConfig;
     }
 }

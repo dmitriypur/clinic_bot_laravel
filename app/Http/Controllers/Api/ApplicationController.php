@@ -15,7 +15,6 @@ use App\Services\OneC\OneCBookingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
@@ -106,27 +105,27 @@ class ApplicationController extends Controller
                 : Application::INTEGRATION_TYPE_LOCAL;
         }
 
+        $application = null;
+
         try {
-            // Чтобы не получить "половинчатую" заявку, все операции ниже выполняются в транзакции.
-            $application = DB::transaction(function () use ($validated, $clinic, $branch, $requiresOneC, $slotExternalId, $manualOnecBooking, $commentForOneC, $appointmentSource) {
-                $application = Application::create($validated);
+            $application = Application::create($validated);
 
-                if ($requiresOneC) {
-                    $this->bookOneCApplication(
-                        application: $application,
-                        clinic: $clinic,
-                        branch: $branch,
-                        slotExternalId: $slotExternalId,
-                        manualBooking: $manualOnecBooking,
-                        comment: $commentForOneC,
-                        appointmentSource: $appointmentSource,
-                        logContext: 'store'
-                    );
-                }
+            if ($requiresOneC) {
+                $this->bookOneCApplication(
+                    application: $application,
+                    clinic: $clinic,
+                    branch: $branch,
+                    slotExternalId: $slotExternalId,
+                    manualBooking: $manualOnecBooking,
+                    comment: $commentForOneC,
+                    appointmentSource: $appointmentSource,
+                    logContext: 'store'
+                );
 
-                return $application;
-            });
+                $application->refresh();
+            }
         } catch (OneCBookingException $exception) {
+            $this->cleanupFailedApplicationCreation($application);
             report($exception);
 
             $errorField = $manualOnecBooking ? 'appointment_datetime' : 'onec_slot_id';
@@ -134,6 +133,9 @@ class ApplicationController extends Controller
             throw ValidationException::withMessages([
                 $errorField => [$exception->getMessage()],
             ]);
+        } catch (ValidationException $exception) {
+            $this->cleanupFailedApplicationCreation($application);
+            throw $exception;
         }
 
         // TODO: Отправка в 1C через очередь
@@ -241,14 +243,10 @@ class ApplicationController extends Controller
         }
 
         try {
-            $application = DB::transaction(function () use ($validated, $application, $branch, $clinic, $requiresOneC, $slotExternalId, $commentForOneC, $appointmentSource) {
-                $application->update($validated);
-                $application->refresh();
+            $application->update($validated);
+            $application->refresh();
 
-                if (! $requiresOneC || ! $branch || ! $clinic) {
-                    return $application;
-                }
-
+            if ($requiresOneC && $branch && $clinic) {
                 if (filled($application->external_appointment_id)) {
                     $this->cancelExistingAppointment($application);
                     $application->refresh();
@@ -265,12 +263,12 @@ class ApplicationController extends Controller
                     logContext: 'update'
                 );
 
-                return $application;
-            });
+                $application->refresh();
+            }
         } catch (OneCBookingException $exception) {
             report($exception);
 
-            $errorField = $shouldBookDirect ? 'appointment_datetime' : 'onec_slot_id';
+            $errorField = $slotExternalId ? 'onec_slot_id' : 'appointment_datetime';
 
             throw ValidationException::withMessages([
                 $errorField => [$exception->getMessage()],
@@ -305,16 +303,7 @@ class ApplicationController extends Controller
 
         if ($application->integration_type === Application::INTEGRATION_TYPE_ONEC && $application->external_appointment_id) {
             try {
-                $response = $this->bookingService->cancel($application);
-
-                $statusCode = (int) Arr::get($response, 'status_code', 0);
-
-                if ($statusCode !== 204) {
-                    return response()->json([
-                        'message' => 'В 1С не удалось отменить запись. Локальная запись не удалена.',
-                        'response' => $response,
-                    ], 422);
-                }
+                $this->bookingService->cancel($application);
             } catch (OneCBookingException $exception) {
                 report($exception);
 
@@ -446,7 +435,7 @@ class ApplicationController extends Controller
         string $logContext,
         array $extraPayload = []
     ): void {
-        $slot = $this->findSlotOrFail($clinic, $branch, $slotExternalId);
+        $slot = $this->findSlotOrFail($clinic, $branch, $slotExternalId, $application);
 
         Log::info("OneC booking via {$logContext} (slot)", array_filter([
             'application_id' => $application->id,
@@ -478,7 +467,7 @@ class ApplicationController extends Controller
         $application->refresh();
     }
 
-    protected function findSlotOrFail(?Clinic $clinic, ?Branch $branch, string $slotExternalId): OnecSlot
+    protected function findSlotOrFail(?Clinic $clinic, ?Branch $branch, string $slotExternalId, Application $application): OnecSlot
     {
         $slot = OnecSlot::query()
             ->when($clinic?->id, fn ($query, $clinicId) => $query->where('clinic_id', $clinicId))
@@ -489,6 +478,22 @@ class ApplicationController extends Controller
         if (! $slot) {
             throw ValidationException::withMessages([
                 'onec_slot_id' => ['Выбранный слот недоступен. Попробуйте обновить расписание.'],
+            ]);
+        }
+
+        if ($slot->status !== OnecSlot::STATUS_FREE) {
+            throw ValidationException::withMessages([
+                'onec_slot_id' => ['Этот слот только что заняли в 1С. Выберите другое время.'],
+            ]);
+        }
+
+        if (
+            $application->doctor_id
+            && $slot->doctor_id
+            && (int) $slot->doctor_id !== (int) $application->doctor_id
+        ) {
+            throw ValidationException::withMessages([
+                'onec_slot_id' => ['Слот не соответствует выбранному врачу. Обновите расписание и выберите заново.'],
             ]);
         }
 
@@ -516,5 +521,21 @@ class ApplicationController extends Controller
             'integration_payload' => null,
             'integration_status' => null,
         ])->save();
+    }
+
+    protected function cleanupFailedApplicationCreation(?Application $application): void
+    {
+        if (! $application || ! $application->exists) {
+            return;
+        }
+
+        try {
+            $application->delete();
+        } catch (\Throwable $exception) {
+            Log::error('Не удалось удалить локальную заявку после ошибки синхронизации с 1С.', [
+                'application_id' => $application->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
     }
 }

@@ -41,8 +41,10 @@ class OneCApiClient
      */
     public function bookSlot(IntegrationEndpoint $endpoint, array $payload): array
     {
-        // Путь может переопределяться в настройках интеграции, иначе берём дефолт.
+        // Сохраняем обратную совместимость со старыми филиалами,
+        // где в UI были только manual_booking_* поля.
         $path = Arr::get($endpoint->credentials, 'booking_path')
+            ?? Arr::get($endpoint->credentials, 'manual_booking_path')
             ?? 'events?action=bookslot';
 
         $options = [
@@ -51,7 +53,9 @@ class OneCApiClient
 
         // 1С часто ждёт custom Authorization, поэтому читаем токен прямо из credentials.
         $authorization = Arr::get($endpoint->credentials, 'booking_authorization')
-            ?? Arr::get($endpoint->credentials, 'booking_token');
+            ?? Arr::get($endpoint->credentials, 'booking_token')
+            ?? Arr::get($endpoint->credentials, 'manual_booking_authorization')
+            ?? Arr::get($endpoint->credentials, 'manual_booking_token');
 
         if ($authorization) {
             $options['headers']['Authorization'] = $authorization;
@@ -66,6 +70,10 @@ class OneCApiClient
                 'endpoint_id' => $endpoint->id,
                 'response' => $response->body(),
             ]);
+        }
+
+        if (! array_key_exists('status_code', $data)) {
+            $data['status_code'] = $response->status();
         }
 
         return $data;
@@ -101,7 +109,13 @@ class OneCApiClient
 
         $response = $this->request($endpoint, 'POST', $path, $options);
 
-        return $this->decodeResponse($response);
+        $data = $this->decodeResponse($response);
+
+        if (! array_key_exists('status_code', $data)) {
+            $data['status_code'] = $response->status();
+        }
+
+        return $data;
     }
 
     /**
@@ -130,6 +144,10 @@ class OneCApiClient
 
         if (! is_array($data)) {
             $data = $this->decodeResponse($response);
+        }
+
+        if (! array_key_exists('status_code', $data)) {
+            $data['status_code'] = $response->status();
         }
 
         return $data;

@@ -9,7 +9,6 @@ use App\Models\OnecSlot;
 use App\Services\OneC\Exceptions\OneCBookingException;
 use App\Services\OneC\OneCBookingService;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class AdminApplicationService
@@ -26,12 +25,19 @@ class AdminApplicationService
             unset($data['onec_slot_id']);
         }
 
-        return DB::transaction(function () use ($data, $slotExternalId, $comment, $appointmentSource) {
-            $application = Application::create($data);
-            $this->createInOneC($application, $slotExternalId, $comment, $appointmentSource);
+        $application = Application::create($data);
 
-            return $application;
-        });
+        try {
+            $this->createInOneC($application, $slotExternalId, $comment, $appointmentSource);
+        } catch (\Throwable $exception) {
+            if ($application->exists) {
+                $application->delete();
+            }
+
+            throw $exception;
+        }
+
+        return $application;
     }
 
     public function update(Application $application, array $data, array $options = []): Application
@@ -44,14 +50,13 @@ class AdminApplicationService
             unset($data['onec_slot_id']);
         }
 
-        return DB::transaction(function () use ($application, $data, $slotExternalId, $comment, $appointmentSource) {
-            $application->update($data);
-            $application->refresh();
+        $application->update($data);
+        $application->refresh();
 
-            $this->rebookInOneC($application, $slotExternalId, $comment, $appointmentSource);
+        $this->rebookInOneC($application, $slotExternalId, $comment, $appointmentSource);
+        $application->refresh();
 
-            return $application;
-        });
+        return $application;
     }
 
     protected function rebookInOneC(Application $application, ?string $slotExternalId, ?string $comment, string $appointmentSource): void
@@ -100,6 +105,23 @@ class AdminApplicationService
                     'appointment_datetime' => 'Выбранный слот недоступен. Обновите расписание и попробуйте снова.',
                 ]);
             }
+
+            if ($slot->status !== OnecSlot::STATUS_FREE) {
+                throw ValidationException::withMessages([
+                    'appointment_datetime' => 'Этот слот только что заняли в 1С. Выберите другое время.',
+                ]);
+            }
+
+            if (
+                $application->doctor_id
+                && $slot->doctor_id
+                && (int) $slot->doctor_id !== (int) $application->doctor_id
+            ) {
+                throw ValidationException::withMessages([
+                    'appointment_datetime' => 'Выбранный слот не соответствует выбранному врачу.',
+                ]);
+            }
+
             \Log::info('OneC rebook: booking by slot', [
                 'application_id' => $application->id,
                 'slot_external_id' => $slotExternalId,
@@ -176,11 +198,28 @@ class AdminApplicationService
                 ->where('external_slot_id', $slotExternalId)
                 ->first();
 
-            if (! $slot || $slot->status !== OnecSlot::STATUS_FREE) {
+            if (! $slot) {
                 throw ValidationException::withMessages([
                     'appointment_datetime' => 'Выбранный слот недоступен. Обновите расписание и попробуйте снова.',
                 ]);
             }
+
+            if ($slot->status !== OnecSlot::STATUS_FREE) {
+                throw ValidationException::withMessages([
+                    'appointment_datetime' => 'Этот слот только что заняли в 1С. Выберите другое время.',
+                ]);
+            }
+
+            if (
+                $application->doctor_id
+                && $slot->doctor_id
+                && (int) $slot->doctor_id !== (int) $application->doctor_id
+            ) {
+                throw ValidationException::withMessages([
+                    'appointment_datetime' => 'Выбранный слот не соответствует выбранному врачу.',
+                ]);
+            }
+
             \Log::info('OneC create: booking by slot', [
                 'application_id' => $application->id,
                 'slot_external_id' => $slotExternalId,

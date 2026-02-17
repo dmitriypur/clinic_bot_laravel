@@ -9,6 +9,8 @@ use App\Models\Cabinet;
 use App\Models\Doctor;
 use App\Models\Branch;
 use App\Models\Clinic;
+use App\Services\Admin\AdminApplicationService;
+use App\Services\OneC\Exceptions\OneCBookingException;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\TextInput;
@@ -350,6 +352,14 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             return;
         }
 
+        // Для слотов из 1С не ищем локальную смену, берём данные прямо из события.
+        if ($this->isOnecEvent($extendedProps, $event)) {
+            $this->slotData = $this->buildOnecSlotData($extendedProps);
+            $this->mountAction('createAppointment');
+
+            return;
+        }
+
         // Находим смену врача по ID из данных события
         // Загружаем связанные данные для заполнения формы
         $shift = DoctorShift::with(['cabinet.branch.clinic', 'cabinet.branch.city', 'doctor'])
@@ -408,6 +418,14 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                 ->find($extendedProps['application_id']);
                 
             if (!$application) {
+                if ($this->isOnecEvent($extendedProps)) {
+                    $this->slotData = $this->buildOnecSlotData($extendedProps, true);
+                    $this->record = null;
+                    $this->mountAction('viewAppointment');
+
+                    return;
+                }
+
                 Notification::make()
                     ->title('Ошибка')
                     ->body('Заявка не найдена')
@@ -466,6 +484,14 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             
 
             if (!$application) {
+                if ($this->isOnecEvent($extendedProps)) {
+                    $this->slotData = $this->buildOnecSlotData($extendedProps, true);
+                    $this->record = null;
+                    $this->mountAction('viewAppointment');
+
+                    return;
+                }
+
                 Notification::make()
                     ->title('Ошибка')
                     ->body('Заявка не найдена')
@@ -1170,14 +1196,34 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         }
                     }
                     
+                    $onecSlotId = $this->slotData['onec_slot_id'] ?? null;
+
                     try {
-                        $application = Application::create($applicationData);
-                    } catch (\Exception $e) {
+                        $application = app(AdminApplicationService::class)->create($applicationData, [
+                            'onec_slot_id' => $onecSlotId,
+                            'appointment_source' => 'Админка',
+                        ]);
+                    } catch (ValidationException $e) {
+                        Notification::make()
+                            ->title('Запись не сохранена')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                        return;
+                    } catch (OneCBookingException $e) {
+                        Notification::make()
+                            ->title('1С отклонила запись')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                        return;
+                    } catch (\Throwable $e) {
                         \Log::error('Ошибка создания заявки', [
                             'error' => $e->getMessage(),
-                            'data' => $applicationData
+                            'data' => $applicationData,
+                            'onec_slot_id' => $onecSlotId,
                         ]);
-                        
+
                         Notification::make()
                             ->title('Ошибка')
                             ->body('Не удалось создать заявку: ' . $e->getMessage())
@@ -1674,5 +1720,54 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
         } catch (\Throwable $exception) {
             return null;
         }
+    }
+
+    /**
+     * Определяем, что событие календаря пришло из 1С.
+     */
+    protected function isOnecEvent(array $extendedProps, array $event = []): bool
+    {
+        $source = $extendedProps['source'] ?? $extendedProps['slot_source'] ?? null;
+        if ($source === 'onec') {
+            return true;
+        }
+
+        $slotId = $extendedProps['slot_id'] ?? $event['id'] ?? null;
+        if (is_string($slotId) && str_starts_with($slotId, 'onec:')) {
+            return true;
+        }
+
+        return ! empty($extendedProps['onec_slot_id']);
+    }
+
+    /**
+     * Собираем данные слота из extendedProps для форм создания/просмотра.
+     */
+    protected function buildOnecSlotData(array $extendedProps, bool $forView = false): array
+    {
+        $slotStart = $this->normalizeEventTime($extendedProps['slot_start'] ?? null);
+
+        return [
+            'city_id' => $extendedProps['city_id'] ?? null,
+            'city_name' => $extendedProps['city_name'] ?? null,
+            'clinic_id' => $extendedProps['clinic_id'] ?? null,
+            'clinic_name' => $extendedProps['clinic_name'] ?? null,
+            'branch_id' => $extendedProps['branch_id'] ?? null,
+            'branch_name' => $extendedProps['branch_name'] ?? null,
+            'cabinet_id' => $extendedProps['cabinet_id'] ?? null,
+            'cabinet_name' => $extendedProps['cabinet_name'] ?? null,
+            'doctor_id' => $extendedProps['doctor_id'] ?? null,
+            'doctor_name' => $extendedProps['doctor_name'] ?? null,
+            'appointment_datetime' => $slotStart,
+            'onec_slot_id' => $extendedProps['onec_slot_id'] ?? null,
+            'source' => 'onec',
+            'send_to_1c' => true,
+            'full_name' => $forView ? ($extendedProps['patient_name'] ?? 'Запись из 1С') : '',
+            'phone' => $forView ? ($extendedProps['patient_phone'] ?? '') : '',
+            'full_name_parent' => '',
+            'birth_date' => '',
+            'promo_code' => '',
+            'appointment_status' => $forView ? 'Занят (1С)' : null,
+        ];
     }
 }

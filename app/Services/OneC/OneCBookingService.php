@@ -60,11 +60,13 @@ class OneCBookingService
 
         $extraPayload['appointment_id'] = $appointmentId;
 
-        $payload = $this->buildManualBookingPayload(
+        $payload = $this->buildBookingPayload(
             $application,
-            $doctor->external_id,
-            $slot->start_at->copy(),
-            $extraPayload
+            $slot,
+            $branch,
+            array_merge($extraPayload, [
+                'appointment_id' => $appointmentId,
+            ])
         );
 
         try {
@@ -73,8 +75,7 @@ class OneCBookingService
                 'payload' => $payload,
             ]);
 
-            // Для слотов и ручных записей вызывается один и тот же method 1С.
-            $response = $this->apiClient->createManualBooking($endpoint, $payload);
+            $response = $this->apiClient->bookSlot($endpoint, $payload);
 
             Log::info('OneC booking response', [
                 'endpoint_id' => $endpoint->id,
@@ -198,12 +199,23 @@ class OneCBookingService
 
     protected function buildBookingPayload(Application $application, OnecSlot $slot, Branch $branch, array $extraPayload = []): array
     {
+        $comment = (string) Arr::get($extraPayload, 'comment', '');
+        if ($application->full_name_parent) {
+            $parentInfo = "Родитель: {$application->full_name_parent}";
+            $comment = $comment ? "{$comment}. {$parentInfo}" : $parentInfo;
+        }
+
+        $appointmentSource = (string) Arr::get($extraPayload, 'appointment_source', 'Приложение');
+
         return array_merge([
+            'appointment_id' => Arr::get($extraPayload, 'appointment_id'),
             'slot_id' => $slot->external_slot_id,
             'clinic_external_id' => $branch->clinic?->external_id,
-            'doctor_external_id' => $slot->doctor?->external_id,
+            'doctor_external_id' => $slot->doctor?->external_id ?? $application->doctor?->external_id,
             'branch_external_id' => $branch->external_id,
             'cabinet_external_id' => $slot->cabinet?->external_id,
+            'comment' => $comment,
+            'appointment_source' => $appointmentSource,
             'patient' => [
                 'full_name' => $application->full_name,
                 'birth_date' => $application->birth_date,

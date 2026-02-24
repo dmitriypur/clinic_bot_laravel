@@ -1326,13 +1326,13 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->label('Статус приема')
                         ->disabled()
                         ->dehydrated(false)
-                        ->formatStateUsing(fn($state) => $this->record ? $this->record->getStatusLabel() : 'Неизвестно'),
+                        ->formatStateUsing(fn($state) => ($this->record ?? null)?->getStatusLabel() ?? 'Неизвестно'),
                     
                     // Сообщение для завершенных приемов
                     \Filament\Forms\Components\Placeholder::make('completed_message')
                         ->label('')
                         ->content('Прием проведен')
-                        ->visible(fn() => $this->record && $this->record->isCompleted())
+                        ->visible(fn() => (bool) (($this->record ?? null)?->isCompleted()))
                         ->extraAttributes([
                             'style' => 'text-align: center; font-size: 18px; font-weight: bold; color: #15803d; background-color: #dcfce7; padding: 12px; border-radius: 8px; border: 1px solid #bbf7d0;'
                         ]),
@@ -1363,9 +1363,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->label('Начать прием')
                         ->icon('heroicon-o-play')
                         ->color('success')
-                        ->visible(function() {
-                            return $this->record && $this->record->isScheduled() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
-                        })
+                        ->visible(fn() => (bool) (($this->record ?? null)?->isScheduled()) && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin()))
                         ->action(function () {
                             if ($this->record && $this->record->startAppointment()) {
                                 \Filament\Notifications\Notification::make()
@@ -1391,9 +1389,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->label('Завершить прием')
                         ->icon('heroicon-o-check-circle')
                         ->color('warning')
-                        ->visible(function() {
-                            return $this->record && $this->record->isInProgress() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
-                        })
+                        ->visible(fn() => (bool) (($this->record ?? null)?->isInProgress()) && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin()))
                         ->action(function () {
                             if ($this->record && $this->record->completeAppointment()) {
                                 \Filament\Notifications\Notification::make()
@@ -1419,7 +1415,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->label('Редактировать')
                         ->color('warning')
                         ->icon('heroicon-o-pencil')
-                        ->visible(fn() => $this->record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $this->record->clinic_id === auth()->user()->clinic_id)))
+                        ->visible(fn() => ($this->record ?? null) && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $this->record?->clinic_id === auth()->user()->clinic_id)))
                         ->form([
                             Grid::make(2)
                                 ->schema([

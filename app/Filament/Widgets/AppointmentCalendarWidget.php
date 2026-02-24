@@ -296,13 +296,9 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             \Saade\FilamentFullCalendar\Actions\DeleteAction::make()
                 ->action(function () {
                     $user = auth()->user();
-                    $record = $this->record ?? null;
-                    if (! $record) {
-                        return;
-                    }
                     
                     // Проверяем права доступа
-                    if ($user->isPartner() && $record->clinic_id !== $user->clinic_id) {
+                    if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
                         Notification::make()
                             ->title('Ошибка доступа')
                             ->body('Вы можете удалять заявки только своей клиники')
@@ -311,7 +307,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         return;
                     }
 
-                    $this->deleteCurrentRecordWithOneCHandling(true);
+                    $this->deleteCurrentRecordWithOneCHandling();
                 }),
         ];
     }
@@ -1603,17 +1599,16 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
 
     protected function deleteCurrentRecordWithOneCHandling(bool $closeModal = false): void
     {
-        $record = $this->record ?? null;
-        if (! $record) {
+        if (! $this->record) {
             return;
         }
 
         if (
-            $record->integration_type === Application::INTEGRATION_TYPE_ONEC
-            && filled($record->external_appointment_id)
+            $this->record->integration_type === Application::INTEGRATION_TYPE_ONEC
+            && filled($this->record->external_appointment_id)
         ) {
             try {
-                app(AdminApplicationService::class)->cancelOneCBooking($record);
+                app(AdminApplicationService::class)->cancelOneCBooking($this->record);
             } catch (OneCBookingException $exception) {
                 $conflict = app(CancellationConflictResolver::class)->buildConflictPayload($exception);
 
@@ -1635,9 +1630,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             }
         }
 
-        $record->delete();
-        $this->record = null;
-        $this->slotData = [];
+        $this->record->delete();
 
         Notification::make()
             ->title('Заявка удалена')

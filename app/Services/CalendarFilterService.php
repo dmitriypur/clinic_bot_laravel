@@ -88,18 +88,6 @@ class CalendarFilterService
             $query->whereIn('status_id', $filters['status_ids']);
         }
 
-        if (! empty($filters['promo_code'])) {
-            $query->where('promo_code', 'like', '%'.$filters['promo_code'].'%');
-        }
-
-        if (! empty($filters['phone'])) {
-            $digits = preg_replace('/\D+/', '', $filters['phone']);
-
-            if ($digits) {
-                $query->where('phone', 'like', '%'.$digits.'%');
-            }
-        }
-
         // Применяем фильтрацию по ролям для заявок
         $this->applyApplicationRoleFilters($query, $user);
 
@@ -173,11 +161,10 @@ class CalendarFilterService
                 $q->where('branch_doctor.doctor_id', $user->doctor_id);
             });
         } elseif (! empty($clinicIds)) {
-            // Если указаны клиники — ограничиваемся ими
             $query->whereIn('clinic_id', $clinicIds);
         } else {
-            // Если клиники не выбраны и пользователь не партнер/врач —
-            // оставляем все филиалы (для ролей admin/super_admin)
+            // Если не указаны клиники и пользователь не партнер/врач, возвращаем пустой массив
+            return [];
         }
 
         return $query->pluck('name', 'id')->toArray();
@@ -197,8 +184,8 @@ class CalendarFilterService
                 $q->whereIn('branch_doctor.branch_id', $branchIds);
             });
         } else {
-            // Если филиалы не выбраны и пользователь не врач —
-            // оставляем всех врачей (для ролей admin/super_admin)
+            // Если не указаны филиалы и пользователь не врач, возвращаем пустой массив
+            return [];
         }
 
         $doctors = $query->get();

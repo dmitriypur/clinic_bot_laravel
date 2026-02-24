@@ -36,7 +36,7 @@ class OneCSlotProvider implements SlotProviderInterface
             $query->where('doctor_id', $user->doctor_id);
         }
 
-        $slots = $query->get();
+        $slots = $this->deduplicateOverlappingSlots($query->get());
 
         return $slots->map(function (OnecSlot $slot) {
             $payload = $slot->source_payload ?? [];
@@ -71,5 +71,46 @@ class OneCSlotProvider implements SlotProviderInterface
                 ],
             );
         });
+    }
+
+    protected function deduplicateOverlappingSlots(Collection $slots): Collection
+    {
+        return $slots
+            ->groupBy(function (OnecSlot $slot) {
+                return implode('|', [
+                    $slot->clinic_id ?? 0,
+                    $slot->branch_id ?? 0,
+                    $slot->doctor_id ?? 0,
+                    $slot->cabinet_id ?? 0,
+                    $slot->start_at?->format('Y-m-d H:i:s') ?? '',
+                    $slot->end_at?->format('Y-m-d H:i:s') ?? '',
+                ]);
+            })
+            ->map(function (Collection $group) {
+                return $group
+                    ->sort(function (OnecSlot $left, OnecSlot $right) {
+                        $leftBooked = $left->status === OnecSlot::STATUS_BOOKED;
+                        $rightBooked = $right->status === OnecSlot::STATUS_BOOKED;
+
+                        if ($leftBooked !== $rightBooked) {
+                            return $leftBooked ? -1 : 1;
+                        }
+
+                        $leftSyncedAt = optional($left->synced_at)->getTimestamp() ?? 0;
+                        $rightSyncedAt = optional($right->synced_at)->getTimestamp() ?? 0;
+
+                        if ($leftSyncedAt !== $rightSyncedAt) {
+                            return $leftSyncedAt > $rightSyncedAt ? -1 : 1;
+                        }
+
+                        if ($left->id === $right->id) {
+                            return 0;
+                        }
+
+                        return $left->id > $right->id ? -1 : 1;
+                    })
+                    ->first();
+            })
+            ->values();
     }
 }

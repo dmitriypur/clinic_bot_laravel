@@ -56,15 +56,13 @@ class City extends Model
 
     public function allDoctors()
     {
-        return Doctor::whereHas('clinics.cities', function ($q) {
-            $q->where('cities.id', $this->id);
+        return Doctor::whereHas('branches', function ($q) {
+            $q->where('branches.city_id', $this->id);
         })->distinct();
     }
 
     public function allDoctorsByBranches()
     {
-        return Doctor::whereHas('branches', function ($q) {
-            $q->where('city_id', $this->id);
-        })->distinct();
+        return $this->allDoctors();
     }
 }

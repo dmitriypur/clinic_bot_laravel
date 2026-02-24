@@ -296,9 +296,13 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             \Saade\FilamentFullCalendar\Actions\DeleteAction::make()
                 ->action(function () {
                     $user = auth()->user();
+                    $record = $this->record ?? null;
+                    if (! $record) {
+                        return;
+                    }
                     
                     // Проверяем права доступа
-                    if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
+                    if ($user->isPartner() && $record->clinic_id !== $user->clinic_id) {
                         Notification::make()
                             ->title('Ошибка доступа')
                             ->body('Вы можете удалять заявки только своей клиники')
@@ -1326,13 +1330,13 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->label('Статус приема')
                         ->disabled()
                         ->dehydrated(false)
-                        ->formatStateUsing(fn($state) => ($this->record ?? null)?->getStatusLabel() ?? 'Неизвестно'),
+                        ->formatStateUsing(fn($state) => $this->record ? $this->record->getStatusLabel() : 'Неизвестно'),
                     
                     // Сообщение для завершенных приемов
                     \Filament\Forms\Components\Placeholder::make('completed_message')
                         ->label('')
                         ->content('Прием проведен')
-                        ->visible(fn() => (bool) (($this->record ?? null)?->isCompleted()))
+                        ->visible(fn() => $this->record && $this->record->isCompleted())
                         ->extraAttributes([
                             'style' => 'text-align: center; font-size: 18px; font-weight: bold; color: #15803d; background-color: #dcfce7; padding: 12px; border-radius: 8px; border: 1px solid #bbf7d0;'
                         ]),
@@ -1363,7 +1367,9 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->label('Начать прием')
                         ->icon('heroicon-o-play')
                         ->color('success')
-                        ->visible(fn() => (bool) (($this->record ?? null)?->isScheduled()) && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin()))
+                        ->visible(function() {
+                            return $this->record && $this->record->isScheduled() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
+                        })
                         ->action(function () {
                             if ($this->record && $this->record->startAppointment()) {
                                 \Filament\Notifications\Notification::make()
@@ -1389,7 +1395,9 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->label('Завершить прием')
                         ->icon('heroicon-o-check-circle')
                         ->color('warning')
-                        ->visible(fn() => (bool) (($this->record ?? null)?->isInProgress()) && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin()))
+                        ->visible(function() {
+                            return $this->record && $this->record->isInProgress() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
+                        })
                         ->action(function () {
                             if ($this->record && $this->record->completeAppointment()) {
                                 \Filament\Notifications\Notification::make()
@@ -1415,7 +1423,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->label('Редактировать')
                         ->color('warning')
                         ->icon('heroicon-o-pencil')
-                        ->visible(fn() => ($this->record ?? null) && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $this->record?->clinic_id === auth()->user()->clinic_id)))
+                        ->visible(fn() => $this->record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $this->record->clinic_id === auth()->user()->clinic_id)))
                         ->form([
                             Grid::make(2)
                                 ->schema([
@@ -1595,16 +1603,17 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
 
     protected function deleteCurrentRecordWithOneCHandling(bool $closeModal = false): void
     {
-        if (! $this->record) {
+        $record = $this->record ?? null;
+        if (! $record) {
             return;
         }
 
         if (
-            $this->record->integration_type === Application::INTEGRATION_TYPE_ONEC
-            && filled($this->record->external_appointment_id)
+            $record->integration_type === Application::INTEGRATION_TYPE_ONEC
+            && filled($record->external_appointment_id)
         ) {
             try {
-                app(AdminApplicationService::class)->cancelOneCBooking($this->record);
+                app(AdminApplicationService::class)->cancelOneCBooking($record);
             } catch (OneCBookingException $exception) {
                 $conflict = app(CancellationConflictResolver::class)->buildConflictPayload($exception);
 
@@ -1626,7 +1635,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             }
         }
 
-        $this->record->delete();
+        $record->delete();
         $this->record = null;
         $this->slotData = [];
 

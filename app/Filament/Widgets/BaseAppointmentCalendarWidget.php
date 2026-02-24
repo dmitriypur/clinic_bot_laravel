@@ -11,6 +11,7 @@ use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
 abstract class BaseAppointmentCalendarWidget extends FullCalendarWidget
 {
     public \Illuminate\Database\Eloquent\Model|string|null $model = Application::class;
+    public \Illuminate\Database\Eloquent\Model|int|string|null $record = null;
 
     /**
      * Данные выбранного слота, переиспользуются дочерними виджетами.

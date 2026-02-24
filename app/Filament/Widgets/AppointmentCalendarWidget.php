@@ -307,7 +307,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         return;
                     }
 
-                    $this->deleteCurrentRecordWithOneCHandling();
+                    $this->deleteCurrentRecordWithOneCHandling(true);
                 }),
         ];
     }
@@ -1631,6 +1631,8 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
         }
 
         $this->record->delete();
+        $this->record = null;
+        $this->slotData = [];
 
         Notification::make()
             ->title('Заявка удалена')

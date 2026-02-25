@@ -435,7 +435,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             if (!$application) {
                 if ($this->isOnecEvent($extendedProps)) {
                     $this->slotData = $this->buildOnecSlotData($extendedProps, true);
-                    $this->record = null;
+                    $this->record = '';
                     $this->mountAction('viewAppointment');
 
                     return;
@@ -504,7 +504,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             if (!$application) {
                 if ($this->isOnecEvent($extendedProps)) {
                     $this->slotData = $this->buildOnecSlotData($extendedProps, true);
-                    $this->record = null;
+                    $this->record = '';
                     $this->mountAction('viewAppointment');
 
                     return;
@@ -1651,7 +1651,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
         $externalAppointmentId = $record?->external_appointment_id;
         // Сразу отвязываем record от Livewire состояния, чтобы избежать гидратации
         // уже удалённой модели на следующем update-запросе.
-        $this->record = null;
+        $this->record = '';
 
         if (
             $record->integration_type === Application::INTEGRATION_TYPE_ONEC

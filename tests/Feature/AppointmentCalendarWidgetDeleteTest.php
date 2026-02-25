@@ -25,7 +25,7 @@ class AppointmentCalendarWidgetDeleteTest extends TestCase
         $widget->setRecordForTest($application);
         $widget->triggerDeleteForTest(true);
 
-        $this->assertNull($widget->record);
+        $this->assertSame('', $widget->record);
         $this->assertTrue($widget->refreshTriggered);
     }
 }

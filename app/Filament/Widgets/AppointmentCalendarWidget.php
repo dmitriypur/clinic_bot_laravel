@@ -1631,6 +1631,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
         }
 
         $this->record->delete();
+        $this->record = null;
 
         Notification::make()
             ->title('Заявка удалена')

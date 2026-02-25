@@ -169,7 +169,7 @@ class BotController extends Controller
         $user = $bot->getUser();
         $message = $bot->getMessage();
 
-        $baseUrl = rtrim((string) config('services.telegram.web_app_url', 'https://app.fondzrenie.ru'), '/');
+        $baseUrl = rtrim((string) config('services.telegram.web_app_url', 'https://adminzrenie.ru'), '/');
 
         $query = [
             'tg_user_id' => $user?->getId(),

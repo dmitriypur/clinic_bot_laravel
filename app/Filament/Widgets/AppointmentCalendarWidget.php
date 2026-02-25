@@ -9,6 +9,7 @@ use App\Models\Cabinet;
 use App\Models\Doctor;
 use App\Models\Branch;
 use App\Models\Clinic;
+use App\Models\OnecSlot;
 use App\Modules\OnecSync\Contracts\CancellationConflictResolver;
 use App\Services\Admin\AdminApplicationService;
 use App\Services\OneC\Exceptions\OneCBookingException;
@@ -1628,6 +1629,9 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             return;
         }
 
+        $record = $this->currentRecord();
+        $externalAppointmentId = $record?->external_appointment_id;
+
         if (
             $this->record->integration_type === Application::INTEGRATION_TYPE_ONEC
             && filled($this->record->external_appointment_id)
@@ -1656,6 +1660,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
         }
 
         $this->record->delete();
+        $this->releaseOnecSlotLocally($record, $externalAppointmentId);
         $this->record = null;
         $this->slotData = [];
 
@@ -1670,6 +1675,41 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
         if ($closeModal) {
             $this->unmountAction();
         }
+    }
+
+    protected function releaseOnecSlotLocally(?Application $record, ?string $externalAppointmentId): void
+    {
+        if (! $record || $record->integration_type !== Application::INTEGRATION_TYPE_ONEC) {
+            return;
+        }
+
+        $slotId = (int) ($this->slotData['onec_slot_id'] ?? 0);
+
+        if ($slotId > 0) {
+            OnecSlot::query()
+                ->whereKey($slotId)
+                ->update([
+                    'status' => OnecSlot::STATUS_FREE,
+                    'booking_uuid' => null,
+                    'synced_at' => now(),
+                ]);
+
+            return;
+        }
+
+        if (! filled($externalAppointmentId)) {
+            return;
+        }
+
+        OnecSlot::query()
+            ->where('clinic_id', $record->clinic_id)
+            ->where('branch_id', $record->branch_id)
+            ->where('booking_uuid', $externalAppointmentId)
+            ->update([
+                'status' => OnecSlot::STATUS_FREE,
+                'booking_uuid' => null,
+                'synced_at' => now(),
+            ]);
     }
     
 

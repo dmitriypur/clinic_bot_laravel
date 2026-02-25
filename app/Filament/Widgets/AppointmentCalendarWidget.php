@@ -908,13 +908,8 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
 
                                 return $record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $record->clinic_id === auth()->user()->clinic_id));
                             })
-                            ->requiresConfirmation()
-                            ->modalHeading('Удаление заявки')
-                            ->modalDescription('Вы уверены, что хотите удалить эту заявку? Это действие нельзя отменить.')
                             ->action(function () {
-                                if ($this->record) {
-                                    $this->deleteCurrentRecordWithOneCHandling(true);
-                                }
+                                $this->deleteCurrentRecordWithOneCHandling(true);
                             }),
                         
                     ]),
@@ -1610,13 +1605,8 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
 
                             return $record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $record->clinic_id === auth()->user()->clinic_id));
                         })
-                        ->requiresConfirmation()
-                        ->modalHeading('Удаление заявки')
-                        ->modalDescription('Вы уверены, что хотите удалить эту заявку? Это действие нельзя отменить.')
                         ->action(function () {
-                            if ($this->record) {
-                                $this->deleteCurrentRecordWithOneCHandling(true);
-                            }
+                            $this->deleteCurrentRecordWithOneCHandling(true);
                         }),
                     
                 ]),

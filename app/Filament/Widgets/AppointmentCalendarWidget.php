@@ -42,6 +42,15 @@ use Illuminate\Validation\ValidationException;
  */
 class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
 {
+    protected function currentRecord(): ?Application
+    {
+        if (! isset($this->record)) {
+            return null;
+        }
+
+        return $this->record instanceof Application ? $this->record : null;
+    }
+
     /**
      * Фильтры для календаря заявок
      * Сохраняют состояние фильтрации по клиникам, филиалам, врачам и датам
@@ -683,7 +692,9 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                             ->icon('heroicon-o-play')
                             ->color('success')
                             ->visible(function() {
-                                return $this->record && $this->record->isScheduled() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
+                                $record = $this->currentRecord();
+
+                                return $record && $record->isScheduled() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
                             })
                             ->action(function () {
                                 if ($this->record && $this->record->startAppointment()) {
@@ -709,7 +720,9 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                             ->icon('heroicon-o-check-circle')
                             ->color('warning')
                             ->visible(function() {
-                                return $this->record && $this->record->isInProgress() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
+                                $record = $this->currentRecord();
+
+                                return $record && $record->isInProgress() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
                             })
                             ->action(function () {
                                 if ($this->record && $this->record->completeAppointment()) {
@@ -734,7 +747,11 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                             ->label('Редактировать')
                             ->color('warning')
                             ->icon('heroicon-o-pencil')
-                            ->visible(fn() => $this->record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $this->record->clinic_id === auth()->user()->clinic_id)))
+                            ->visible(function () {
+                                $record = $this->currentRecord();
+
+                                return $record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $record->clinic_id === auth()->user()->clinic_id));
+                            })
                             ->form([
                                 Grid::make(2)
                                     ->schema([
@@ -1332,7 +1349,11 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                     \Filament\Forms\Components\Placeholder::make('completed_message')
                         ->label('')
                         ->content('Прием проведен')
-                        ->visible(fn() => $this->record && $this->record->isCompleted())
+                        ->visible(function () {
+                            $record = $this->currentRecord();
+
+                            return $record && $record->isCompleted();
+                        })
                         ->extraAttributes([
                             'style' => 'text-align: center; font-size: 18px; font-weight: bold; color: #15803d; background-color: #dcfce7; padding: 12px; border-radius: 8px; border: 1px solid #bbf7d0;'
                         ]),
@@ -1364,7 +1385,9 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->icon('heroicon-o-play')
                         ->color('success')
                         ->visible(function() {
-                            return $this->record && $this->record->isScheduled() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
+                            $record = $this->currentRecord();
+
+                            return $record && $record->isScheduled() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
                         })
                         ->action(function () {
                             if ($this->record && $this->record->startAppointment()) {
@@ -1392,7 +1415,9 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->icon('heroicon-o-check-circle')
                         ->color('warning')
                         ->visible(function() {
-                            return $this->record && $this->record->isInProgress() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
+                            $record = $this->currentRecord();
+
+                            return $record && $record->isInProgress() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
                         })
                         ->action(function () {
                             if ($this->record && $this->record->completeAppointment()) {

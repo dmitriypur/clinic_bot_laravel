@@ -1632,6 +1632,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
 
         $this->record->delete();
         $this->record = null;
+        $this->slotData = [];
 
         Notification::make()
             ->title('Заявка удалена')
@@ -1642,7 +1643,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
         $this->refreshRecords();
 
         if ($closeModal) {
-            $this->mountedAction = null;
+            $this->unmountAction();
         }
     }
     

@@ -165,10 +165,15 @@ class AdminApplicationService
         }
 
         $this->bookingService->cancel($application);
+        // Заявка может быть удалена параллельно inbound-обработчиком 1С
+        // (например, при ONEC_SYNC_AUTO_DELETE=true и статусе free).
+        // В этом случае не пытаемся обновлять модель, чтобы не выбрасывать ModelNotFound.
+        $freshApplication = $application->fresh();
+        if (! $freshApplication) {
+            return;
+        }
 
-        $application->refresh();
-
-        $application->forceFill([
+        $freshApplication->forceFill([
             'external_appointment_id' => null,
             'integration_payload' => null,
             'integration_status' => null,

@@ -45,11 +45,17 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
 {
     protected function currentRecord(): ?Application
     {
-        if (! isset($this->record)) {
+        if (isset($this->record) && $this->record instanceof Application) {
+            return $this->record;
+        }
+
+        $applicationId = (int) ($this->slotData['application_id'] ?? 0);
+
+        if ($applicationId <= 0) {
             return null;
         }
 
-        return $this->record instanceof Application ? $this->record : null;
+        return Application::query()->find($applicationId);
     }
 
     /**
@@ -265,25 +271,34 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
         return [
             \Saade\FilamentFullCalendar\Actions\EditAction::make()
                 ->mountUsing(function (\Filament\Forms\Form $form, array $arguments) {
+                    $record = $this->currentRecord();
+                    if (! $record) {
+                        return;
+                    }
+
                     $form->fill([
-                        'city_id' => $this->record->city_id,
-                        'clinic_id' => $this->record->clinic_id,
-                        'branch_id' => $this->record->branch_id,
-                        'cabinet_id' => $this->record->cabinet_id,
-                        'doctor_id' => $this->record->doctor_id,
-                        'appointment_datetime' => $this->normalizeEventTime($arguments['event']['start'] ?? $this->record->appointment_datetime, isset($arguments['event']['start'])),
-                        'full_name' => $this->record->full_name,
-                        'phone' => $this->record->phone,
-                        'full_name_parent' => $this->record->full_name_parent,
-                        'birth_date' => $this->record->birth_date,
-                        'promo_code' => $this->record->promo_code,
+                        'city_id' => $record->city_id,
+                        'clinic_id' => $record->clinic_id,
+                        'branch_id' => $record->branch_id,
+                        'cabinet_id' => $record->cabinet_id,
+                        'doctor_id' => $record->doctor_id,
+                        'appointment_datetime' => $this->normalizeEventTime($arguments['event']['start'] ?? $record->appointment_datetime, isset($arguments['event']['start'])),
+                        'full_name' => $record->full_name,
+                        'phone' => $record->phone,
+                        'full_name_parent' => $record->full_name_parent,
+                        'birth_date' => $record->birth_date,
+                        'promo_code' => $record->promo_code,
                     ]);
                 })
                 ->action(function (array $data) {
                     $user = auth()->user();
+                    $record = $this->currentRecord();
+                    if (! $record) {
+                        return;
+                    }
                     
                     // Проверяем права доступа
-                    if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
+                    if ($user->isPartner() && $record->clinic_id !== $user->clinic_id) {
                         Notification::make()
                             ->title('Ошибка доступа')
                             ->body('Вы можете редактировать заявки только своей клиники')
@@ -292,7 +307,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         return;
                     }
                     
-                    $this->record->update($data);
+                    $record->update($data);
                     
                     Notification::make()
                         ->title('Заявка обновлена')
@@ -306,9 +321,13 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             \Saade\FilamentFullCalendar\Actions\DeleteAction::make()
                 ->action(function () {
                     $user = auth()->user();
+                    $record = $this->currentRecord();
+                    if (! $record) {
+                        return;
+                    }
                     
                     // Проверяем права доступа
-                    if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
+                    if ($user->isPartner() && $record->clinic_id !== $user->clinic_id) {
                         Notification::make()
                             ->title('Ошибка доступа')
                             ->body('Вы можете удалять заявки только своей клиники')
@@ -542,7 +561,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
         ];
 
         // Устанавливаем запись для действий
-        $this->record = $application;
+        $this->record = '';
         
         // Открываем модальное окно для просмотра/редактирования заявки
         $this->mountAction('viewAppointment');
@@ -698,7 +717,8 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                                 return $record && $record->isScheduled() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
                             })
                             ->action(function () {
-                                if ($this->record && $this->record->startAppointment()) {
+                                $record = $this->currentRecord();
+                                if ($record && $record->startAppointment()) {
                                     \Filament\Notifications\Notification::make()
                                         ->title('Прием начат')
                                         ->body('Прием пациента успешно начат')
@@ -726,7 +746,8 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                                 return $record && $record->isInProgress() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
                             })
                             ->action(function () {
-                                if ($this->record && $this->record->completeAppointment()) {
+                                $record = $this->currentRecord();
+                                if ($record && $record->completeAppointment()) {
                                     \Filament\Notifications\Notification::make()
                                         ->title('Прием завершен')
                                         ->body('Прием пациента успешно завершен')
@@ -856,27 +877,32 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                                     ]),
                             ])
                             ->mountUsing(function (\Filament\Forms\Form $form) {
-                                if ($this->record) {
+                                $record = $this->currentRecord();
+                                if ($record) {
                                     $form->fill([
-                                        'city_id' => $this->record->city_id,
-                                        'clinic_id' => $this->record->clinic_id,
-                                        'branch_id' => $this->record->branch_id,
-                                        'cabinet_id' => $this->record->cabinet_id,
-                                        'doctor_id' => $this->record->doctor_id,
-                                        'appointment_datetime' => $this->record->appointment_datetime,
-                                        'full_name' => $this->record->full_name,
-                                        'phone' => $this->record->phone,
-                                        'full_name_parent' => $this->record->full_name_parent,
-                                        'birth_date' => $this->record->birth_date,
-                                        'promo_code' => $this->record->promo_code,
+                                        'city_id' => $record->city_id,
+                                        'clinic_id' => $record->clinic_id,
+                                        'branch_id' => $record->branch_id,
+                                        'cabinet_id' => $record->cabinet_id,
+                                        'doctor_id' => $record->doctor_id,
+                                        'appointment_datetime' => $record->appointment_datetime,
+                                        'full_name' => $record->full_name,
+                                        'phone' => $record->phone,
+                                        'full_name_parent' => $record->full_name_parent,
+                                        'birth_date' => $record->birth_date,
+                                        'promo_code' => $record->promo_code,
                                     ]);
                                 }
                             })
                             ->action(function (array $data) {
                                 $user = auth()->user();
+                                $record = $this->currentRecord();
+                                if (! $record) {
+                                    return;
+                                }
                                 
                                 // Проверяем права доступа
-                                if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
+                                if ($user->isPartner() && $record->clinic_id !== $user->clinic_id) {
                                     Notification::make()
                                         ->title('Ошибка доступа')
                                         ->body('Вы можете редактировать заявки только своей клиники')
@@ -885,7 +911,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                                     return;
                                 }
                                 
-                                $this->record->update($data);
+                                $record->update($data);
                                 
                                 Notification::make()
                                     ->title('Заявка обновлена')
@@ -908,6 +934,9 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
 
                                 return $record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $record->clinic_id === auth()->user()->clinic_id));
                             })
+                            ->requiresConfirmation()
+                            ->modalHeading('Удаление заявки')
+                            ->modalDescription('Вы уверены, что хотите удалить эту заявку? Это действие нельзя отменить.')
                             ->action(function () {
                                 $this->deleteCurrentRecordWithOneCHandling(true);
                             }),
@@ -1391,7 +1420,8 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                             return $record && $record->isScheduled() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
                         })
                         ->action(function () {
-                            if ($this->record && $this->record->startAppointment()) {
+                            $record = $this->currentRecord();
+                            if ($record && $record->startAppointment()) {
                                 \Filament\Notifications\Notification::make()
                                     ->title('Прием начат')
                                     ->body('Прием пациента успешно начат')
@@ -1421,7 +1451,8 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                             return $record && $record->isInProgress() && (auth()->user()->isDoctor() || auth()->user()->isPartner() || auth()->user()->isSuperAdmin());
                         })
                         ->action(function () {
-                            if ($this->record && $this->record->completeAppointment()) {
+                            $record = $this->currentRecord();
+                            if ($record && $record->completeAppointment()) {
                                 \Filament\Notifications\Notification::make()
                                     ->title('Прием завершен')
                                     ->body('Прием пациента успешно завершен')
@@ -1553,27 +1584,32 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                                 ]),
                         ])
                         ->mountUsing(function (\Filament\Forms\Form $form) {
-                            if ($this->record) {
+                            $record = $this->currentRecord();
+                            if ($record) {
                                 $form->fill([
-                                    'city_id' => $this->record->city_id,
-                                    'clinic_id' => $this->record->clinic_id,
-                                    'branch_id' => $this->record->branch_id,
-                                    'cabinet_id' => $this->record->cabinet_id,
-                                    'doctor_id' => $this->record->doctor_id,
-                                    'appointment_datetime' => $this->record->appointment_datetime,
-                                    'full_name' => $this->record->full_name,
-                                    'phone' => $this->record->phone,
-                                    'full_name_parent' => $this->record->full_name_parent,
-                                    'birth_date' => $this->record->birth_date,
-                                    'promo_code' => $this->record->promo_code,
+                                    'city_id' => $record->city_id,
+                                    'clinic_id' => $record->clinic_id,
+                                    'branch_id' => $record->branch_id,
+                                    'cabinet_id' => $record->cabinet_id,
+                                    'doctor_id' => $record->doctor_id,
+                                    'appointment_datetime' => $record->appointment_datetime,
+                                    'full_name' => $record->full_name,
+                                    'phone' => $record->phone,
+                                    'full_name_parent' => $record->full_name_parent,
+                                    'birth_date' => $record->birth_date,
+                                    'promo_code' => $record->promo_code,
                                 ]);
                             }
                         })
                         ->action(function (array $data) {
                             $user = auth()->user();
+                            $record = $this->currentRecord();
+                            if (! $record) {
+                                return;
+                            }
                             
                             // Проверяем права доступа
-                            if ($user->isPartner() && $this->record->clinic_id !== $user->clinic_id) {
+                            if ($user->isPartner() && $record->clinic_id !== $user->clinic_id) {
                                 Notification::make()
                                     ->title('Ошибка доступа')
                                     ->body('Вы можете редактировать заявки только своей клиники')
@@ -1582,7 +1618,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                                 return;
                             }
                             
-                            $this->record->update($data);
+                            $record->update($data);
                             
                             Notification::make()
                                 ->title('Заявка обновлена')
@@ -1605,6 +1641,9 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
 
                             return $record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $record->clinic_id === auth()->user()->clinic_id));
                         })
+                        ->requiresConfirmation()
+                        ->modalHeading('Удаление заявки')
+                        ->modalDescription('Вы уверены, что хотите удалить эту заявку? Это действие нельзя отменить.')
                         ->action(function () {
                             $this->deleteCurrentRecordWithOneCHandling(true);
                         }),
@@ -1629,10 +1668,6 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
 
     protected function deleteCurrentRecordWithOneCHandling(bool $closeModal = false): void
     {
-        if (! isset($this->record) || ! $this->record) {
-            return;
-        }
-
         $record = $this->currentRecord();
         if (! $record) {
             return;

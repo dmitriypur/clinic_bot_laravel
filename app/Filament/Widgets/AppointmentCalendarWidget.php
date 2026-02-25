@@ -663,7 +663,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                                     ->label('Статус приема')
                                     ->disabled()
                                     ->dehydrated(false)
-                                    ->formatStateUsing(fn($state) => $this->record ? $this->record->getStatusLabel() : 'Неизвестно'),
+                                    ->formatStateUsing(fn($state) => $this->currentRecord()?->getStatusLabel() ?? 'Неизвестно'),
                             ]),
                     ])
                     ->mountUsing(function (\Filament\Forms\Form $form) {
@@ -902,7 +902,12 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                             ->label('Удалить')
                             ->color('danger')
                             ->icon('heroicon-o-trash')
-                            ->visible(fn() => $this->record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $this->record->clinic_id === auth()->user()->clinic_id)))
+                            ->cancelParentActions()
+                            ->visible(function () {
+                                $record = $this->currentRecord();
+
+                                return $record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $record->clinic_id === auth()->user()->clinic_id));
+                            })
                             ->requiresConfirmation()
                             ->modalHeading('Удаление заявки')
                             ->modalDescription('Вы уверены, что хотите удалить эту заявку? Это действие нельзя отменить.')
@@ -1344,7 +1349,7 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->label('Статус приема')
                         ->disabled()
                         ->dehydrated(false)
-                        ->formatStateUsing(fn($state) => $this->record ? $this->record->getStatusLabel() : 'Неизвестно'),
+                        ->formatStateUsing(fn($state) => $this->currentRecord()?->getStatusLabel() ?? 'Неизвестно'),
                     
                     // Сообщение для завершенных приемов
                     \Filament\Forms\Components\Placeholder::make('completed_message')
@@ -1445,7 +1450,11 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->label('Редактировать')
                         ->color('warning')
                         ->icon('heroicon-o-pencil')
-                        ->visible(fn() => $this->record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $this->record->clinic_id === auth()->user()->clinic_id)))
+                        ->visible(function () {
+                            $record = $this->currentRecord();
+
+                            return $record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $record->clinic_id === auth()->user()->clinic_id));
+                        })
                         ->form([
                             Grid::make(2)
                                 ->schema([
@@ -1595,7 +1604,12 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         ->label('Удалить')
                         ->color('danger')
                         ->icon('heroicon-o-trash')
-                        ->visible(fn() => $this->record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $this->record->clinic_id === auth()->user()->clinic_id)))
+                        ->cancelParentActions()
+                        ->visible(function () {
+                            $record = $this->currentRecord();
+
+                            return $record && (auth()->user()->isSuperAdmin() || (auth()->user()->isPartner() && $record->clinic_id === auth()->user()->clinic_id));
+                        })
                         ->requiresConfirmation()
                         ->modalHeading('Удаление заявки')
                         ->modalDescription('Вы уверены, что хотите удалить эту заявку? Это действие нельзя отменить.')

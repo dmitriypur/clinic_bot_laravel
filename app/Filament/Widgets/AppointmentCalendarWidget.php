@@ -1625,19 +1625,26 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
 
     protected function deleteCurrentRecordWithOneCHandling(bool $closeModal = false): void
     {
-        if (! $this->record) {
+        if (! isset($this->record) || ! $this->record) {
             return;
         }
 
         $record = $this->currentRecord();
+        if (! $record) {
+            return;
+        }
+
         $externalAppointmentId = $record?->external_appointment_id;
+        // Сразу отвязываем record от Livewire состояния, чтобы избежать гидратации
+        // уже удалённой модели на следующем update-запросе.
+        $this->record = null;
 
         if (
-            $this->record->integration_type === Application::INTEGRATION_TYPE_ONEC
-            && filled($this->record->external_appointment_id)
+            $record->integration_type === Application::INTEGRATION_TYPE_ONEC
+            && filled($record->external_appointment_id)
         ) {
             try {
-                app(AdminApplicationService::class)->cancelOneCBooking($this->record);
+                app(AdminApplicationService::class)->cancelOneCBooking($record);
             } catch (OneCBookingException $exception) {
                 $conflict = app(CancellationConflictResolver::class)->buildConflictPayload($exception);
 
@@ -1659,9 +1666,8 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
             }
         }
 
-        $this->record->delete();
+        $record->delete();
         $this->releaseOnecSlotLocally($record, $externalAppointmentId);
-        $this->record = null;
         $this->slotData = [];
 
         Notification::make()

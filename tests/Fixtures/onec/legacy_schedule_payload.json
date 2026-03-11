@@ -1,0 +1,33 @@
+{
+  "schedule": {
+    "branch-ext-1": "Anonymized Branch",
+    "data": {
+      "branch-ext-1": {
+        "doctor-ext-1": {
+          "cells": [
+            {
+              "free": true,
+              "time_start": "09:00",
+              "time_end": "09:30",
+              "dt": "2026-03-21"
+            },
+            {
+              "free": false,
+              "time_start": "09:30",
+              "time_end": "10:00",
+              "dt": "2026-03-21"
+            },
+            {
+              "free": true,
+              "time_start": "10:00",
+              "time_end": "10:30",
+              "dt": "2026-03-21"
+            }
+          ],
+          "espec": "Офтальмолог",
+          "efio": "Тестовый Врач"
+        }
+      }
+    }
+  }
+}

@@ -34,22 +34,13 @@ class MassShiftCreator
         $start = Carbon::parse($data['start_time'])->setTimezone($timezone);
         $end = Carbon::parse($data['end_time'])->setTimezone($timezone);
 
-        $workdayStartTemplate = null;
-        $workdayEndTemplate = null;
-
-        if (! empty($data['workday_start'])) {
-            $workdayStartTemplate = $this->parseTimeOnly($data['workday_start'], $start, 'workday_start', 'Неверный формат времени начала рабочего дня.');
-        }
-
-        if (! empty($data['workday_end'])) {
-            $workdayEndTemplate = $this->parseTimeOnly($data['workday_end'], $end, 'workday_end', 'Неверный формат времени конца рабочего дня.');
-        }
-
         if ($end->lte($start)) {
             throw ValidationException::withMessages([
                 'end_time' => 'Время окончания должно быть позже времени начала.',
             ]);
         }
+
+        [$workdayStartTemplate, $workdayEndTemplate] = $this->resolveWorkdayTemplates($data, $start, $end);
 
         $hasBreak = (bool) ($data['has_break'] ?? false);
         $breakBounds = $hasBreak ? $this->resolveBreakBounds($data, $start) : null;
@@ -57,29 +48,26 @@ class MassShiftCreator
         $defaultDailyStart = $workdayStartTemplate ?? $start->copy();
         $defaultDailyEnd = $workdayEndTemplate ?? $end->copy();
 
-        $excludedWeekdays = collect($data['excluded_weekdays'] ?? [])
-            ->map(fn ($value) => (int) $value)
-            ->filter(fn (int $day) => $day >= 1 && $day <= 7)
-            ->unique()
-            ->values()
-            ->all();
+        $excludedWeekdays = $this->resolveExcludedWeekdays($data['excluded_weekdays'] ?? []);
 
         return DB::transaction(function () use ($data, $start, $end, $breakBounds, $defaultDailyStart, $defaultDailyEnd, $workdayStartTemplate, $workdayEndTemplate, $excludedWeekdays) {
             $createdShifts = collect();
             $period = CarbonPeriod::create($start->copy()->startOfDay(), $end->copy()->startOfDay());
 
             foreach ($period as $day) {
-                if (! empty($excludedWeekdays) && in_array($day->isoWeekday(), $excludedWeekdays, true)) {
+                if ($this->shouldSkipDay($day, $excludedWeekdays)) {
                     continue;
                 }
 
-                $segmentStart = $day->isSameDay($start)
-                    ? $start->copy()
-                    : $this->applyTemplateToDay($day, $workdayStartTemplate, $defaultDailyStart);
-
-                $segmentEnd = $day->isSameDay($end)
-                    ? $end->copy()
-                    : $this->applyTemplateToDay($day, $workdayEndTemplate, $defaultDailyEnd);
+                [$segmentStart, $segmentEnd] = $this->resolveDayWindow(
+                    $day,
+                    $start,
+                    $end,
+                    $workdayStartTemplate,
+                    $workdayEndTemplate,
+                    $defaultDailyStart,
+                    $defaultDailyEnd
+                );
 
                 if ($segmentStart->gte($segmentEnd)) {
                     continue;
@@ -107,16 +95,9 @@ class MassShiftCreator
                             ])
                         );
                     } catch (ValidationException $exception) {
-                        $messages = $exception->errors();
-                        $messages['shift_date'] = [
-                            sprintf(
-                                'Не удалось создать смену на %s. %s',
-                                $segmentStart->format('d.m.Y'),
-                                implode(' ', array_map(fn ($item) => is_array($item) ? implode(' ', $item) : $item, $messages))
-                            ),
-                        ];
-
-                        throw ValidationException::withMessages($messages);
+                        throw ValidationException::withMessages(
+                            $this->buildShiftCreationErrorMessages($exception, $segmentStart)
+                        );
                     }
                 }
             }
@@ -286,5 +267,83 @@ class MassShiftCreator
             $reference->minute,
             $reference->second
         );
+    }
+
+    /**
+     * @return array{0: ?Carbon, 1: ?Carbon}
+     */
+    protected function resolveWorkdayTemplates(array $data, CarbonInterface $start, CarbonInterface $end): array
+    {
+        $workdayStartTemplate = null;
+        $workdayEndTemplate = null;
+
+        if (! empty($data['workday_start'])) {
+            $workdayStartTemplate = $this->parseTimeOnly($data['workday_start'], $start, 'workday_start', 'Неверный формат времени начала рабочего дня.');
+        }
+
+        if (! empty($data['workday_end'])) {
+            $workdayEndTemplate = $this->parseTimeOnly($data['workday_end'], $end, 'workday_end', 'Неверный формат времени конца рабочего дня.');
+        }
+
+        return [$workdayStartTemplate, $workdayEndTemplate];
+    }
+
+    /**
+     * @param  array<int, mixed>  $rawWeekdays
+     * @return array<int, int>
+     */
+    protected function resolveExcludedWeekdays(array $rawWeekdays): array
+    {
+        return collect($rawWeekdays)
+            ->map(fn ($value) => (int) $value)
+            ->filter(fn (int $day) => $day >= 1 && $day <= 7)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    protected function shouldSkipDay(CarbonInterface $day, array $excludedWeekdays): bool
+    {
+        return ! empty($excludedWeekdays) && in_array($day->isoWeekday(), $excludedWeekdays, true);
+    }
+
+    /**
+     * @return array{0: CarbonInterface, 1: CarbonInterface}
+     */
+    protected function resolveDayWindow(
+        CarbonInterface $day,
+        CarbonInterface $start,
+        CarbonInterface $end,
+        ?CarbonInterface $workdayStartTemplate,
+        ?CarbonInterface $workdayEndTemplate,
+        CarbonInterface $defaultDailyStart,
+        CarbonInterface $defaultDailyEnd
+    ): array {
+        $segmentStart = $day->isSameDay($start)
+            ? $start->copy()
+            : $this->applyTemplateToDay($day, $workdayStartTemplate, $defaultDailyStart);
+
+        $segmentEnd = $day->isSameDay($end)
+            ? $end->copy()
+            : $this->applyTemplateToDay($day, $workdayEndTemplate, $defaultDailyEnd);
+
+        return [$segmentStart, $segmentEnd];
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    protected function buildShiftCreationErrorMessages(ValidationException $exception, CarbonInterface $segmentStart): array
+    {
+        $messages = $exception->errors();
+        $messages['shift_date'] = [
+            sprintf(
+                'Не удалось создать смену на %s. %s',
+                $segmentStart->format('d.m.Y'),
+                implode(' ', array_map(fn ($item) => is_array($item) ? implode(' ', $item) : $item, $messages))
+            ),
+        ];
+
+        return $messages;
     }
 }

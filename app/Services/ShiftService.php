@@ -28,54 +28,10 @@ class ShiftService
     public function create(array $data): DoctorShift
     {
         return DB::transaction(function () use ($data) {
-            // Парсим и нормализуем время в UTC
-            $starts = Carbon::parse($data['start_time'])->setTimezone('UTC');
-            $ends = Carbon::parse($data['end_time'])->setTimezone('UTC');
+            [$starts, $ends] = $this->normalizeInterval($data);
 
-            // Проверяем, что время окончания позже времени начала
-            if ($ends->lte($starts)) {
-                throw ValidationException::withMessages(['end_time' => 'Время конца должно быть позже начала']);
-            }
-
-            // Удаляем мягко удаленные дубликаты, если они мешают уникальному индексу
-            DoctorShift::withTrashed()
-                ->where('doctor_id', $data['doctor_id'])
-                ->where('cabinet_id', $data['cabinet_id'])
-                ->where('start_time', $starts)
-                ->where('end_time', $ends)
-                ->whereNotNull('deleted_at')
-                ->get()
-                ->each->forceDelete();
-
-            // 1) Проверка: врач не должен иметь пересечения в любом кабинете
-            $conflictDoctor = DoctorShift::where('doctor_id', $data['doctor_id'])
-                ->where(function ($q) use ($starts, $ends) {
-                    $q->whereBetween('start_time', [$starts, $ends])  // Смена начинается в диапазоне
-                        ->orWhereBetween('end_time', [$starts, $ends])  // Смена заканчивается в диапазоне
-                        ->orWhere(function ($qq) use ($starts, $ends) {  // Смена полностью покрывает диапазон
-                            $qq->where('start_time', '<=', $starts)->where('end_time', '>=', $ends);
-                        });
-                })
-                ->exists();
-
-            if ($conflictDoctor) {
-                throw ValidationException::withMessages(['doctor_id' => 'У врача есть пересечение в другом кабинете/время занято']);
-            }
-
-            // 2) Проверка: в одном кабинете не должно быть двух врачей одновременно
-            $conflictCabinet = DoctorShift::where('cabinet_id', $data['cabinet_id'])
-                ->where(function ($q) use ($starts, $ends) {
-                    $q->whereBetween('start_time', [$starts, $ends])  // Смена начинается в диапазоне
-                        ->orWhereBetween('end_time', [$starts, $ends])  // Смена заканчивается в диапазоне
-                        ->orWhere(function ($qq) use ($starts, $ends) {  // Смена полностью покрывает диапазон
-                            $qq->where('start_time', '<=', $starts)->where('end_time', '>=', $ends);
-                        });
-                })
-                ->exists();
-
-            if ($conflictCabinet) {
-                throw ValidationException::withMessages(['cabinet_id' => 'В этом кабинете уже назначен врач в заданное время']);
-            }
+            $this->purgeSoftDeletedDuplicates($data['doctor_id'], $data['cabinet_id'], $starts, $ends);
+            $this->assertNoConflicts($data['doctor_id'], $data['cabinet_id'], $starts, $ends);
 
             // Создаем смену после успешных проверок
             return DoctorShift::create([
@@ -101,55 +57,10 @@ class ShiftService
     public function update(DoctorShift $shift, array $data): DoctorShift
     {
         return DB::transaction(function () use ($shift, $data) {
-            // Парсим и нормализуем время в UTC
-            $starts = Carbon::parse($data['start_time'])->setTimezone('UTC');
-            $ends = Carbon::parse($data['end_time'])->setTimezone('UTC');
+            [$starts, $ends] = $this->normalizeInterval($data);
 
-            // Проверяем, что время окончания позже времени начала
-            if ($ends->lte($starts)) {
-                throw ValidationException::withMessages(['end_time' => 'Время конца должно быть позже начала']);
-            }
-
-            DoctorShift::withTrashed()
-                ->where('doctor_id', $data['doctor_id'])
-                ->where('cabinet_id', $data['cabinet_id'])
-                ->where('start_time', $starts)
-                ->where('end_time', $ends)
-                ->whereNotNull('deleted_at')
-                ->get()
-                ->each->forceDelete();
-
-            // 1) Проверка: врач не должен иметь пересечения в любом кабинете (исключая текущую смену)
-            $conflictDoctor = DoctorShift::where('doctor_id', $data['doctor_id'])
-                ->where('id', '!=', $shift->id)  // Исключаем текущую смену
-                ->where(function ($q) use ($starts, $ends) {
-                    $q->whereBetween('start_time', [$starts, $ends])  // Смена начинается в диапазоне
-                        ->orWhereBetween('end_time', [$starts, $ends])  // Смена заканчивается в диапазоне
-                        ->orWhere(function ($qq) use ($starts, $ends) {  // Смена полностью покрывает диапазон
-                            $qq->where('start_time', '<=', $starts)->where('end_time', '>=', $ends);
-                        });
-                })
-                ->exists();
-
-            if ($conflictDoctor) {
-                throw ValidationException::withMessages(['doctor_id' => 'У врача есть пересечение в другом кабинете/время занято']);
-            }
-
-            // 2) Проверка: в одном кабинете не должно быть двух врачей одновременно (исключая текущую смену)
-            $conflictCabinet = DoctorShift::where('cabinet_id', $data['cabinet_id'])
-                ->where('id', '!=', $shift->id)  // Исключаем текущую смену
-                ->where(function ($q) use ($starts, $ends) {
-                    $q->whereBetween('start_time', [$starts, $ends])  // Смена начинается в диапазоне
-                        ->orWhereBetween('end_time', [$starts, $ends])  // Смена заканчивается в диапазоне
-                        ->orWhere(function ($qq) use ($starts, $ends) {  // Смена полностью покрывает диапазон
-                            $qq->where('start_time', '<=', $starts)->where('end_time', '>=', $ends);
-                        });
-                })
-                ->exists();
-
-            if ($conflictCabinet) {
-                throw ValidationException::withMessages(['cabinet_id' => 'В этом кабинете уже назначен врач в заданное время']);
-            }
+            $this->purgeSoftDeletedDuplicates($data['doctor_id'], $data['cabinet_id'], $starts, $ends);
+            $this->assertNoConflicts($data['doctor_id'], $data['cabinet_id'], $starts, $ends, $shift->id);
 
             // Обновляем смену после успешных проверок
             $shift->update([
@@ -173,5 +84,52 @@ class ShiftService
     public function delete(DoctorShift $shift): void
     {
         $shift->delete();
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    protected function normalizeInterval(array $data): array
+    {
+        $starts = Carbon::parse($data['start_time'])->setTimezone('UTC');
+        $ends = Carbon::parse($data['end_time'])->setTimezone('UTC');
+
+        if ($ends->lte($starts)) {
+            throw ValidationException::withMessages(['end_time' => 'Время конца должно быть позже начала']);
+        }
+
+        return [$starts, $ends];
+    }
+
+    protected function purgeSoftDeletedDuplicates(int $doctorId, int $cabinetId, Carbon $starts, Carbon $ends): void
+    {
+        DoctorShift::withTrashed()
+            ->where('doctor_id', $doctorId)
+            ->where('cabinet_id', $cabinetId)
+            ->where('start_time', $starts)
+            ->where('end_time', $ends)
+            ->whereNotNull('deleted_at')
+            ->get()
+            ->each->forceDelete();
+    }
+
+    protected function assertNoConflicts(int $doctorId, int $cabinetId, Carbon $starts, Carbon $ends, ?int $ignoredShiftId = null): void
+    {
+        if ($this->hasOverlap('doctor_id', $doctorId, $starts, $ends, $ignoredShiftId)) {
+            throw ValidationException::withMessages(['doctor_id' => 'У врача есть пересечение в другом кабинете/время занято']);
+        }
+
+        if ($this->hasOverlap('cabinet_id', $cabinetId, $starts, $ends, $ignoredShiftId)) {
+            throw ValidationException::withMessages(['cabinet_id' => 'В этом кабинете уже назначен врач в заданное время']);
+        }
+    }
+
+    protected function hasOverlap(string $column, int $value, Carbon $starts, Carbon $ends, ?int $ignoredShiftId = null): bool
+    {
+        return DoctorShift::query()
+            ->where($column, $value)
+            ->when($ignoredShiftId !== null, fn ($query) => $query->where('id', '!=', $ignoredShiftId))
+            ->between($starts, $ends)
+            ->exists();
     }
 }

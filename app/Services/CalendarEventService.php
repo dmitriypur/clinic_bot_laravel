@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Application;
 use App\Models\Clinic;
+use App\Models\OnecSlot;
 use App\Models\User;
 use App\Services\Slots\SlotData;
 use App\Services\Slots\SlotProviderFactory;
@@ -108,7 +109,13 @@ class CalendarEventService
             }
         }
 
-        $title = $isOccupied ? ($application?->full_name ?? 'Занят') : 'Свободен';
+        $slotStatus = $slot->meta['slot_status'] ?? null;
+        $title = match (true) {
+            ! $isOccupied => 'Свободен',
+            $application !== null => $application->full_name,
+            $slotStatus === OnecSlot::STATUS_BLOCKED => 'Недоступен',
+            default => 'Занят',
+        };
 
         $extendedProps = [
             'slot_id' => $slot->id,
@@ -133,6 +140,7 @@ class CalendarEventService
             'externally_occupied' => $slot->externallyOccupied,
             'booking_uuid' => $slot->meta['booking_uuid'] ?? null,
             'is_local_booking' => $slot->meta['is_local_booking'] ?? false,
+            'slot_status' => $slotStatus,
             'shift_id' => $slot->meta['shift_id'] ?? null,
             'onec_slot_id' => $slot->meta['onec_slot_id'] ?? null,
             'raw' => $slot->meta['raw_payload'] ?? null,

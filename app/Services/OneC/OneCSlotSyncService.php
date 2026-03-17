@@ -122,8 +122,9 @@ class OneCSlotSyncService
                 }
             }
 
-            // Всё, что не пришло в батче, считаем заблокированным (1С перестала их отдавать).
-            $blocked = $this->markMissingSlotsAsBlocked($clinic, $branch, $processedExternalIds);
+            // Всё, что не пришло в батче, удаляем как устаревшие слоты:
+            // сайт должен показывать только актуальный срез расписания из 1С.
+            $deleted = $this->deleteMissingSlots($clinic, $branch, $processedExternalIds);
 
             $this->markEndpointSuccess($endpoint);
 
@@ -131,7 +132,7 @@ class OneCSlotSyncService
                 'total_received' => count($payloads),
                 'created' => $created,
                 'updated' => $updated,
-                'blocked' => $blocked,
+                'deleted' => $deleted,
             ];
         });
     }
@@ -151,10 +152,11 @@ class OneCSlotSyncService
     }
 
     /**
-     * Если слот отсутствует в свежем батче — 1С считает его занятым/недоступным.
-     * Помечаем такие записи как blocked, чтобы фронт не предлагал их пациентам.
+     * Если слот отсутствует в свежем батче — он больше не актуален для сайта.
+     * Удаляем такие записи, чтобы админка и публичный виджет показывали только
+     * то, что реально пришло в последнем срезе расписания.
      */
-    protected function markMissingSlotsAsBlocked(Clinic $clinic, Branch $branch, array $processedExternalIds): int
+    protected function deleteMissingSlots(Clinic $clinic, Branch $branch, array $processedExternalIds): int
     {
         if (empty($processedExternalIds)) {
             return 0;
@@ -164,11 +166,7 @@ class OneCSlotSyncService
             ->where('clinic_id', $clinic->id)
             ->where('branch_id', $branch->id)
             ->whereNotIn('external_slot_id', $processedExternalIds)
-            ->update([
-                'status' => OnecSlot::STATUS_BLOCKED,
-                'booking_uuid' => null,
-                'synced_at' => now(),
-            ]);
+            ->delete();
     }
 
     protected function resolveLocalId(Clinic $clinic, string $type, mixed $externalId, array $payloadContext = [], ?Branch $branch = null): ?int

@@ -53,7 +53,7 @@ class OneCSlotProvider implements SlotProviderInterface
                 cabinetId: $slot->cabinet_id,
                 doctorId: $slot->doctor_id,
                 source: 'onec',
-                externallyOccupied: $slot->status === OnecSlot::STATUS_BOOKED && $slot->isBookedExternally(),
+                externallyOccupied: ! $slot->isFree(),
                 meta: [
                     'doctor_name' => $doctor?->full_name ?? Arr::get($payload, 'doctor.efio') ?? Arr::get($payload, 'doctor_name'),
                     'speciality' => Arr::get($payload, 'doctor.espec') ?? Arr::get($payload, 'doctor_speciality') ?? $doctor?->speciality ?? null,
@@ -67,6 +67,7 @@ class OneCSlotProvider implements SlotProviderInterface
                     'onec_slot_id' => $slot->external_slot_id,
                     'booking_uuid' => $slot->booking_uuid,
                     'is_local_booking' => $slot->isBookedLocally(),
+                    'slot_status' => $slot->status,
                     'raw_payload' => $payload,
                 ],
             );
@@ -89,11 +90,11 @@ class OneCSlotProvider implements SlotProviderInterface
             ->map(function (Collection $group) {
                 return $group
                     ->sort(function (OnecSlot $left, OnecSlot $right) {
-                        $leftBooked = $left->status === OnecSlot::STATUS_BOOKED;
-                        $rightBooked = $right->status === OnecSlot::STATUS_BOOKED;
+                        $leftUnavailable = ! $left->isFree();
+                        $rightUnavailable = ! $right->isFree();
 
-                        if ($leftBooked !== $rightBooked) {
-                            return $leftBooked ? -1 : 1;
+                        if ($leftUnavailable !== $rightUnavailable) {
+                            return $leftUnavailable ? -1 : 1;
                         }
 
                         $leftSyncedAt = optional($left->synced_at)->getTimestamp() ?? 0;

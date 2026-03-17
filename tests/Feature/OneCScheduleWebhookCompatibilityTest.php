@@ -8,8 +8,13 @@ use App\Models\Clinic;
 use App\Models\Doctor;
 use App\Models\IntegrationEndpoint;
 use App\Models\OnecSlot;
+use App\Models\User;
+use App\Services\CalendarFilterService;
+use App\Services\Slots\OneCSlotProvider;
+use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Mockery;
 use Tests\TestCase;
 
 class OneCScheduleWebhookCompatibilityTest extends TestCase
@@ -54,7 +59,7 @@ class OneCScheduleWebhookCompatibilityTest extends TestCase
             ->assertJsonPath('stats.branch-ext-1.total_received', 3)
             ->assertJsonPath('stats.branch-ext-1.created', 3)
             ->assertJsonPath('stats.branch-ext-1.updated', 0)
-            ->assertJsonPath('stats.branch-ext-1.blocked', 0);
+            ->assertJsonPath('stats.branch-ext-1.deleted', 0);
 
         $this->assertSame(3, OnecSlot::query()->count());
 
@@ -96,6 +101,83 @@ class OneCScheduleWebhookCompatibilityTest extends TestCase
         $response->assertUnauthorized();
         $this->assertSame(0, OnecSlot::query()->count());
         $this->assertNull($context['endpoint']->fresh()->last_success_at);
+    }
+
+    public function test_schedule_webhook_deletes_slots_missing_from_the_next_batch(): void
+    {
+        $context = $this->createPushSchedulingContext();
+        $payload = $this->loadFixture('tests/Fixtures/onec/legacy_schedule_payload.json');
+
+        $this->withHeader('X-Integration-Token', 'secret-1')
+            ->postJson(sprintf('/api/v1/integrations/%d/schedule', $context['clinic']->id), $payload)
+            ->assertOk();
+
+        $payload['schedule']['data']['branch-ext-1']['doctor-ext-1']['cells'] = [
+            $payload['schedule']['data']['branch-ext-1']['doctor-ext-1']['cells'][0],
+            $payload['schedule']['data']['branch-ext-1']['doctor-ext-1']['cells'][2],
+        ];
+
+        $response = $this->withHeader('X-Integration-Token', 'secret-1')
+            ->postJson(sprintf('/api/v1/integrations/%d/schedule', $context['clinic']->id), $payload);
+
+        $response->assertOk()
+            ->assertJsonPath('status', 'accepted')
+            ->assertJsonPath('stats.branch-ext-1.total_received', 2)
+            ->assertJsonPath('stats.branch-ext-1.created', 0)
+            ->assertJsonPath('stats.branch-ext-1.updated', 0)
+            ->assertJsonPath('stats.branch-ext-1.deleted', 1);
+
+        $this->assertSame(2, OnecSlot::query()->count());
+
+        $this->assertDatabaseMissing('onec_slots', [
+            'clinic_id' => $context['clinic']->id,
+            'branch_id' => $context['branch']->id,
+            'doctor_id' => $context['doctor']->id,
+            'external_slot_id' => 'branch-ext-1-doctor-ext-1-20260321-0930',
+        ]);
+    }
+
+    public function test_onec_slot_provider_treats_blocked_slots_as_unavailable(): void
+    {
+        $context = $this->createPushSchedulingContext();
+
+        OnecSlot::create([
+            'clinic_id' => $context['clinic']->id,
+            'doctor_id' => $context['doctor']->id,
+            'branch_id' => $context['branch']->id,
+            'start_at' => Carbon::parse('2026-03-21 09:00:00', 'UTC'),
+            'end_at' => Carbon::parse('2026-03-21 09:30:00', 'UTC'),
+            'status' => OnecSlot::STATUS_FREE,
+            'external_slot_id' => 'slot-free',
+            'synced_at' => now(),
+        ]);
+
+        OnecSlot::create([
+            'clinic_id' => $context['clinic']->id,
+            'doctor_id' => $context['doctor']->id,
+            'branch_id' => $context['branch']->id,
+            'start_at' => Carbon::parse('2026-03-21 09:00:00', 'UTC'),
+            'end_at' => Carbon::parse('2026-03-21 09:30:00', 'UTC'),
+            'status' => OnecSlot::STATUS_BLOCKED,
+            'external_slot_id' => 'slot-blocked',
+            'synced_at' => now()->addSecond(),
+        ]);
+
+        $provider = new OneCSlotProvider($context['clinic'], app(CalendarFilterService::class));
+        $user = Mockery::mock(User::class);
+        $user->shouldReceive('isDoctor')->andReturnFalse();
+
+        $slots = $provider->getSlots(
+            Carbon::parse('2026-03-21 00:00:00', 'UTC'),
+            Carbon::parse('2026-03-21 23:59:59', 'UTC'),
+            [],
+            $user
+        );
+
+        $this->assertCount(1, $slots);
+        $this->assertTrue($slots->first()->externallyOccupied);
+        $this->assertSame('slot-blocked', $slots->first()->meta['onec_slot_id']);
+        $this->assertSame(OnecSlot::STATUS_BLOCKED, $slots->first()->meta['slot_status']);
     }
 
     private function createPushSchedulingContext(): array
@@ -169,6 +251,7 @@ class OneCScheduleWebhookCompatibilityTest extends TestCase
             'branch_doctor',
             'clinic_doctor',
             'branches',
+            'cities',
             'doctors',
             'clinics',
         ] as $table) {
@@ -187,6 +270,12 @@ class OneCScheduleWebhookCompatibilityTest extends TestCase
             $table->json('crm_settings')->nullable();
             $table->boolean('dashboard_calendar_enabled')->nullable();
             $table->string('integration_mode')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('cities', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
             $table->timestamps();
         });
 

@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Slots\SlotData;
 use App\Services\Slots\SlotProviderFactory;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 
 class CalendarEventService
@@ -32,9 +33,10 @@ class CalendarEventService
             $provider = $this->slotProviderFactory->make($clinic);
 
             $slots = $provider->getSlots($rangeStart, $rangeEnd, $filters, $user);
+            $applicationsBySlot = $this->loadApplicationsBySlot($slots, $user);
 
             foreach ($slots as $slot) {
-                [$isOccupied, $application] = $this->resolveSlotState($slot, $user);
+                [$isOccupied, $application] = $this->resolveSlotState($slot, $applicationsBySlot);
 
                 $events[] = $this->createEventData($slot, $isOccupied, $application);
             }
@@ -43,10 +45,10 @@ class CalendarEventService
         return $events;
     }
 
-    private function resolveSlotState(SlotData $slot, User $user): array
+    private function resolveSlotState(SlotData $slot, Collection $applicationsBySlot): array
     {
         $occupied = $slot->externallyOccupied;
-        $application = $this->findSlotApplication($slot, $user);
+        $application = $this->findSlotApplication($slot, $applicationsBySlot);
 
         if ($application) {
             $occupied = true;
@@ -55,32 +57,74 @@ class CalendarEventService
         return [$occupied, $application];
     }
 
-    private function findSlotApplication(SlotData $slot, User $user): ?Application
+    private function loadApplicationsBySlot(Collection $slots, User $user): Collection
     {
-        $slotStartUtc = $slot->start->copy()->setTimezone('UTC')->format('Y-m-d H:i:s');
+        if ($slots->isEmpty()) {
+            return collect();
+        }
 
-        $query = Application::query()
+        $appointmentDatetimesUtc = $slots
+            ->map(fn (SlotData $slot) => $slot->start->copy()->setTimezone('UTC')->format('Y-m-d H:i:s'))
+            ->unique()
+            ->values()
+            ->all();
+
+        $clinicIds = $slots
+            ->map(fn (SlotData $slot) => $slot->clinicId)
+            ->unique()
+            ->values()
+            ->all();
+
+        $applications = Application::query()
             ->with(['city', 'clinic', 'branch', 'cabinet', 'doctor'])
-            ->where('clinic_id', $slot->clinicId)
-            ->where('appointment_datetime', $slotStartUtc);
-
-        if ($slot->cabinetId) {
-            $query->where('cabinet_id', $slot->cabinetId);
-        }
-
-        if ($slot->doctorId) {
-            $query->where('doctor_id', $slot->doctorId);
-        }
+            ->whereIn('clinic_id', $clinicIds)
+            ->whereIn('appointment_datetime', $appointmentDatetimesUtc);
 
         if ($user->isPartner()) {
-            $query->where('clinic_id', $user->clinic_id);
+            $applications->where('clinic_id', $user->clinic_id);
         }
 
         if ($user->isDoctor()) {
-            $query->where('doctor_id', $user->doctor_id);
+            $applications->where('doctor_id', $user->doctor_id);
         }
 
-        return $query->first();
+        return $applications
+            ->get()
+            ->groupBy(fn (Application $application) => $this->makeApplicationLookupKey(
+                (int) $application->clinic_id,
+                (string) $application->getRawOriginal('appointment_datetime')
+            ));
+    }
+
+    private function findSlotApplication(SlotData $slot, Collection $applicationsBySlot): ?Application
+    {
+        $slotStartUtc = $slot->start->copy()->setTimezone('UTC')->format('Y-m-d H:i:s');
+        $lookupKey = $this->makeApplicationLookupKey($slot->clinicId, $slotStartUtc);
+
+        /** @var EloquentCollection<int, Application> $applications */
+        $applications = $applicationsBySlot->get($lookupKey, new EloquentCollection());
+
+        if ($applications->isEmpty()) {
+            return null;
+        }
+
+        return $applications
+            ->first(function (Application $application) use ($slot) {
+                if ($slot->cabinetId && (int) $application->cabinet_id !== (int) $slot->cabinetId) {
+                    return false;
+                }
+
+                if ($slot->doctorId && (int) $application->doctor_id !== (int) $slot->doctorId) {
+                    return false;
+                }
+
+                return true;
+            });
+    }
+
+    private function makeApplicationLookupKey(int $clinicId, string $slotStartUtc): string
+    {
+        return $clinicId.'|'.$slotStartUtc;
     }
 
     private function createEventData(SlotData $slot, bool $isOccupied, ?Application $application): array

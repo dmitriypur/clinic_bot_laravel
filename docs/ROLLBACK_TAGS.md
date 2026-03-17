@@ -32,10 +32,24 @@
 - если нужно откатить только ускорение календаря
 - если фикс 1С должен остаться в проде
 
+### `tested-calendar-perf-2026-03-17`
+
+Точка отката на текущее проверенное состояние с ускорением календаря и документацией по rollback.
+
+Что включает:
+- фикс `06994da` `fix(onec): delete stale slots missing from schedule batch`
+- фикс `426a19a` `perf(calendar): preload applications for slot events`
+- документацию `a44f8c6` `docs(deploy): add rollback tag guide`
+
+Когда использовать:
+- если нужно вернуться к текущему проверенному состоянию
+- если ускорение календаря уже принято и нужно сохранить его как отдельную контрольную точку
+
 ## Текущие важные коммиты
 
 - `06994da` `fix(onec): delete stale slots missing from schedule batch`
 - `426a19a` `perf(calendar): preload applications for slot events`
+- `a44f8c6` `docs(deploy): add rollback tag guide`
 
 ## Самый безопасный способ отката
 
@@ -60,6 +74,7 @@ git push origin main
 Результат:
 - фикс календаря будет отменён
 - фикс 1С останется
+- документация по rollback останется
 
 ### Откатить фикс 1С и ускорение календаря
 
@@ -99,6 +114,12 @@ git checkout prod-stable-2026-03-11
 
 Это переключит репозиторий в detached HEAD.
 
+Для текущего проверенного состояния:
+
+```bash
+git checkout tested-calendar-perf-2026-03-17
+```
+
 ### Создать ветку от тега
 
 ```bash
@@ -116,6 +137,12 @@ git checkout -b codex/rollback-check prod-stable-2026-03-11
 - временно задеплоить тег через отдельную ветку
 - сравнить изменения перед откатом
 
+Для текущего проверенного состояния:
+
+```bash
+git checkout -b codex/rollback-check tested-calendar-perf-2026-03-17
+```
+
 ## Как понять, какой тег нужен
 
 Если проблема в новом ускорении календаря:
@@ -123,6 +150,9 @@ git checkout -b codex/rollback-check prod-stable-2026-03-11
 
 Если проблема глубже и нужно убрать также фикс 1С:
 - использовать `prod-stable-2026-03-11`
+
+Если нужно вернуться к текущему проверенному состоянию после последующих экспериментов:
+- использовать `tested-calendar-perf-2026-03-17`
 
 ## Полезные команды
 
@@ -134,6 +164,10 @@ git show prod-stable-post-onec-2026-03-17 --stat --oneline
 
 ```bash
 git show prod-stable-2026-03-11 --stat --oneline
+```
+
+```bash
+git show tested-calendar-perf-2026-03-17 --stat --oneline
 ```
 
 Посмотреть последние коммиты:
@@ -150,6 +184,10 @@ git diff prod-stable-post-onec-2026-03-17..main
 
 ```bash
 git diff prod-stable-2026-03-11..main
+```
+
+```bash
+git diff tested-calendar-perf-2026-03-17..main
 ```
 
 ## Практическое правило

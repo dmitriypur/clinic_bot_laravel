@@ -19,7 +19,7 @@
                 <p v-if="clinicName"><span class="font-medium">Клиника:</span> {{ clinicName }}</p>
                 <p v-if="branchName"><span class="font-medium">Филиал:</span> {{ branchName }}</p>
                 <p>
-                    Запись будет оформлена без выбора
+                    Вам позвонит координатор и согласует с вами клинику и время приема
                     <span v-if="doctor">времени.</span>
                     <span v-else>времени и доктора.</span>
                 </p>

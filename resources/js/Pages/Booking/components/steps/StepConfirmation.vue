@@ -20,8 +20,8 @@
                 <p v-if="branchName"><span class="font-medium">Филиал:</span> {{ branchName }}</p>
                 <p>
                     Вам позвонит координатор и согласует с вами клинику и время приема
-                    <span v-if="doctor">времени.</span>
-                    <span v-else>времени и доктора.</span>
+                    <!--<span v-if="doctor">времени.</span>
+                    <span v-else>времени и доктора.</span>-->
                 </p>
             </div>
         </div>

@@ -142,6 +142,22 @@
 - Фабрика провайдеров: Bitrix24, AmoCRM, Albato, OneCNotifier.
 - Все попытки логируются в `crm_integration_logs`.
 
+### TODO: маршрутизация WebApp заявок без дублей
+- Требуется развести три сценария заявок из Telegram WebApp:
+- 1. Полноценная запись: выбраны клиника/филиал/врач и есть дата+время (или свободный слот).
+- Ожидаемое поведение: заявка создается как обычная запись/appointment и уходит только в основной 1С endpoint записи (`.../integration/events?action=newrecord` или slot booking), без дубля в `tgpromobot`.
+- 2. Промо-сценарий: пользователь ввел промокод на первом шаге, flow сокращается, дата и время не выбираются.
+- Ожидаемое поведение: заявка не считается обычной записью и уходит только в `TGPromoBot` endpoint `http://85.93.54.201:5490/unf_telephony/hs/site/events?action=tgpromobot`.
+- 3. Запись без выбора времени: пользователь идет по обычному flow без промокода, доходит до шага расписания, свободных слотов нет и нажимает «Записаться без выбора времени».
+- Ожидаемое поведение: если у заявки отсутствуют и `onec_slot_id`, и `appointment_datetime`, она должна обрабатываться как лид без времени и уходить в тот же `TGPromoBot` endpoint, а не падать с ошибкой `422`.
+- Текущее проблемное поведение:
+- CRM dispatch на `Application::created` срабатывает слишком широко и при включенном `clinic.crm_provider=onec_crm` отправляет в `tgpromobot` любые новые заявки клиники, включая полноценные записи с датой и временем.
+- Для ветки 1С backend сейчас трактует отсутствие `onec_slot_id` как manual booking и требует `appointment_datetime`; из-за этого сценарий «без выбора времени» падает с `422` (`Для записи выберите дату и время.`) вместо отправки в `tgpromobot`.
+- При последующей правке проверить минимум три кейса:
+- обычная запись со слотом/датой не дублируется в `tgpromobot`;
+- promo-flow без даты/времени уходит в `tgpromobot`;
+- обычный flow без свободных слотов и без даты/времени тоже уходит в `tgpromobot`.
+
 ## WebApp фронт (Inertia/Vue)
 - Страница: `resources/js/Pages/Booking.vue`.
 - Пошаговый мастер с динамическими flow:
@@ -161,6 +177,7 @@
 Файл: `routes/api.php`
 - `cities`, `clinics`, `doctors`, `applications` (REST + доп. роуты).
 - `GET /api/v1/doctors/{doctor}/slots`.
+- `GET /api/v1/cities/{city}/doctors-by-date`.
 - `POST /api/v1/applications/check-slot`.
 - `POST /api/v1/integrations/{clinic}/bookings/webhook`.
 - `POST /api/v1/integrations/{clinic}/schedule`.
@@ -255,7 +272,13 @@
 3. При необходимости обновить разделы: маршруты, сервисы, env, ограничения.
 
 ## Что изменилось (последнее)
+- 2026-04-07: добавлен `GET /api/v1/cities/{city}/doctors-by-date` для ветки выбора по дате во внешнем booking widget. Endpoint агрегирует доступных врачей по выбранной дате, филиалу и возрасту пациента; возрастная фильтрация в doctor API теперь поддерживает открытые границы (`age_admission_from`/`age_admission_to` могут быть `null`).
 - 2026-02-13: создан `docs/APP_CONTEXT.md` с подробным контекстом проекта (архитектура, домен, интеграции 1С/CRM/Telegram, API, правила и операционные заметки).
 
 ## Журнал изменений
+- 2026-04-07:
+  - добавлен маршрут `GET /api/v1/cities/{city}/doctors-by-date`;
+  - реализована агрегированная выдача врачей на дату из локальных смен и `onec_slots`;
+  - для будущего сценария "выбор по дате" наружу отдаются doctor cards с `doctor_id`, `branch_id`, `clinic_id`, `speciality`, `branch_name`, `branch_address`, `clinic_name`, `available_slots`, `first_available_time`;
+  - возрастная фильтрация в `cities/{city}/doctors`, `clinics/{clinic}/doctors` и `cities/{city}/doctors-by-date` поддерживает открытые границы по возрасту.
 - 2026-02-13: первичное создание `docs/APP_CONTEXT.md`.

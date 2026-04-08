@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\DoctorDateAvailabilityResource;
 use App\Http\Resources\DoctorResource;
 use App\Models\Application;
 use App\Models\Branch;
@@ -13,6 +14,7 @@ use App\Models\DoctorShift;
 use App\Models\OnecSlot;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 
@@ -61,10 +63,7 @@ class DoctorController extends Controller
                     ->where('branches.clinic_id', $clinic->id);
             });
         }
-        if ($age !== null) {
-            $doctorsQuery->where('age_admission_from', '<=', $age)
-                ->where('age_admission_to', '>=', $age);
-        }
+        $this->applyDoctorAgeFilter($doctorsQuery, $age);
 
         $latestUpdate = Doctor::query()->max('updated_at');
         $versionStamp = $latestUpdate ? (string) strtotime((string) $latestUpdate) : '0';
@@ -112,10 +111,7 @@ class DoctorController extends Controller
 
         $doctorsQuery = $city->allDoctors()
             ->where('doctors.status', 1);
-        if ($age !== null) {
-            $doctorsQuery->where('age_admission_from', '<=', $age)
-                ->where('age_admission_to', '>=', $age);
-        }
+        $this->applyDoctorAgeFilter($doctorsQuery, $age);
 
         $latestUpdate = Doctor::query()->max('updated_at');
         $versionStamp = $latestUpdate ? (string) strtotime((string) $latestUpdate) : '0';
@@ -165,6 +161,166 @@ class DoctorController extends Controller
         }
 
         return Carbon::parse($birthDate)->age;
+    }
+
+    protected function applyDoctorAgeFilter($query, ?int $age): void
+    {
+        if ($age === null) {
+            return;
+        }
+
+        $query
+            ->where(function ($builder) use ($age) {
+                $builder->whereNull('age_admission_from')
+                    ->orWhere('age_admission_from', '<=', $age);
+            })
+            ->where(function ($builder) use ($age) {
+                $builder->whereNull('age_admission_to')
+                    ->orWhere('age_admission_to', '>=', $age);
+            });
+    }
+
+    public function availableByDate(Request $request, City $city)
+    {
+        $validated = $request->validate([
+            'date' => 'required|date_format:Y-m-d',
+            'birth_date' => 'nullable|date',
+            'clinic_id' => 'nullable|integer|exists:clinics,id',
+            'branch_id' => 'nullable|integer|exists:branches,id',
+        ]);
+
+        $appTimezone = config('app.timezone', 'UTC');
+        $selectedDate = Carbon::createFromFormat('Y-m-d', $validated['date'], $appTimezone);
+        $dayStartUtc = $selectedDate->copy()->startOfDay()->setTimezone('UTC');
+        $dayEndUtc = $selectedDate->copy()->endOfDay()->setTimezone('UTC');
+        $now = Carbon::now($appTimezone);
+        $age = $this->getAge($request);
+
+        $clinicId = isset($validated['clinic_id']) ? (int) $validated['clinic_id'] : null;
+        $branchId = isset($validated['branch_id']) ? (int) $validated['branch_id'] : null;
+        $branch = $branchId ? Branch::query()->with('clinic')->find($branchId) : null;
+
+        if ($branch && (int) $branch->city_id !== (int) $city->id) {
+            throw ValidationException::withMessages([
+                'branch_id' => ['Указанный филиал не относится к выбранному городу.'],
+            ]);
+        }
+
+        if ($branch && $clinicId && (int) $branch->clinic_id !== $clinicId) {
+            throw ValidationException::withMessages([
+                'branch_id' => ['Указанный филиал не относится к выбранной клинике.'],
+            ]);
+        }
+
+        $branches = Branch::query()
+            ->with('clinic:id,name,integration_mode,status')
+            ->where('city_id', $city->id)
+            ->where('status', 1)
+            ->when($clinicId, fn ($query) => $query->where('clinic_id', $clinicId))
+            ->when($branchId, fn ($query) => $query->where('id', $branchId))
+            ->get(['id', 'clinic_id', 'city_id', 'name', 'address', 'status', 'integration_mode']);
+
+        if ($branches->isEmpty()) {
+            return response()->json(['data' => []]);
+        }
+
+        $branchIds = $branches->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $localBranchIds = $branches
+            ->filter(fn (Branch $branchModel) => ! $branchModel->isOnecPushMode())
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $onecBranchIds = $branches
+            ->filter(fn (Branch $branchModel) => $branchModel->isOnecPushMode())
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $doctorVersion = Doctor::query()->max('updated_at');
+        $shiftVersion = ! empty($localBranchIds)
+            ? DoctorShift::query()
+                ->whereHas('cabinet', fn ($query) => $query->whereIn('branch_id', $localBranchIds))
+                ->where(function ($query) use ($dayStartUtc, $dayEndUtc) {
+                    $query->whereBetween('start_time', [$dayStartUtc, $dayEndUtc])
+                        ->orWhereBetween('end_time', [$dayStartUtc, $dayEndUtc])
+                        ->orWhere(function ($sub) use ($dayStartUtc, $dayEndUtc) {
+                            $sub->where('start_time', '<=', $dayStartUtc)
+                                ->where('end_time', '>=', $dayEndUtc);
+                        });
+                })
+                ->max('updated_at')
+            : null;
+        $applicationVersion = Application::query()
+            ->whereIn('branch_id', $branchIds)
+            ->whereBetween('appointment_datetime', [
+                $dayStartUtc->format('Y-m-d H:i:s'),
+                $dayEndUtc->format('Y-m-d H:i:s'),
+            ])
+            ->max('updated_at');
+        $onecVersion = ! empty($onecBranchIds)
+            ? OnecSlot::query()
+                ->whereIn('branch_id', $onecBranchIds)
+                ->whereBetween('start_at', [$dayStartUtc, $dayEndUtc])
+                ->max('synced_at')
+            : null;
+
+        $cacheKey = implode(':', [
+            'doctors-by-date',
+            'city', $city->id,
+            'clinic', $clinicId ?: 'any',
+            'branch', $branchId ?: 'any',
+            'date', $validated['date'],
+            'age', $age !== null ? $age : 'any',
+            $doctorVersion ? (string) strtotime((string) $doctorVersion) : '0',
+            $shiftVersion ? (string) strtotime((string) $shiftVersion) : '0',
+            $applicationVersion ? (string) strtotime((string) $applicationVersion) : '0',
+            $onecVersion ? (string) strtotime((string) $onecVersion) : '0',
+        ]);
+
+        if ($cached = Cache::get($cacheKey)) {
+            return response()->json(['data' => $cached]);
+        }
+
+        $payload = array_merge(
+            $this->buildLocalDoctorsByDatePayload(
+                branchIds: $localBranchIds,
+                selectedDate: $selectedDate,
+                dayStartUtc: $dayStartUtc,
+                dayEndUtc: $dayEndUtc,
+                now: $now,
+                age: $age
+            ),
+            $this->buildOnecDoctorsByDatePayload(
+                branchIds: $onecBranchIds,
+                selectedDate: $selectedDate,
+                dayStartUtc: $dayStartUtc,
+                dayEndUtc: $dayEndUtc,
+                now: $now,
+                age: $age,
+                appTimezone: $appTimezone
+            )
+        );
+
+        usort($payload, function (array $left, array $right): int {
+            $timeComparison = strcmp((string) ($left['first_available_time'] ?? ''), (string) ($right['first_available_time'] ?? ''));
+            if ($timeComparison !== 0) {
+                return $timeComparison;
+            }
+
+            $nameComparison = strcmp((string) ($left['name'] ?? ''), (string) ($right['name'] ?? ''));
+            if ($nameComparison !== 0) {
+                return $nameComparison;
+            }
+
+            return strcmp((string) ($left['branch_name'] ?? ''), (string) ($right['branch_name'] ?? ''));
+        });
+
+        $resource = DoctorDateAvailabilityResource::collection(collect($payload));
+        $data = $resource->toResponse($request)->getData(true)['data'] ?? [];
+
+        Cache::put($cacheKey, $data, now()->addSeconds(self::CALENDAR_AVAILABILITY_CACHE_TTL_SECONDS));
+
+        return response()->json(['data' => $data]);
     }
 
     public function calendarAvailability(Request $request)
@@ -484,6 +640,249 @@ class DoctorController extends Controller
         }
 
         return $doctor->clinics()->first();
+    }
+
+    protected function buildLocalDoctorsByDatePayload(
+        array $branchIds,
+        Carbon $selectedDate,
+        Carbon $dayStartUtc,
+        Carbon $dayEndUtc,
+        Carbon $now,
+        ?int $age
+    ): array {
+        if (empty($branchIds)) {
+            return [];
+        }
+
+        $shifts = DoctorShift::query()
+            ->with([
+                'doctor:id,last_name,first_name,second_name,experience,age,photo_src,diploma_src,status,age_admission_from,age_admission_to,uuid,review_link,external_id',
+                'cabinet:id,name,branch_id',
+                'cabinet.branch:id,clinic_id,city_id,name,address,status,integration_mode',
+                'cabinet.branch.clinic:id,name,integration_mode,status',
+            ])
+            ->whereHas('cabinet', fn ($query) => $query->whereIn('branch_id', $branchIds))
+            ->whereHas('doctor', function ($query) use ($age) {
+                $query->where('doctors.status', 1);
+                $this->applyDoctorAgeFilter($query, $age);
+            })
+            ->where(function ($query) use ($dayStartUtc, $dayEndUtc) {
+                $query->whereBetween('start_time', [$dayStartUtc, $dayEndUtc])
+                    ->orWhereBetween('end_time', [$dayStartUtc, $dayEndUtc])
+                    ->orWhere(function ($sub) use ($dayStartUtc, $dayEndUtc) {
+                        $sub->where('start_time', '<=', $dayStartUtc)
+                            ->where('end_time', '>=', $dayEndUtc);
+                    });
+            })
+            ->orderBy('start_time')
+            ->get();
+
+        if ($shifts->isEmpty()) {
+            return [];
+        }
+
+        $occupiedAppointments = Application::query()
+            ->whereIn('branch_id', $branchIds)
+            ->whereBetween('appointment_datetime', [
+                $dayStartUtc->format('Y-m-d H:i:s'),
+                $dayEndUtc->format('Y-m-d H:i:s'),
+            ])
+            ->get(['cabinet_id', 'appointment_datetime']);
+
+        $occupiedMap = [];
+
+        foreach ($occupiedAppointments as $application) {
+            if (! $application->appointment_datetime || ! $application->cabinet_id) {
+                continue;
+            }
+
+            $occupiedMap[$application->cabinet_id.'|'.$application->appointment_datetime->copy()->setTimezone('UTC')->format('Y-m-d H:i:s')] = true;
+        }
+
+        $entries = [];
+        $seenSlots = [];
+
+        foreach ($shifts as $shift) {
+            $doctor = $shift->doctor;
+            $branch = $shift->cabinet?->branch;
+            $clinic = $branch?->clinic;
+
+            if (! $doctor || ! $branch || ! $clinic) {
+                continue;
+            }
+
+            foreach ($shift->getTimeSlots() as $slot) {
+                $slotStart = $slot['start'] instanceof Carbon
+                    ? $slot['start']->copy()
+                    : Carbon::parse($slot['start']);
+
+                if (! $slotStart->isSameDay($selectedDate)) {
+                    continue;
+                }
+
+                if ($slotStart->lt($now)) {
+                    continue;
+                }
+
+                $slotStartUtc = $slotStart->copy()->setTimezone('UTC');
+                $occupiedKey = $shift->cabinet_id.'|'.$slotStartUtc->format('Y-m-d H:i:s');
+
+                if (isset($occupiedMap[$occupiedKey])) {
+                    continue;
+                }
+
+                $entryKey = $doctor->id.'|'.$branch->id;
+                $slotKey = $entryKey.'|'.$slotStart->format('Y-m-d H:i');
+
+                if (isset($seenSlots[$slotKey])) {
+                    continue;
+                }
+
+                $seenSlots[$slotKey] = true;
+
+                if (! isset($entries[$entryKey])) {
+                    $entries[$entryKey] = $this->makeDoctorAvailabilityEntry(
+                        doctor: $doctor,
+                        branch: $branch,
+                        clinic: $clinic,
+                        date: $selectedDate->format('Y-m-d')
+                    );
+                }
+
+                $entries[$entryKey]['available_slots']++;
+                $entries[$entryKey]['first_available_time'] = $this->minTime(
+                    $entries[$entryKey]['first_available_time'],
+                    $slotStart->format('H:i')
+                );
+            }
+        }
+
+        return array_values($entries);
+    }
+
+    protected function buildOnecDoctorsByDatePayload(
+        array $branchIds,
+        Carbon $selectedDate,
+        Carbon $dayStartUtc,
+        Carbon $dayEndUtc,
+        Carbon $now,
+        ?int $age,
+        string $appTimezone
+    ): array {
+        if (empty($branchIds)) {
+            return [];
+        }
+
+        $slots = OnecSlot::query()
+            ->with([
+                'doctor:id,last_name,first_name,second_name,experience,age,photo_src,diploma_src,status,age_admission_from,age_admission_to,uuid,review_link,external_id',
+                'branch:id,clinic_id,city_id,name,address,status,integration_mode',
+                'branch.clinic:id,name,integration_mode,status',
+            ])
+            ->whereIn('branch_id', $branchIds)
+            ->whereBetween('start_at', [$dayStartUtc, $dayEndUtc])
+            ->whereHas('doctor', function ($query) use ($age) {
+                $query->where('doctors.status', 1);
+                $this->applyDoctorAgeFilter($query, $age);
+            })
+            ->orderBy('start_at')
+            ->get(['id', 'clinic_id', 'doctor_id', 'branch_id', 'cabinet_id', 'start_at', 'status']);
+
+        if ($slots->isEmpty()) {
+            return [];
+        }
+
+        $entries = [];
+        $seenSlots = [];
+
+        foreach ($slots as $slot) {
+            $doctor = $slot->doctor;
+            $branch = $slot->branch;
+            $clinic = $branch?->clinic;
+
+            if (! $doctor || ! $branch || ! $clinic || ! $slot->start_at) {
+                continue;
+            }
+
+            $startLocal = $slot->start_at->copy()->setTimezone($appTimezone);
+
+            if (! $startLocal->isSameDay($selectedDate)) {
+                continue;
+            }
+
+            if ($startLocal->lt($now) || ! $slot->isFree()) {
+                continue;
+            }
+
+            $entryKey = $doctor->id.'|'.$branch->id;
+            $slotKey = $entryKey.'|'.$startLocal->format('Y-m-d H:i');
+
+            if (isset($seenSlots[$slotKey])) {
+                continue;
+            }
+
+            $seenSlots[$slotKey] = true;
+
+            if (! isset($entries[$entryKey])) {
+                $entries[$entryKey] = $this->makeDoctorAvailabilityEntry(
+                    doctor: $doctor,
+                    branch: $branch,
+                    clinic: $clinic,
+                    date: $selectedDate->format('Y-m-d'),
+                    sourcePayload: $slot->source_payload
+                );
+            }
+
+            $entries[$entryKey]['available_slots']++;
+            $entries[$entryKey]['first_available_time'] = $this->minTime(
+                $entries[$entryKey]['first_available_time'],
+                $startLocal->format('H:i')
+            );
+        }
+
+        return array_values($entries);
+    }
+
+    protected function makeDoctorAvailabilityEntry(Doctor $doctor, Branch $branch, Clinic $clinic, string $date, ?array $sourcePayload = null): array
+    {
+        $speciality = $doctor->speciality
+            ?? $doctor->specialization
+            ?? Arr::get($sourcePayload ?? [], 'doctor.espec')
+            ?? Arr::get($sourcePayload ?? [], 'doctor_speciality');
+
+        return [
+            'id' => $doctor->id.'-'.$branch->id.'-'.$date,
+            'date' => $date,
+            'doctor_id' => $doctor->id,
+            'branch_id' => $branch->id,
+            'clinic_id' => $clinic->id,
+            'name' => $doctor->full_name,
+            'experience' => $doctor->experience,
+            'age' => $doctor->age,
+            'photo_src' => $doctor->photo_src,
+            'diploma_src' => $doctor->diploma_src,
+            'status' => $doctor->status,
+            'age_admission_from' => $doctor->age_admission_from,
+            'age_admission_to' => $doctor->age_admission_to,
+            'uuid' => $doctor->uuid,
+            'review_link' => $doctor->review_link,
+            'external_id' => $doctor->external_id,
+            'speciality' => $speciality,
+            'branch_name' => $branch->name,
+            'branch_address' => $branch->address,
+            'clinic_name' => $clinic->name,
+            'available_slots' => 0,
+            'first_available_time' => null,
+        ];
+    }
+
+    protected function minTime(?string $current, string $candidate): string
+    {
+        if (! $current) {
+            return $candidate;
+        }
+
+        return strcmp($candidate, $current) < 0 ? $candidate : $current;
     }
 
     protected function buildOnecCalendarAvailability(

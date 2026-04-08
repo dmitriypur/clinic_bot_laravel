@@ -23,6 +23,7 @@ Route::prefix('v1')->group(function () {
     Route::apiResource('doctors', DoctorController::class);
     Route::get('/doctors/{doctor}/slots', [DoctorController::class, 'slots']);
     Route::get('/booking/calendar-availability', [DoctorController::class, 'calendarAvailability']);
+    Route::get('/cities/{city}/doctors-by-date', [DoctorController::class, 'availableByDate']);
     Route::get('/clinics/{clinic}/branches', [ClinicController::class, 'branches']);
     Route::get('/clinics/{clinic}/doctors', [DoctorController::class, 'byClinic']);
     Route::get('/cities/{city}/doctors', [DoctorController::class, 'byCity']);

@@ -30,6 +30,7 @@
 - `GET /api/v1/cities/{city}/clinics`
 - `GET /api/v1/clinics/{clinic}/branches`
 - `GET /api/v1/cities/{city}/doctors`
+- `GET /api/v1/cities/{city}/doctors-by-date`
 - `GET /api/v1/clinics/{clinic}/doctors`
 - `GET /api/v1/doctors/{doctor}/slots`
 - `GET /api/v1/booking/calendar-availability`
@@ -124,6 +125,52 @@ Notes:
 
 - `uuid` и `external_id` критичны для маппинга врача на стороне внешнего сайта.
 - поле `name` используется как основное отображаемое имя.
+- возрастная фильтрация поддерживает открытые границы:
+  - `age_admission_from = null` означает отсутствие нижней границы;
+  - `age_admission_to = null` означает отсутствие верхней границы.
+
+### `GET /api/v1/cities/{city}/doctors-by-date?date=&birth_date=&clinic_id=&branch_id=`
+
+Response shape:
+
+```json
+{
+  "data": [
+    {
+      "id": "100-10-2025-01-02",
+      "date": "2025-01-02",
+      "doctor_id": 100,
+      "branch_id": 10,
+      "clinic_id": 1,
+      "name": "Doctor Name",
+      "experience": 10,
+      "age": 40,
+      "photo_src": null,
+      "diploma_src": null,
+      "status": 1,
+      "age_admission_from": 0,
+      "age_admission_to": 99,
+      "uuid": "uuid",
+      "review_link": null,
+      "external_id": "external-doctor-id",
+      "speciality": null,
+      "branch_name": "Branch",
+      "branch_address": "Address",
+      "clinic_name": "Clinic",
+      "available_slots": 3,
+      "first_available_time": "09:00"
+    }
+  ]
+}
+```
+
+Notes:
+
+- endpoint агрегирует доступных врачей на выбранную дату по городу;
+- каждый элемент коллекции соответствует связке `doctor + branch + date`;
+- в ответ попадают только врачи, у которых есть хотя бы один доступный слот на выбранную дату;
+- `birth_date` применяет ту же возрастную фильтрацию, что и обычные doctor collections, включая открытые границы;
+- `clinic_id` и `branch_id` являются опциональными сужающими фильтрами для будущего сценария выбора по дате во внешнем виджете.
 
 ### `GET /api/v1/doctors/{doctor}/slots?date=&clinic_id=&branch_id=`
 

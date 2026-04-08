@@ -148,6 +148,137 @@ class BookingWidgetApiContractTest extends TestCase
             ->assertJsonPath('data.0.uuid', $context['doctor']->uuid);
     }
 
+    public function test_doctors_by_date_endpoint_returns_aggregated_doctor_cards_for_selected_day(): void
+    {
+        $context = $this->createLocalSchedulingContext();
+
+        DoctorShift::create([
+            'doctor_id' => $context['doctor']->id,
+            'cabinet_id' => $context['cabinet']->id,
+            'start_time' => Carbon::create(2025, 1, 2, 6, 0, 0, 'UTC'),
+            'end_time' => Carbon::create(2025, 1, 2, 7, 0, 0, 'UTC'),
+        ]);
+
+        $this->createOccupiedApplication(
+            context: $context,
+            appointmentDateTime: Carbon::create(2025, 1, 2, 9, 30, 0, 'Europe/Moscow')
+        );
+
+        $response = $this->getJson(sprintf(
+            '/api/v1/cities/%d/doctors-by-date?date=2025-01-02&birth_date=2010-01-01',
+            $context['city']->id
+        ));
+
+        $response->assertOk()
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => [
+                        'id',
+                        'date',
+                        'doctor_id',
+                        'branch_id',
+                        'clinic_id',
+                        'name',
+                        'experience',
+                        'age',
+                        'photo_src',
+                        'diploma_src',
+                        'status',
+                        'age_admission_from',
+                        'age_admission_to',
+                        'uuid',
+                        'review_link',
+                        'external_id',
+                        'speciality',
+                        'branch_name',
+                        'branch_address',
+                        'clinic_name',
+                        'available_slots',
+                        'first_available_time',
+                    ],
+                ],
+            ])
+            ->assertJsonPath('data.0.doctor_id', $context['doctor']->id)
+            ->assertJsonPath('data.0.branch_id', $context['branch']->id)
+            ->assertJsonPath('data.0.clinic_id', $context['clinic']->id)
+            ->assertJsonPath('data.0.date', '2025-01-02')
+            ->assertJsonPath('data.0.available_slots', 1)
+            ->assertJsonPath('data.0.first_available_time', '09:00');
+    }
+
+    public function test_doctors_by_date_endpoint_respects_nullable_age_boundaries(): void
+    {
+        $context = $this->createLocalSchedulingContext();
+
+        $teenDoctor = Doctor::create([
+            'last_name' => 'Петров',
+            'first_name' => 'Пётр',
+            'second_name' => 'Петрович',
+            'experience' => 8,
+            'age' => 38,
+            'status' => 1,
+            'age_admission_from' => null,
+            'age_admission_to' => 17,
+            'review_link' => 'https://example.test/doctors/petrov',
+            'external_id' => 'doctor-ext-petrov',
+        ]);
+
+        $infantDoctor = Doctor::create([
+            'last_name' => 'Сидорова',
+            'first_name' => 'Анна',
+            'second_name' => 'Игоревна',
+            'experience' => 6,
+            'age' => 34,
+            'status' => 1,
+            'age_admission_from' => 2,
+            'age_admission_to' => null,
+            'review_link' => 'https://example.test/doctors/sidorova',
+            'external_id' => 'doctor-ext-sidorova',
+        ]);
+
+        $context['clinic']->doctors()->attach([$teenDoctor->id, $infantDoctor->id]);
+        $context['branch']->doctors()->attach([$teenDoctor->id, $infantDoctor->id]);
+
+        DoctorShift::insert([
+            [
+                'doctor_id' => $teenDoctor->id,
+                'cabinet_id' => $context['cabinet']->id,
+                'start_time' => Carbon::create(2025, 1, 2, 8, 0, 0, 'UTC'),
+                'end_time' => Carbon::create(2025, 1, 2, 9, 0, 0, 'UTC'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'doctor_id' => $infantDoctor->id,
+                'cabinet_id' => $context['cabinet']->id,
+                'start_time' => Carbon::create(2025, 1, 2, 10, 0, 0, 'UTC'),
+                'end_time' => Carbon::create(2025, 1, 2, 11, 0, 0, 'UTC'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $adultResponse = $this->getJson(sprintf(
+            '/api/v1/cities/%d/doctors-by-date?date=2025-01-02&birth_date=2000-01-01',
+            $context['city']->id
+        ));
+
+        $adultDoctorIds = collect($adultResponse->json('data'))->pluck('doctor_id')->all();
+
+        $this->assertContains($infantDoctor->id, $adultDoctorIds);
+        $this->assertNotContains($teenDoctor->id, $adultDoctorIds);
+
+        $childResponse = $this->getJson(sprintf(
+            '/api/v1/cities/%d/doctors-by-date?date=2025-01-02&birth_date=2015-01-01',
+            $context['city']->id
+        ));
+
+        $childDoctorIds = collect($childResponse->json('data'))->pluck('doctor_id')->all();
+
+        $this->assertContains($teenDoctor->id, $childDoctorIds);
+        $this->assertContains($infantDoctor->id, $childDoctorIds);
+    }
+
     public function test_local_slots_endpoint_preserves_widget_slot_shape(): void
     {
         $context = $this->createLocalSchedulingContext();

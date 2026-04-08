@@ -214,7 +214,11 @@ class CreateBid extends CreateRecord
 
             $branch = $data['branch_id'] ?? null;
 
-            if ($branch && app(AdminApplicationService::class)->branchRequiresOneCSlot((int) $branch) && ! $slotExternalId) {
+            if (
+                $branch
+                && app(AdminApplicationService::class)->branchRequiresOneCSlot((int) $branch, $data['appointment_datetime'] ?? null)
+                && ! $slotExternalId
+            ) {
                 Notification::make()
                     ->title('Выберите слот 1С')
                     ->body('Для этого филиала запись создаётся только через календарь со слотами 1С.')

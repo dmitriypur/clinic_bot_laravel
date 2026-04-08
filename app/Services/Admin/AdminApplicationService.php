@@ -6,6 +6,7 @@ use App\Models\Application;
 use App\Models\Branch;
 use App\Models\IntegrationEndpoint;
 use App\Models\OnecSlot;
+use App\Services\ApplicationRoutingService;
 use App\Services\OneC\Exceptions\OneCBookingException;
 use App\Services\OneC\OneCBookingService;
 use Illuminate\Support\Arr;
@@ -13,7 +14,10 @@ use Illuminate\Validation\ValidationException;
 
 class AdminApplicationService
 {
-    public function __construct(private readonly OneCBookingService $bookingService) {}
+    public function __construct(
+        private readonly OneCBookingService $bookingService,
+        private readonly ApplicationRoutingService $routingService
+    ) {}
 
     public function create(array $data, array $options = []): Application
     {
@@ -26,9 +30,17 @@ class AdminApplicationService
         }
 
         $application = Application::create($data);
+        $shouldSendToOneC = $this->routingService->shouldSendToOneC(
+            branch: $application->branch,
+            clinic: $application->clinic,
+            appointmentDateTime: $application->appointment_datetime,
+            slotExternalId: $slotExternalId
+        );
 
         try {
-            $this->createInOneC($application, $slotExternalId, $comment, $appointmentSource);
+            if ($shouldSendToOneC) {
+                $this->createInOneC($application, $slotExternalId, $comment, $appointmentSource);
+            }
         } catch (\Throwable $exception) {
             if ($application->exists) {
                 $application->delete();
@@ -53,8 +65,17 @@ class AdminApplicationService
         $application->update($data);
         $application->refresh();
 
-        $this->rebookInOneC($application, $slotExternalId, $comment, $appointmentSource);
-        $application->refresh();
+        $shouldSendToOneC = $this->routingService->shouldSendToOneC(
+            branch: $application->branch,
+            clinic: $application->clinic,
+            appointmentDateTime: $application->appointment_datetime,
+            slotExternalId: $slotExternalId
+        );
+
+        if ($shouldSendToOneC) {
+            $this->rebookInOneC($application, $slotExternalId, $comment, $appointmentSource);
+            $application->refresh();
+        }
 
         return $application;
     }
@@ -254,19 +275,14 @@ class AdminApplicationService
         ]);
     }
 
-    public function branchRequiresOneCSlot(int $branchId): bool
+    public function branchRequiresOneCSlot(int $branchId, mixed $appointmentDateTime = null): bool
     {
-        $branch = Branch::with('integrationEndpoint')->find($branchId);
+        $branch = Branch::with(['clinic', 'integrationEndpoint'])->find($branchId);
 
         if (! $branch) {
             return false;
         }
 
-        $endpoint = $branch->integrationEndpoint;
-
-        return $branch->isOnecPushMode()
-            && $endpoint
-            && $endpoint->type === IntegrationEndpoint::TYPE_ONEC
-            && $endpoint->is_active;
+        return $this->routingService->shouldRequireOneCSlot($branch, $appointmentDateTime);
     }
 }

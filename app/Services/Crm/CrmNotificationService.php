@@ -4,18 +4,15 @@ namespace App\Services\Crm;
 
 use App\Jobs\SendCrmNotificationJob;
 use App\Models\Application;
+use App\Services\ApplicationRoutingService;
 
 class CrmNotificationService
 {
+    public function __construct(private readonly ApplicationRoutingService $routingService) {}
+
     public function dispatch(Application $application): void
     {
-        $clinic = $application->clinic;
-
-        if (! $clinic) {
-            return;
-        }
-
-        if ($clinic->crm_provider === 'none' || empty($clinic->crm_provider)) {
+        if (! $this->routingService->shouldDispatchCrm($application)) {
             return;
         }
 

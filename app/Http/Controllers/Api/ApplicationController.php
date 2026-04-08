@@ -10,6 +10,7 @@ use App\Models\Clinic;
 use App\Models\IntegrationEndpoint;
 use App\Models\OnecSlot;
 use App\Modules\OnecSync\Contracts\CancellationConflictResolver;
+use App\Services\ApplicationRoutingService;
 use App\Services\OneC\Exceptions\OneCBookingException;
 use App\Services\OneC\OneCBookingService;
 use Illuminate\Http\Request;
@@ -27,6 +28,7 @@ class ApplicationController extends Controller
     public function __construct(
         private readonly OneCBookingService $bookingService,
         private readonly CancellationConflictResolver $cancellationConflictResolver,
+        private readonly ApplicationRoutingService $routingService,
     ) {}
 
     /**
@@ -95,12 +97,19 @@ class ApplicationController extends Controller
 
         [$slotExternalId, $commentForOneC, $appointmentSource] = $this->extractIntegrationFields($validated);
 
-        $manualOnecBooking = $this->shouldUseManualBooking($requiresOneC, $isPushMode, $slotExternalId);
+        $shouldSendToOneC = $this->routingService->shouldSendToOneC(
+            branch: $branch,
+            clinic: $clinic,
+            appointmentDateTime: $validated['appointment_datetime'] ?? null,
+            slotExternalId: $slotExternalId
+        );
 
-        $this->validateBookingMode($requiresOneC, $manualOnecBooking, $slotExternalId, $validated);
+        $manualOnecBooking = $this->shouldUseManualBooking($shouldSendToOneC, $isPushMode, $slotExternalId);
+
+        $this->validateBookingMode($shouldSendToOneC, $manualOnecBooking, $slotExternalId, $validated);
 
         if (! isset($validated['integration_type'])) {
-            $validated['integration_type'] = $requiresOneC
+            $validated['integration_type'] = $shouldSendToOneC
                 ? Application::INTEGRATION_TYPE_ONEC
                 : Application::INTEGRATION_TYPE_LOCAL;
         }
@@ -110,7 +119,7 @@ class ApplicationController extends Controller
         try {
             $application = Application::create($validated);
 
-            if ($requiresOneC) {
+            if ($shouldSendToOneC) {
                 $this->bookOneCApplication(
                     application: $application,
                     clinic: $clinic,
@@ -236,7 +245,14 @@ class ApplicationController extends Controller
 
         [$slotExternalId, $commentForOneC, $appointmentSource] = $this->extractIntegrationFields($validated);
 
-        if ($requiresOneC && ! $slotExternalId && $branch && $branch->isOnecPushMode()) {
+        $shouldSendToOneC = $this->routingService->shouldSendToOneC(
+            branch: $branch,
+            clinic: $clinic,
+            appointmentDateTime: $validated['appointment_datetime'] ?? $application->appointment_datetime,
+            slotExternalId: $slotExternalId
+        );
+
+        if ($shouldSendToOneC && ! $slotExternalId && $branch && $branch->isOnecPushMode()) {
             throw ValidationException::withMessages([
                 'onec_slot_id' => ['Для переноса записи 1С выберите слот из календаря.'],
             ]);
@@ -246,7 +262,7 @@ class ApplicationController extends Controller
             $application->update($validated);
             $application->refresh();
 
-            if ($requiresOneC && $branch && $clinic) {
+            if ($shouldSendToOneC && $branch && $clinic) {
                 if (filled($application->external_appointment_id)) {
                     $this->cancelExistingAppointment($application);
                     $application->refresh();
@@ -375,9 +391,9 @@ class ApplicationController extends Controller
         ];
     }
 
-    protected function validateBookingMode(bool $requiresOneC, bool $manualOnecBooking, ?string $slotExternalId, array $validated): void
+    protected function validateBookingMode(bool $shouldSendToOneC, bool $manualOnecBooking, ?string $slotExternalId, array $validated): void
     {
-        if (! $requiresOneC) {
+        if (! $shouldSendToOneC) {
             return;
         }
 
@@ -398,9 +414,9 @@ class ApplicationController extends Controller
         }
     }
 
-    protected function shouldUseManualBooking(bool $requiresOneC, bool $isPushMode, ?string $slotExternalId): bool
+    protected function shouldUseManualBooking(bool $shouldSendToOneC, bool $isPushMode, ?string $slotExternalId): bool
     {
-        return $requiresOneC && $isPushMode && empty($slotExternalId);
+        return $shouldSendToOneC && $isPushMode && empty($slotExternalId);
     }
 
     protected function bookOneCApplication(

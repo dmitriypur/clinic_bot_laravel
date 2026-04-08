@@ -9,10 +9,15 @@ use App\Models\City;
 use App\Models\Clinic;
 use App\Models\Doctor;
 use App\Models\DoctorShift;
+use App\Models\IntegrationEndpoint;
+use App\Jobs\SendCrmNotificationJob;
+use App\Services\OneC\OneCBookingService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
+use Mockery;
 use Tests\TestCase;
 
 class BookingWidgetApiContractTest extends TestCase
@@ -469,6 +474,128 @@ class BookingWidgetApiContractTest extends TestCase
             ->assertJsonValidationErrors(['city_id', 'full_name', 'phone']);
     }
 
+    public function test_create_application_with_onec_and_crm_sends_only_to_onec_and_stays_local(): void
+    {
+        Queue::fake();
+
+        $context = $this->createLocalSchedulingContext();
+        $this->enableCrm($context['clinic']);
+        $this->enableOneC($context['clinic'], $context['branch']);
+
+        $bookingService = Mockery::mock(OneCBookingService::class);
+        $bookingService->shouldReceive('bookDirect')
+            ->once()
+            ->andReturn(['status' => 'booked']);
+        $this->app->instance(OneCBookingService::class, $bookingService);
+
+        $response = $this->postJson('/api/v1/applications', [
+            'city_id' => $context['city']->id,
+            'clinic_id' => $context['clinic']->id,
+            'branch_id' => $context['branch']->id,
+            'doctor_id' => $context['doctor']->id,
+            'cabinet_id' => $context['cabinet']->id,
+            'appointment_datetime' => '2025-01-02 09:00',
+            'full_name' => 'Пациент 1С',
+            'phone' => '79990000001',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.integration_type', Application::INTEGRATION_TYPE_ONEC);
+
+        Queue::assertNotPushed(SendCrmNotificationJob::class);
+        $this->assertDatabaseHas('applications', [
+            'full_name' => 'Пациент 1С',
+            'integration_type' => Application::INTEGRATION_TYPE_ONEC,
+        ]);
+    }
+
+    public function test_create_application_with_crm_only_and_datetime_dispatches_crm_and_stays_local(): void
+    {
+        Queue::fake();
+
+        $context = $this->createLocalSchedulingContext();
+        $this->enableCrm($context['clinic']);
+
+        $response = $this->postJson('/api/v1/applications', [
+            'city_id' => $context['city']->id,
+            'clinic_id' => $context['clinic']->id,
+            'branch_id' => $context['branch']->id,
+            'doctor_id' => $context['doctor']->id,
+            'cabinet_id' => $context['cabinet']->id,
+            'appointment_datetime' => '2025-01-02 09:00',
+            'full_name' => 'CRM запись',
+            'phone' => '79990000002',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.integration_type', Application::INTEGRATION_TYPE_LOCAL);
+
+        Queue::assertPushed(SendCrmNotificationJob::class, 1);
+        $this->assertDatabaseHas('applications', [
+            'full_name' => 'CRM запись',
+            'integration_type' => Application::INTEGRATION_TYPE_LOCAL,
+        ]);
+    }
+
+    public function test_create_application_without_datetime_with_crm_dispatches_crm_and_does_not_require_onec(): void
+    {
+        Queue::fake();
+
+        $context = $this->createLocalSchedulingContext();
+        $this->enableCrm($context['clinic']);
+        $this->enableOneC($context['clinic'], $context['branch']);
+
+        $bookingService = Mockery::mock(OneCBookingService::class);
+        $bookingService->shouldNotReceive('book');
+        $bookingService->shouldNotReceive('bookDirect');
+        $this->app->instance(OneCBookingService::class, $bookingService);
+
+        $response = $this->postJson('/api/v1/applications', [
+            'city_id' => $context['city']->id,
+            'clinic_id' => $context['clinic']->id,
+            'branch_id' => $context['branch']->id,
+            'doctor_id' => $context['doctor']->id,
+            'full_name' => 'Лид без времени',
+            'phone' => '79990000003',
+            'promo_code' => 'PROMO',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.integration_type', Application::INTEGRATION_TYPE_LOCAL)
+            ->assertJsonPath('data.appointment_datetime', null);
+
+        Queue::assertPushed(SendCrmNotificationJob::class, 1);
+        $this->assertDatabaseHas('applications', [
+            'full_name' => 'Лид без времени',
+            'integration_type' => Application::INTEGRATION_TYPE_LOCAL,
+        ]);
+    }
+
+    public function test_create_application_without_datetime_and_without_crm_stays_local_only(): void
+    {
+        Queue::fake();
+
+        $context = $this->createLocalSchedulingContext();
+
+        $response = $this->postJson('/api/v1/applications', [
+            'city_id' => $context['city']->id,
+            'clinic_id' => $context['clinic']->id,
+            'branch_id' => $context['branch']->id,
+            'doctor_id' => $context['doctor']->id,
+            'full_name' => 'Локальный лид',
+            'phone' => '79990000004',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.integration_type', Application::INTEGRATION_TYPE_LOCAL);
+
+        Queue::assertNotPushed(SendCrmNotificationJob::class);
+        $this->assertDatabaseHas('applications', [
+            'full_name' => 'Локальный лид',
+            'integration_type' => Application::INTEGRATION_TYPE_LOCAL,
+        ]);
+    }
+
     private function createLocalSchedulingContext(): array
     {
         $city = City::create([
@@ -535,6 +662,31 @@ class BookingWidgetApiContractTest extends TestCase
                 'integration_type' => Application::INTEGRATION_TYPE_LOCAL,
             ]);
         });
+    }
+
+    private function enableCrm(Clinic $clinic, string $provider = 'onec_crm'): void
+    {
+        $clinic->forceFill([
+            'crm_provider' => $provider,
+            'crm_settings' => [
+                'webhook_url' => 'https://example.test/webhook',
+                'token' => 'test-token',
+            ],
+        ])->save();
+    }
+
+    private function enableOneC(Clinic $clinic, Branch $branch): void
+    {
+        $branch->forceFill([
+            'integration_mode' => 'onec_push',
+        ])->save();
+
+        IntegrationEndpoint::create([
+            'clinic_id' => $clinic->id,
+            'branch_id' => $branch->id,
+            'type' => IntegrationEndpoint::TYPE_ONEC,
+            'is_active' => true,
+        ]);
     }
 
     /**

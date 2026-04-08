@@ -29,7 +29,11 @@ class CreateApplication extends CreateRecord
 
         $branchId = $data['branch_id'] ?? null;
 
-        if ($branchId && app(AdminApplicationService::class)->branchRequiresOneCSlot((int) $branchId) && ! $onecSlotId) {
+        if (
+            $branchId
+            && app(AdminApplicationService::class)->branchRequiresOneCSlot((int) $branchId, $data['appointment_datetime'] ?? null)
+            && ! $onecSlotId
+        ) {
             Notification::make()
                 ->title('Выберите время в календаре')
                 ->body('Для филиала с интеграцией 1С запись создаётся только через слот. Пожалуйста, используйте календарь.')

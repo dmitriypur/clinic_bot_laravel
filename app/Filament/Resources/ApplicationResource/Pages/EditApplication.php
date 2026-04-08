@@ -38,7 +38,11 @@ class EditApplication extends EditRecord
 
         $branchId = $data['branch_id'] ?? $this->record->branch_id;
 
-        if ($branchId && app(AdminApplicationService::class)->branchRequiresOneCSlot((int) $branchId) && ! $onecSlotId) {
+        if (
+            $branchId
+            && app(AdminApplicationService::class)->branchRequiresOneCSlot((int) $branchId, $data['appointment_datetime'] ?? $this->record->appointment_datetime)
+            && ! $onecSlotId
+        ) {
             Notification::make()
                 ->title('Выберите время в календаре')
                 ->body('Для филиала с интеграцией 1С редактирование возможно только через слот 1С.')

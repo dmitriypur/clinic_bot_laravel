@@ -199,7 +199,7 @@ Notes:
 - `available_doctors` считает доступные карточки уровня `doctor + branch`;
 - возвращает весь диапазон дат целиком, включая дни с нулевой доступностью;
 - `birth_date`, `clinic_id` и `branch_id` применяют те же фильтры, что и дневной `doctors-by-date`;
-- `doctor_uuids` — опциональный comma-separated список UUID врачей, который позволяет внешнему multi-source клиенту отфильтровать календарь только по локально видимым специалистам.
+- `doctor_uuids` — опциональный comma-separated список doctor identifiers, который позволяет внешнему multi-source клиенту отфильтровать календарь только по локально видимым специалистам; для совместимости принимаются как внутренние `uuid`, так и внешние `external_id` врачей.
 
 ### `GET /api/v1/doctors/{doctor}/slots?date=&clinic_id=&branch_id=`
 

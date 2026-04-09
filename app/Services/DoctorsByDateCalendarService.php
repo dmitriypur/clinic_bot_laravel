@@ -170,7 +170,9 @@ class DoctorsByDateCalendarService
                 $this->applyDoctorAgeFilter($query, $age);
             })
             ->when($doctorUuids !== [], function ($query) use ($doctorUuids) {
-                $query->whereHas('doctor', fn ($doctorQuery) => $doctorQuery->whereIn('doctors.uuid', $doctorUuids));
+                $query->whereHas('doctor', function ($doctorQuery) use ($doctorUuids) {
+                    $this->applyDoctorIdentifierFilter($doctorQuery, $doctorUuids);
+                });
             })
             ->where(function ($query) use ($rangeStartUtc, $rangeEndUtc) {
                 $query->whereBetween('start_time', [$rangeStartUtc, $rangeEndUtc])
@@ -267,7 +269,9 @@ class DoctorsByDateCalendarService
                 $this->applyDoctorAgeFilter($query, $age);
             })
             ->when($doctorUuids !== [], function ($query) use ($doctorUuids) {
-                $query->whereHas('doctor', fn ($doctorQuery) => $doctorQuery->whereIn('doctors.uuid', $doctorUuids));
+                $query->whereHas('doctor', function ($doctorQuery) use ($doctorUuids) {
+                    $this->applyDoctorIdentifierFilter($doctorQuery, $doctorUuids);
+                });
             })
             ->orderBy('start_at')
             ->get(['id', 'doctor_id', 'branch_id', 'cabinet_id', 'start_at', 'status']);
@@ -454,6 +458,15 @@ class DoctorsByDateCalendarService
                 $builder->whereNull('age_admission_to')
                     ->orWhere('age_admission_to', '>=', $age);
             });
+    }
+
+    private function applyDoctorIdentifierFilter($query, array $doctorIdentifiers): void
+    {
+        $query->where(function ($builder) use ($doctorIdentifiers) {
+            $builder
+                ->whereIn('doctors.uuid', $doctorIdentifiers)
+                ->orWhereIn('doctors.external_id', $doctorIdentifiers);
+        });
     }
 
     private function registerCalendarCacheKey(string $cacheKey): void

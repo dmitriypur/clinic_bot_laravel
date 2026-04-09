@@ -285,6 +285,127 @@ class BookingWidgetApiContractTest extends TestCase
         $this->assertContains($infantDoctor->id, $childDoctorIds);
     }
 
+    public function test_doctors_by_date_calendar_endpoint_returns_month_aggregates_for_city_flow(): void
+    {
+        $context = $this->createLocalSchedulingContext();
+
+        DoctorShift::create([
+            'doctor_id' => $context['doctor']->id,
+            'cabinet_id' => $context['cabinet']->id,
+            'start_time' => Carbon::create(2025, 1, 2, 6, 0, 0, 'UTC'),
+            'end_time' => Carbon::create(2025, 1, 2, 7, 0, 0, 'UTC'),
+        ]);
+
+        DoctorShift::create([
+            'doctor_id' => $context['doctor']->id,
+            'cabinet_id' => $context['cabinet']->id,
+            'start_time' => Carbon::create(2025, 1, 3, 8, 0, 0, 'UTC'),
+            'end_time' => Carbon::create(2025, 1, 3, 9, 0, 0, 'UTC'),
+        ]);
+
+        $this->createOccupiedApplication(
+            context: $context,
+            appointmentDateTime: Carbon::create(2025, 1, 2, 9, 30, 0, 'Europe/Moscow')
+        );
+
+        $response = $this->getJson(sprintf(
+            '/api/v1/cities/%d/doctors-by-date/calendar?date_from=2025-01-02&date_to=2025-01-03&birth_date=2010-01-01',
+            $context['city']->id
+        ));
+
+        $response->assertOk()
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => ['date', 'total_slots', 'available_slots', 'available_doctors', 'first_available_time'],
+                ],
+            ]);
+
+        $byDate = collect($response->json('data'))->keyBy('date');
+
+        $this->assertSame(1, $byDate['2025-01-02']['total_slots']);
+        $this->assertSame(1, $byDate['2025-01-02']['available_slots']);
+        $this->assertSame(1, $byDate['2025-01-02']['available_doctors']);
+        $this->assertSame('09:00', $byDate['2025-01-02']['first_available_time']);
+
+        $this->assertSame(2, $byDate['2025-01-03']['total_slots']);
+        $this->assertSame(2, $byDate['2025-01-03']['available_slots']);
+        $this->assertSame(1, $byDate['2025-01-03']['available_doctors']);
+        $this->assertSame('11:00', $byDate['2025-01-03']['first_available_time']);
+    }
+
+    public function test_doctors_by_date_calendar_endpoint_respects_nullable_age_boundaries(): void
+    {
+        $context = $this->createLocalSchedulingContext();
+
+        $teenDoctor = Doctor::create([
+            'last_name' => 'Петров',
+            'first_name' => 'Пётр',
+            'second_name' => 'Петрович',
+            'experience' => 8,
+            'age' => 38,
+            'status' => 1,
+            'age_admission_from' => null,
+            'age_admission_to' => 17,
+            'review_link' => 'https://example.test/doctors/petrov',
+            'external_id' => 'doctor-ext-petrov',
+        ]);
+
+        $adultDoctor = Doctor::create([
+            'last_name' => 'Сидорова',
+            'first_name' => 'Анна',
+            'second_name' => 'Игоревна',
+            'experience' => 6,
+            'age' => 34,
+            'status' => 1,
+            'age_admission_from' => 2,
+            'age_admission_to' => null,
+            'review_link' => 'https://example.test/doctors/sidorova',
+            'external_id' => 'doctor-ext-sidorova',
+        ]);
+
+        $context['clinic']->doctors()->attach([$teenDoctor->id, $adultDoctor->id]);
+        $context['branch']->doctors()->attach([$teenDoctor->id, $adultDoctor->id]);
+
+        DoctorShift::insert([
+            [
+                'doctor_id' => $teenDoctor->id,
+                'cabinet_id' => $context['cabinet']->id,
+                'start_time' => Carbon::create(2025, 1, 2, 8, 0, 0, 'UTC'),
+                'end_time' => Carbon::create(2025, 1, 2, 9, 0, 0, 'UTC'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'doctor_id' => $adultDoctor->id,
+                'cabinet_id' => $context['cabinet']->id,
+                'start_time' => Carbon::create(2025, 1, 2, 10, 0, 0, 'UTC'),
+                'end_time' => Carbon::create(2025, 1, 2, 11, 0, 0, 'UTC'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $adultResponse = $this->getJson(sprintf(
+            '/api/v1/cities/%d/doctors-by-date/calendar?date_from=2025-01-02&date_to=2025-01-02&birth_date=2000-01-01',
+            $context['city']->id
+        ));
+
+        $adultDay = collect($adultResponse->json('data'))->firstWhere('date', '2025-01-02');
+        $this->assertSame(2, $adultDay['available_slots']);
+        $this->assertSame(1, $adultDay['available_doctors']);
+        $this->assertSame('13:00', $adultDay['first_available_time']);
+
+        $childResponse = $this->getJson(sprintf(
+            '/api/v1/cities/%d/doctors-by-date/calendar?date_from=2025-01-02&date_to=2025-01-02&birth_date=2015-01-01',
+            $context['city']->id
+        ));
+
+        $childDay = collect($childResponse->json('data'))->firstWhere('date', '2025-01-02');
+        $this->assertSame(4, $childDay['available_slots']);
+        $this->assertSame(2, $childDay['available_doctors']);
+        $this->assertSame('11:00', $childDay['first_available_time']);
+    }
+
     public function test_local_slots_endpoint_preserves_widget_slot_shape(): void
     {
         $context = $this->createLocalSchedulingContext();

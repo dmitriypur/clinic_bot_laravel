@@ -168,6 +168,7 @@
   - `/api/v1/cities/{city}/clinics`;
   - `/api/v1/clinics/{clinic}/branches`;
   - `/api/v1/clinics/{clinic}/doctors` и `/api/v1/cities/{city}/doctors`;
+  - `/api/v1/cities/{city}/doctors-by-date` и `/api/v1/cities/{city}/doctors-by-date/calendar`;
   - `/api/v1/doctors/{doctor}/slots`;
   - `/api/v1/applications/check-slot`;
   - `POST /api/v1/applications`.
@@ -178,6 +179,7 @@
 - `cities`, `clinics`, `doctors`, `applications` (REST + доп. роуты).
 - `GET /api/v1/doctors/{doctor}/slots`.
 - `GET /api/v1/cities/{city}/doctors-by-date`.
+- `GET /api/v1/cities/{city}/doctors-by-date/calendar`.
 - `POST /api/v1/applications/check-slot`.
 - `POST /api/v1/integrations/{clinic}/bookings/webhook`.
 - `POST /api/v1/integrations/{clinic}/schedule`.
@@ -272,10 +274,16 @@
 3. При необходимости обновить разделы: маршруты, сервисы, env, ограничения.
 
 ## Что изменилось (последнее)
+- 2026-04-09: для ветки `выбор по дате` добавлен отдельный агрегированный monthly endpoint `GET /api/v1/cities/{city}/doctors-by-date/calendar`. В отличие от дневного `doctors-by-date`, он сразу считает доступность по всему диапазону дат города одним серверным проходом по локальным сменам и `onec_slots`, учитывает `birth_date`, `clinic_id` и `branch_id`, возвращает `available_doctors` и больше не требует fan-out клиента по каждому дню месяца. Добавлены contract-тесты в [tests/Feature/BookingWidgetApiContractTest.php](/Users/dmitriypur/Desktop/adminzrenie-laravel/tests/Feature/BookingWidgetApiContractTest.php).
 - 2026-04-07: добавлен `GET /api/v1/cities/{city}/doctors-by-date` для ветки выбора по дате во внешнем booking widget. Endpoint агрегирует доступных врачей по выбранной дате, филиалу и возрасту пациента; возрастная фильтрация в doctor API теперь поддерживает открытые границы (`age_admission_from`/`age_admission_to` могут быть `null`).
 - 2026-02-13: создан `docs/APP_CONTEXT.md` с подробным контекстом проекта (архитектура, домен, интеграции 1С/CRM/Telegram, API, правила и операционные заметки).
 
 ## Журнал изменений
+- 2026-04-09:
+  - добавлен маршрут `GET /api/v1/cities/{city}/doctors-by-date/calendar`;
+  - реализован отдельный сервис [app/Services/DoctorsByDateCalendarService.php](/Users/dmitriypur/Desktop/adminzrenie-laravel/app/Services/DoctorsByDateCalendarService.php) для прямой агрегации monthly calendar availability по городу;
+  - новый endpoint считает диапазон дат без вызова дневного `doctors-by-date` по каждому дню, поэтому подходит как базовая быстрая ручка для подсветки календаря во внешнем виджете;
+  - в ответ добавлено поле `available_doctors`, а дни без доступности возвращаются с нулевыми агрегатами, чтобы клиент мог кешировать целый месяц одной пачкой.
 - 2026-04-07:
   - добавлен маршрут `GET /api/v1/cities/{city}/doctors-by-date`;
   - реализована агрегированная выдача врачей на дату из локальных смен и `onec_slots`;

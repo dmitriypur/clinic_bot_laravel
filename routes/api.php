@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\ApplicationController;
 use App\Http\Controllers\Api\CityController;
 use App\Http\Controllers\Api\ClinicController;
 use App\Http\Controllers\Api\DoctorController;
+use App\Http\Controllers\Api\DoctorDateCalendarController;
 use App\Http\Controllers\Api\IntegrationWebhookController;
 use App\Http\Controllers\Api\WebhookController;
 use Illuminate\Http\Request;
@@ -24,6 +25,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/doctors/{doctor}/slots', [DoctorController::class, 'slots']);
     Route::get('/booking/calendar-availability', [DoctorController::class, 'calendarAvailability']);
     Route::get('/cities/{city}/doctors-by-date', [DoctorController::class, 'availableByDate']);
+    Route::get('/cities/{city}/doctors-by-date/calendar', DoctorDateCalendarController::class);
     Route::get('/clinics/{clinic}/branches', [ClinicController::class, 'branches']);
     Route::get('/clinics/{clinic}/doctors', [DoctorController::class, 'byClinic']);
     Route::get('/cities/{city}/doctors', [DoctorController::class, 'byCity']);

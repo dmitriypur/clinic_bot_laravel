@@ -31,6 +31,7 @@
 - `GET /api/v1/clinics/{clinic}/branches`
 - `GET /api/v1/cities/{city}/doctors`
 - `GET /api/v1/cities/{city}/doctors-by-date`
+- `GET /api/v1/cities/{city}/doctors-by-date/calendar`
 - `GET /api/v1/clinics/{clinic}/doctors`
 - `GET /api/v1/doctors/{doctor}/slots`
 - `GET /api/v1/booking/calendar-availability`
@@ -171,6 +172,33 @@ Notes:
 - в ответ попадают только врачи, у которых есть хотя бы один доступный слот на выбранную дату;
 - `birth_date` применяет ту же возрастную фильтрацию, что и обычные doctor collections, включая открытые границы;
 - `clinic_id` и `branch_id` являются опциональными сужающими фильтрами для будущего сценария выбора по дате во внешнем виджете.
+
+### `GET /api/v1/cities/{city}/doctors-by-date/calendar?date_from=&date_to=&birth_date=&clinic_id=&branch_id=`
+
+Response shape:
+
+```json
+{
+  "data": [
+    {
+      "date": "2025-01-02",
+      "total_slots": 3,
+      "available_slots": 3,
+      "available_doctors": 1,
+      "first_available_time": "09:00"
+    }
+  ]
+}
+```
+
+Notes:
+
+- endpoint предназначен специально для monthly calendar-подсветки ветки `выбрать дату` во внешнем виджете;
+- агрегирует доступность сразу по диапазону дат города, без fan-out клиента по одному дню;
+- `total_slots` и `available_slots` для этого endpoint равны количеству реально доступных к записи слотов в день;
+- `available_doctors` считает доступные карточки уровня `doctor + branch`;
+- возвращает весь диапазон дат целиком, включая дни с нулевой доступностью;
+- `birth_date`, `clinic_id` и `branch_id` применяют те же фильтры, что и дневной `doctors-by-date`.
 
 ### `GET /api/v1/doctors/{doctor}/slots?date=&clinic_id=&branch_id=`
 

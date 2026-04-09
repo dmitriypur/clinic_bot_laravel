@@ -406,6 +406,59 @@ class BookingWidgetApiContractTest extends TestCase
         $this->assertSame('11:00', $childDay['first_available_time']);
     }
 
+    public function test_doctors_by_date_calendar_endpoint_can_filter_by_doctor_uuids(): void
+    {
+        $context = $this->createLocalSchedulingContext();
+
+        $secondDoctor = Doctor::create([
+            'last_name' => 'Петров',
+            'first_name' => 'Пётр',
+            'second_name' => 'Петрович',
+            'experience' => 8,
+            'age' => 38,
+            'status' => 1,
+            'age_admission_from' => 0,
+            'age_admission_to' => 99,
+            'review_link' => 'https://example.test/doctors/petrov',
+            'external_id' => 'doctor-ext-petrov',
+        ]);
+
+        $context['clinic']->doctors()->attach($secondDoctor->id);
+        $context['branch']->doctors()->attach($secondDoctor->id);
+
+        DoctorShift::insert([
+            [
+                'doctor_id' => $context['doctor']->id,
+                'cabinet_id' => $context['cabinet']->id,
+                'start_time' => Carbon::create(2025, 1, 2, 6, 0, 0, 'UTC'),
+                'end_time' => Carbon::create(2025, 1, 2, 7, 0, 0, 'UTC'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'doctor_id' => $secondDoctor->id,
+                'cabinet_id' => $context['cabinet']->id,
+                'start_time' => Carbon::create(2025, 1, 2, 8, 0, 0, 'UTC'),
+                'end_time' => Carbon::create(2025, 1, 2, 9, 0, 0, 'UTC'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $response = $this->getJson(sprintf(
+            '/api/v1/cities/%d/doctors-by-date/calendar?date_from=2025-01-02&date_to=2025-01-02&doctor_uuids=%s',
+            $context['city']->id,
+            $context['doctor']->uuid
+        ));
+
+        $response->assertOk();
+
+        $day = collect($response->json('data'))->firstWhere('date', '2025-01-02');
+        $this->assertSame(2, $day['available_slots']);
+        $this->assertSame(1, $day['available_doctors']);
+        $this->assertSame('09:00', $day['first_available_time']);
+    }
+
     public function test_local_slots_endpoint_preserves_widget_slot_shape(): void
     {
         $context = $this->createLocalSchedulingContext();

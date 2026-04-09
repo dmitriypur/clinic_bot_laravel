@@ -173,7 +173,7 @@ Notes:
 - `birth_date` применяет ту же возрастную фильтрацию, что и обычные doctor collections, включая открытые границы;
 - `clinic_id` и `branch_id` являются опциональными сужающими фильтрами для будущего сценария выбора по дате во внешнем виджете.
 
-### `GET /api/v1/cities/{city}/doctors-by-date/calendar?date_from=&date_to=&birth_date=&clinic_id=&branch_id=`
+### `GET /api/v1/cities/{city}/doctors-by-date/calendar?date_from=&date_to=&birth_date=&doctor_uuids=&clinic_id=&branch_id=`
 
 Response shape:
 
@@ -198,7 +198,8 @@ Notes:
 - `total_slots` и `available_slots` для этого endpoint равны количеству реально доступных к записи слотов в день;
 - `available_doctors` считает доступные карточки уровня `doctor + branch`;
 - возвращает весь диапазон дат целиком, включая дни с нулевой доступностью;
-- `birth_date`, `clinic_id` и `branch_id` применяют те же фильтры, что и дневной `doctors-by-date`.
+- `birth_date`, `clinic_id` и `branch_id` применяют те же фильтры, что и дневной `doctors-by-date`;
+- `doctor_uuids` — опциональный comma-separated список UUID врачей, который позволяет внешнему multi-source клиенту отфильтровать календарь только по локально видимым специалистам.
 
 ### `GET /api/v1/doctors/{doctor}/slots?date=&clinic_id=&branch_id=`
 

@@ -274,11 +274,16 @@
 3. При необходимости обновить разделы: маршруты, сервисы, env, ограничения.
 
 ## Что изменилось (последнее)
+- 2026-04-09: monthly endpoint `GET /api/v1/cities/{city}/doctors-by-date/calendar` стал принимать опциональный `doctor_uuids` (comma-separated), чтобы внешние multi-source клиенты вроде `zrenie.clinic-7` могли считать календарную подсветку только по локально видимым врачам и не подсвечивать даты из-за скрытых/непубличных специалистов. Контракт закреплён в [docs/API_CONTRACT_BOOKING_WIDGET.md](/Users/dmitriypur/Desktop/adminzrenie-laravel/docs/API_CONTRACT_BOOKING_WIDGET.md) и [tests/Feature/BookingWidgetApiContractTest.php](/Users/dmitriypur/Desktop/adminzrenie-laravel/tests/Feature/BookingWidgetApiContractTest.php).
 - 2026-04-09: для ветки `выбор по дате` добавлен отдельный агрегированный monthly endpoint `GET /api/v1/cities/{city}/doctors-by-date/calendar`. В отличие от дневного `doctors-by-date`, он сразу считает доступность по всему диапазону дат города одним серверным проходом по локальным сменам и `onec_slots`, учитывает `birth_date`, `clinic_id` и `branch_id`, возвращает `available_doctors` и больше не требует fan-out клиента по каждому дню месяца. Добавлены contract-тесты в [tests/Feature/BookingWidgetApiContractTest.php](/Users/dmitriypur/Desktop/adminzrenie-laravel/tests/Feature/BookingWidgetApiContractTest.php).
 - 2026-04-07: добавлен `GET /api/v1/cities/{city}/doctors-by-date` для ветки выбора по дате во внешнем booking widget. Endpoint агрегирует доступных врачей по выбранной дате, филиалу и возрасту пациента; возрастная фильтрация в doctor API теперь поддерживает открытые границы (`age_admission_from`/`age_admission_to` могут быть `null`).
 - 2026-02-13: создан `docs/APP_CONTEXT.md` с подробным контекстом проекта (архитектура, домен, интеграции 1С/CRM/Telegram, API, правила и операционные заметки).
 
 ## Журнал изменений
+- 2026-04-09:
+  - monthly endpoint `/api/v1/cities/{city}/doctors-by-date/calendar` расширен опциональным фильтром `doctor_uuids`;
+  - `DoctorsByDateCalendarService` теперь умеет ограничивать local/onec агрегацию указанным набором UUID врачей;
+  - это изменение обратно совместимо: старые клиенты без `doctor_uuids` продолжают работать по прежнему контракту.
 - 2026-04-09:
   - добавлен маршрут `GET /api/v1/cities/{city}/doctors-by-date/calendar`;
   - реализован отдельный сервис [app/Services/DoctorsByDateCalendarService.php](/Users/dmitriypur/Desktop/adminzrenie-laravel/app/Services/DoctorsByDateCalendarService.php) для прямой агрегации monthly calendar availability по городу;

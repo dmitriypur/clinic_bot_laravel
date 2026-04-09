@@ -21,6 +21,7 @@ class DoctorsByDateCalendarService
         string $dateFrom,
         string $dateTo,
         ?string $birthDate = null,
+        array $doctorUuids = [],
         ?int $clinicId = null,
         ?int $branchId = null,
     ): array {
@@ -42,6 +43,12 @@ class DoctorsByDateCalendarService
         }
 
         $age = $birthDate ? Carbon::parse($birthDate)->age : null;
+        $normalizedDoctorUuids = collect($doctorUuids)
+            ->map(fn ($uuid) => trim((string) $uuid))
+            ->filter(fn (string $uuid) => $uuid !== '')
+            ->unique()
+            ->values()
+            ->all();
         $rangeStartUtc = $rangeStartLocal->copy()->setTimezone('UTC');
         $rangeEndUtc = $rangeEndLocal->copy()->setTimezone('UTC');
         $now = Carbon::now($appTimezone);
@@ -92,6 +99,7 @@ class DoctorsByDateCalendarService
             'from', $dateFrom,
             'to', $dateTo,
             'age', $age !== null ? $age : 'any',
+            'uuids', $normalizedDoctorUuids !== [] ? sha1(implode(',', $normalizedDoctorUuids)) : 'all',
             'v', $this->resolveVersion($branchIds, $localBranchIds, $onecBranchIds, $rangeStartUtc, $rangeEndUtc),
         ]);
 
@@ -112,6 +120,7 @@ class DoctorsByDateCalendarService
                     rangeEndLocal: $rangeEndLocal,
                     now: $now,
                     age: $age,
+                    doctorUuids: $normalizedDoctorUuids,
                     appTimezone: $appTimezone
                 )
             );
@@ -126,6 +135,7 @@ class DoctorsByDateCalendarService
                     rangeEndUtc: $rangeEndUtc,
                     now: $now,
                     age: $age,
+                    doctorUuids: $normalizedDoctorUuids,
                     appTimezone: $appTimezone
                 )
             );
@@ -146,6 +156,7 @@ class DoctorsByDateCalendarService
         Carbon $rangeEndLocal,
         Carbon $now,
         ?int $age,
+        array $doctorUuids,
         string $appTimezone,
     ): array {
         $shifts = DoctorShift::query()
@@ -157,6 +168,9 @@ class DoctorsByDateCalendarService
             ->whereHas('doctor', function ($query) use ($age) {
                 $query->where('doctors.status', 1);
                 $this->applyDoctorAgeFilter($query, $age);
+            })
+            ->when($doctorUuids !== [], function ($query) use ($doctorUuids) {
+                $query->whereHas('doctor', fn ($doctorQuery) => $doctorQuery->whereIn('doctors.uuid', $doctorUuids));
             })
             ->where(function ($query) use ($rangeStartUtc, $rangeEndUtc) {
                 $query->whereBetween('start_time', [$rangeStartUtc, $rangeEndUtc])
@@ -242,6 +256,7 @@ class DoctorsByDateCalendarService
         Carbon $rangeEndUtc,
         Carbon $now,
         ?int $age,
+        array $doctorUuids,
         string $appTimezone,
     ): array {
         $slots = OnecSlot::query()
@@ -250,6 +265,9 @@ class DoctorsByDateCalendarService
             ->whereHas('doctor', function ($query) use ($age) {
                 $query->where('doctors.status', 1);
                 $this->applyDoctorAgeFilter($query, $age);
+            })
+            ->when($doctorUuids !== [], function ($query) use ($doctorUuids) {
+                $query->whereHas('doctor', fn ($doctorQuery) => $doctorQuery->whereIn('doctors.uuid', $doctorUuids));
             })
             ->orderBy('start_at')
             ->get(['id', 'doctor_id', 'branch_id', 'cabinet_id', 'start_at', 'status']);

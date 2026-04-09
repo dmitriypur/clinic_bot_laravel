@@ -77,7 +77,7 @@ class ClinicController extends Controller
         }
 
         $branches = $branchesQuery
-            ->select('id', 'name', 'address', 'phone')
+            ->select('id', 'name', 'address', 'phone', 'external_id')
             ->orderBy('name')
             ->get()
             ->map(function ($branch) {
@@ -86,6 +86,7 @@ class ClinicController extends Controller
                     'name' => $branch->name,
                     'address' => $branch->address,
                     'phone' => $branch->phone,
+                    'external_id' => $branch->external_id,
                 ];
             });
 

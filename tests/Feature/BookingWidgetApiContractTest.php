@@ -95,13 +95,14 @@ class BookingWidgetApiContractTest extends TestCase
         $branchesResponse->assertOk()
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name', 'address', 'phone'],
+                    '*' => ['id', 'name', 'address', 'phone', 'external_id'],
                 ],
             ])
             ->assertJsonPath('data.0.id', $context['branch']->id)
             ->assertJsonPath('data.0.name', $context['branch']->name)
             ->assertJsonPath('data.0.address', $context['branch']->address)
-            ->assertJsonPath('data.0.phone', $context['branch']->phone);
+            ->assertJsonPath('data.0.phone', $context['branch']->phone)
+            ->assertJsonPath('data.0.external_id', $context['branch']->external_id);
     }
 
     public function test_doctor_collections_preserve_widget_contract(): void

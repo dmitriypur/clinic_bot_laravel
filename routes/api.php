@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ApplicationController;
 use App\Http\Controllers\Api\CityController;
 use App\Http\Controllers\Api\ClinicController;
+use App\Http\Controllers\Api\DoctorBranchesAvailabilityController;
 use App\Http\Controllers\Api\DoctorController;
 use App\Http\Controllers\Api\DoctorDateCalendarController;
 use App\Http\Controllers\Api\IntegrationWebhookController;
@@ -22,6 +23,7 @@ Route::prefix('v1')->group(function () {
     Route::post('applications/check-slot', [ApplicationController::class, 'checkSlot'])
         ->name('applications.checkSlot');
     Route::apiResource('doctors', DoctorController::class);
+    Route::get('/doctors/{doctor}/branches-availability', DoctorBranchesAvailabilityController::class);
     Route::get('/doctors/{doctor}/slots', [DoctorController::class, 'slots']);
     Route::get('/booking/calendar-availability', [DoctorController::class, 'calendarAvailability']);
     Route::get('/cities/{city}/doctors-by-date', [DoctorController::class, 'availableByDate']);

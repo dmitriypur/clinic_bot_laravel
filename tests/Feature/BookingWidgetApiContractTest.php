@@ -512,6 +512,97 @@ class BookingWidgetApiContractTest extends TestCase
         $this->assertSame('09:00', $day['first_available_time']);
     }
 
+    public function test_doctor_branches_availability_endpoint_returns_branch_availability_for_selected_date(): void
+    {
+        $context = $this->createLocalSchedulingContext();
+
+        $secondBranch = Branch::create([
+            'clinic_id' => $context['clinic']->id,
+            'city_id' => $context['city']->id,
+            'name' => 'Филиал Север',
+            'address' => 'ул. Северная, 15',
+            'phone' => '+79990000001',
+            'status' => 1,
+            'slot_duration' => 30,
+            'external_id' => 'branch-ext-2',
+        ]);
+
+        $secondCabinet = Cabinet::create([
+            'branch_id' => $secondBranch->id,
+            'name' => 'Кабинет 102',
+            'status' => 1,
+        ]);
+
+        $context['doctor']->branches()->attach($secondBranch->id);
+
+        DoctorShift::insert([
+            [
+                'doctor_id' => $context['doctor']->id,
+                'cabinet_id' => $context['cabinet']->id,
+                'start_time' => Carbon::create(2025, 1, 2, 6, 0, 0, 'UTC'),
+                'end_time' => Carbon::create(2025, 1, 2, 7, 0, 0, 'UTC'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'doctor_id' => $context['doctor']->id,
+                'cabinet_id' => $secondCabinet->id,
+                'start_time' => Carbon::create(2025, 1, 2, 8, 0, 0, 'UTC'),
+                'end_time' => Carbon::create(2025, 1, 2, 9, 0, 0, 'UTC'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $this->createOccupiedApplication(
+            $context,
+            Carbon::create(2025, 1, 2, 6, 0, 0, 'UTC')
+        );
+        $this->createOccupiedApplication(
+            $context,
+            Carbon::create(2025, 1, 2, 6, 30, 0, 'UTC')
+        );
+
+        $response = $this->getJson(sprintf(
+            '/api/v1/doctors/%d/branches-availability?date=2025-01-02&clinic_id=%d&city_id=%d',
+            $context['doctor']->id,
+            $context['clinic']->id,
+            $context['city']->id
+        ));
+
+        $response->assertOk()
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => [
+                        'id',
+                        'clinic_id',
+                        'city_id',
+                        'name',
+                        'address',
+                        'phone',
+                        'external_id',
+                        'integration_mode',
+                        'clinic_name',
+                        'available_slots',
+                        'first_available_time',
+                        'has_available_slots',
+                    ],
+                ],
+                'meta' => [
+                    'default_branch_id',
+                ],
+            ]);
+
+        $this->assertSame($secondBranch->id, $response->json('meta.default_branch_id'));
+        $this->assertSame($secondBranch->id, $response->json('data.0.id'));
+        $this->assertSame(2, $response->json('data.0.available_slots'));
+        $this->assertSame('11:00', $response->json('data.0.first_available_time'));
+        $this->assertTrue($response->json('data.0.has_available_slots'));
+        $this->assertSame($context['branch']->id, $response->json('data.1.id'));
+        $this->assertSame(0, $response->json('data.1.available_slots'));
+        $this->assertFalse($response->json('data.1.has_available_slots'));
+    }
+
     public function test_local_slots_endpoint_preserves_widget_slot_shape(): void
     {
         $context = $this->createLocalSchedulingContext();

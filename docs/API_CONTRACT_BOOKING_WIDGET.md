@@ -32,6 +32,7 @@
 - `GET /api/v1/cities/{city}/doctors`
 - `GET /api/v1/cities/{city}/doctors-by-date`
 - `GET /api/v1/cities/{city}/doctors-by-date/calendar`
+- `GET /api/v1/doctors/{doctor}/branches-availability`
 - `GET /api/v1/clinics/{clinic}/doctors`
 - `GET /api/v1/doctors/{doctor}/slots`
 - `GET /api/v1/booking/calendar-availability`
@@ -228,6 +229,41 @@ Response shape:
   ]
 }
 ```
+
+### `GET /api/v1/doctors/{doctor}/branches-availability?date=&clinic_id=&city_id=`
+
+Response shape:
+
+```json
+{
+  "data": [
+    {
+      "id": 10,
+      "clinic_id": 1,
+      "city_id": 2,
+      "name": "Branch",
+      "address": "Address",
+      "phone": "+79990000000",
+      "external_id": "branch-external-id",
+      "integration_mode": "local",
+      "clinic_name": "Clinic",
+      "available_slots": 3,
+      "first_available_time": "09:00",
+      "has_available_slots": true
+    }
+  ],
+  "meta": {
+    "default_branch_id": 10
+  }
+}
+```
+
+Notes:
+
+- endpoint агрегирует доступность филиалов для уже выбранного врача на конкретную дату;
+- используется для doctor-flow, чтобы клиент не делал `N+1` запросы `clinics/{clinic}/doctors` и `doctors/{doctor}/slots` по каждому филиалу;
+- `default_branch_id` указывает первый рекомендуемый филиал с доступными слотами;
+- старые endpoints `clinics/{clinic}/doctors`, `doctors/{doctor}/slots` и `booking/calendar-availability` остаются обратнос совместимыми и не заменяются автоматически.
 
 Notes:
 

@@ -810,6 +810,8 @@ class BookingWidgetApiContractTest extends TestCase
                 Mockery::on(fn (array $payload): bool => ($payload['utm_source'] ?? null) === 'google'
                     && ($payload['utm_medium'] ?? null) === 'cpc'
                     && ($payload['utm_campaign'] ?? null) === 'kids'
+                    && ($payload['utm_content'] ?? null) === 'button-a'
+                    && ($payload['utm_term'] ?? null) === 'child ophthalmologist'
                 )
             )
             ->andReturn(['status' => 'booked']);
@@ -827,6 +829,8 @@ class BookingWidgetApiContractTest extends TestCase
             'utm_source' => 'google',
             'utm_medium' => 'cpc',
             'utm_campaign' => 'kids',
+            'utm_content' => 'button-a',
+            'utm_term' => 'child ophthalmologist',
         ]);
 
         $response->assertCreated()

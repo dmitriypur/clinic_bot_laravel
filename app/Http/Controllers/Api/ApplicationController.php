@@ -77,6 +77,8 @@ class ApplicationController extends Controller
             'utm_source' => 'nullable|string|max:255',
             'utm_medium' => 'nullable|string|max:255',
             'utm_campaign' => 'nullable|string|max:255',
+            'utm_content' => 'nullable|string|max:255',
+            'utm_term' => 'nullable|string|max:255',
         ]);
 
         // Генерируем ID как в Python версии (BigInteger), чтобы совместимость с внешними системами не ломалась.
@@ -241,6 +243,8 @@ class ApplicationController extends Controller
             'utm_source' => 'nullable|string|max:255',
             'utm_medium' => 'nullable|string|max:255',
             'utm_campaign' => 'nullable|string|max:255',
+            'utm_content' => 'nullable|string|max:255',
+            'utm_term' => 'nullable|string|max:255',
         ]);
 
         $this->normalizeBirthDate($validated);
@@ -394,7 +398,13 @@ class ApplicationController extends Controller
     {
         $extraPayload = [];
 
-        foreach (['utm_source', 'utm_medium', 'utm_campaign'] as $key) {
+        foreach ([
+            'utm_source',
+            'utm_medium',
+            'utm_campaign',
+            'utm_content',
+            'utm_term',
+        ] as $key) {
             $value = Arr::pull($payload, $key);
 
             if (filled($value)) {

@@ -804,6 +804,14 @@ class BookingWidgetApiContractTest extends TestCase
         $bookingService = Mockery::mock(OneCBookingService::class);
         $bookingService->shouldReceive('bookDirect')
             ->once()
+            ->with(
+                Mockery::type(Application::class),
+                Mockery::type(Branch::class),
+                Mockery::on(fn (array $payload): bool => ($payload['utm_source'] ?? null) === 'google'
+                    && ($payload['utm_medium'] ?? null) === 'cpc'
+                    && ($payload['utm_campaign'] ?? null) === 'kids'
+                )
+            )
             ->andReturn(['status' => 'booked']);
         $this->app->instance(OneCBookingService::class, $bookingService);
 
@@ -816,6 +824,9 @@ class BookingWidgetApiContractTest extends TestCase
             'appointment_datetime' => '2025-01-02 09:00',
             'full_name' => 'Пациент 1С',
             'phone' => '79990000001',
+            'utm_source' => 'google',
+            'utm_medium' => 'cpc',
+            'utm_campaign' => 'kids',
         ]);
 
         $response->assertCreated()

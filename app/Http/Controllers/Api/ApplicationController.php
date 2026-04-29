@@ -74,6 +74,9 @@ class ApplicationController extends Controller
             'onec_slot_id' => 'nullable|string|max:191',
             'comment' => 'nullable|string|max:500',
             'appointment_source' => 'nullable|string|max:100',
+            'utm_source' => 'nullable|string|max:255',
+            'utm_medium' => 'nullable|string|max:255',
+            'utm_campaign' => 'nullable|string|max:255',
         ]);
 
         // Генерируем ID как в Python версии (BigInteger), чтобы совместимость с внешними системами не ломалась.
@@ -95,7 +98,7 @@ class ApplicationController extends Controller
 
         [$requiresOneC, $isPushMode] = $this->determineIntegrationContext($branch, $clinic);
 
-        [$slotExternalId, $commentForOneC, $appointmentSource] = $this->extractIntegrationFields($validated);
+        [$slotExternalId, $commentForOneC, $appointmentSource, $extraPayload] = $this->extractIntegrationFields($validated);
 
         $shouldSendToOneC = $this->routingService->shouldSendToOneC(
             branch: $branch,
@@ -128,7 +131,8 @@ class ApplicationController extends Controller
                     manualBooking: $manualOnecBooking,
                     comment: $commentForOneC,
                     appointmentSource: $appointmentSource,
-                    logContext: 'store'
+                    logContext: 'store',
+                    extraPayload: $extraPayload
                 );
 
                 $application->refresh();
@@ -234,6 +238,9 @@ class ApplicationController extends Controller
             'onec_slot_id' => 'nullable|string|max:191',
             'comment' => 'nullable|string|max:500',
             'appointment_source' => 'nullable|string|max:100',
+            'utm_source' => 'nullable|string|max:255',
+            'utm_medium' => 'nullable|string|max:255',
+            'utm_campaign' => 'nullable|string|max:255',
         ]);
 
         $this->normalizeBirthDate($validated);
@@ -243,7 +250,7 @@ class ApplicationController extends Controller
 
         [$requiresOneC] = $this->determineIntegrationContext($branch, $clinic);
 
-        [$slotExternalId, $commentForOneC, $appointmentSource] = $this->extractIntegrationFields($validated);
+        [$slotExternalId, $commentForOneC, $appointmentSource, $extraPayload] = $this->extractIntegrationFields($validated);
 
         $shouldSendToOneC = $this->routingService->shouldSendToOneC(
             branch: $branch,
@@ -276,7 +283,8 @@ class ApplicationController extends Controller
                     manualBooking: false,
                     comment: $commentForOneC,
                     appointmentSource: $appointmentSource,
-                    logContext: 'update'
+                    logContext: 'update',
+                    extraPayload: $extraPayload
                 );
 
                 $application->refresh();
@@ -384,10 +392,21 @@ class ApplicationController extends Controller
 
     protected function extractIntegrationFields(array &$payload): array
     {
+        $extraPayload = [];
+
+        foreach (['utm_source', 'utm_medium', 'utm_campaign'] as $key) {
+            $value = Arr::pull($payload, $key);
+
+            if (filled($value)) {
+                $extraPayload[$key] = $value;
+            }
+        }
+
         return [
             Arr::pull($payload, 'onec_slot_id'),
             Arr::pull($payload, 'comment'),
             Arr::pull($payload, 'appointment_source'),
+            $extraPayload,
         ];
     }
 
@@ -431,7 +450,7 @@ class ApplicationController extends Controller
         array $extraPayload = []
     ): void {
         if ($manualBooking && $branch) {
-            $this->bookManualFlow($application, $branch, $comment, $appointmentSource, $logContext);
+            $this->bookManualFlow($application, $branch, $comment, $appointmentSource, $logContext, $extraPayload);
 
             return;
         }
@@ -468,7 +487,8 @@ class ApplicationController extends Controller
         Branch $branch,
         ?string $comment,
         ?string $appointmentSource,
-        string $logContext
+        string $logContext,
+        array $extraPayload = []
     ): void {
         Log::info("OneC booking via {$logContext} (manual)", array_filter([
             'application_id' => $application->id,
@@ -476,10 +496,11 @@ class ApplicationController extends Controller
             'previous_external_id' => $application->external_appointment_id,
         ]));
 
-        $this->bookingService->bookDirect($application, $branch, [
+        $this->bookingService->bookDirect($application, $branch, array_filter([
             'comment' => $comment,
             'appointment_source' => $appointmentSource ?? 'Приложение',
-        ]);
+            ...$extraPayload,
+        ], static fn ($value) => filled($value)));
         $application->refresh();
     }
 

@@ -458,7 +458,7 @@ class OneCBookingService
         }
         $appointmentSource = (string) Arr::get($extraPayload, 'appointment_source', 'Приложение');
 
-        return [
+        return array_merge([
             'appointment_id' => Arr::get($extraPayload, 'appointment_id'),
             'doctor' => [
                 'id' => $doctorExternalId,
@@ -475,7 +475,15 @@ class OneCBookingService
                 'birthday' => $this->normalizeBirthDate($application->birth_date),
             ],
             'appointment_source' => $appointmentSource,
-        ];
+        ], $this->extractUtmPayload($extraPayload));
+    }
+
+    protected function extractUtmPayload(array $payload): array
+    {
+        return array_filter(
+            Arr::only($payload, ['utm_source', 'utm_medium', 'utm_campaign']),
+            static fn ($value) => filled($value)
+        );
     }
 
     protected function splitFullName(?string $fullName): array

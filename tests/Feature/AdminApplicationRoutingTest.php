@@ -51,6 +51,13 @@ class AdminApplicationRoutingTest extends TestCase
         $bookingService = Mockery::mock(OneCBookingService::class);
         $bookingService->shouldReceive('bookDirect')
             ->once()
+            ->with(
+                Mockery::type(Application::class),
+                Mockery::type(Branch::class),
+                Mockery::on(fn (array $payload): bool => ($payload['source'] ?? null) === 'admin'
+                    && ($payload['type'] ?? null) === 'Онлайн-запись'
+                )
+            )
             ->andReturn(['status' => 'booked']);
         $this->app->instance(OneCBookingService::class, $bookingService);
 
@@ -72,6 +79,8 @@ class AdminApplicationRoutingTest extends TestCase
         $this->assertDatabaseHas('applications', [
             'id' => $application->id,
             'full_name' => 'Админ 1С',
+            'submission_source' => 'admin',
+            'submission_type' => 'Онлайн-запись',
         ]);
     }
 
@@ -106,6 +115,8 @@ class AdminApplicationRoutingTest extends TestCase
         $this->assertDatabaseHas('applications', [
             'id' => $application->id,
             'full_name' => 'Админ лид',
+            'submission_source' => 'admin',
+            'submission_type' => 'Онлайн-запись',
         ]);
     }
 
@@ -244,6 +255,8 @@ class AdminApplicationRoutingTest extends TestCase
             $table->boolean('send_to_1c')->default(false);
             $table->string('appointment_status')->nullable();
             $table->string('source')->nullable();
+            $table->string('submission_source')->nullable();
+            $table->string('submission_type')->nullable();
             $table->unsignedBigInteger('status_id')->nullable();
             $table->string('external_appointment_id')->nullable();
             $table->string('integration_type')->nullable();

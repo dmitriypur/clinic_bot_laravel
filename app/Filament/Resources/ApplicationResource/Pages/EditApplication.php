@@ -58,6 +58,8 @@ class EditApplication extends EditRecord
             app(AdminApplicationService::class)->update($this->record, $data, [
                 'onec_slot_id' => $onecSlotId,
                 'appointment_source' => 'Админка',
+                'source' => \App\Models\Application::SUBMISSION_SOURCE_ADMIN,
+                'type' => \App\Models\Application::SUBMISSION_TYPE_APPOINTMENT_FORM,
             ]);
 
             return $this->record;

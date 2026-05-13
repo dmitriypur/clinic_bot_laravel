@@ -758,6 +758,8 @@ export function useBooking() {
             tg_user_id: state.tgUserId,
             tg_chat_id: state.tgChatId,
             promo_code: (state.promoCode || '').trim() || null,
+            source: 'telegram_mini_app',
+            type: 'Онлайн-запись',
         })
 
         alert('Вы успешно записаны!')

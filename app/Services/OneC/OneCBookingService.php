@@ -247,6 +247,8 @@ class OneCBookingService
         }
 
         $appointmentSource = (string) Arr::get($extraPayload, 'appointment_source', 'Приложение');
+        $submissionSource = (string) Arr::get($extraPayload, 'source', $application->submission_source);
+        $submissionType = (string) Arr::get($extraPayload, 'type', $application->submission_type);
 
         return array_merge([
             'appointment_id' => Arr::get($extraPayload, 'appointment_id'),
@@ -257,6 +259,8 @@ class OneCBookingService
             'cabinet_external_id' => $slot->cabinet?->external_id,
             'comment' => $comment,
             'appointment_source' => $appointmentSource,
+            'source' => $submissionSource ?: null,
+            'type' => $submissionType ?: null,
             'patient' => [
                 'full_name' => $application->full_name,
                 'birth_date' => $application->birth_date,
@@ -457,6 +461,8 @@ class OneCBookingService
             $comment = $comment ? "{$comment}. {$parentInfo}" : $parentInfo;
         }
         $appointmentSource = (string) Arr::get($extraPayload, 'appointment_source', 'Приложение');
+        $submissionSource = (string) Arr::get($extraPayload, 'source', $application->submission_source);
+        $submissionType = (string) Arr::get($extraPayload, 'type', $application->submission_type);
 
         return array_merge([
             'appointment_id' => Arr::get($extraPayload, 'appointment_id'),
@@ -475,6 +481,8 @@ class OneCBookingService
                 'birthday' => $this->normalizeBirthDate($application->birth_date),
             ],
             'appointment_source' => $appointmentSource,
+            'source' => $submissionSource ?: null,
+            'type' => $submissionType ?: null,
         ], $this->extractUtmPayload($extraPayload));
     }
 
@@ -487,6 +495,8 @@ class OneCBookingService
                 'utm_campaign',
                 'utm_content',
                 'utm_term',
+                'source',
+                'type',
             ]),
             static fn ($value) => filled($value)
         );

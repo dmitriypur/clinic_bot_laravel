@@ -49,6 +49,8 @@ class CreateApplication extends CreateRecord
             return app(AdminApplicationService::class)->create($data, [
                 'onec_slot_id' => $onecSlotId,
                 'appointment_source' => 'Админка',
+                'source' => \App\Models\Application::SUBMISSION_SOURCE_ADMIN,
+                'type' => \App\Models\Application::SUBMISSION_TYPE_APPOINTMENT_FORM,
             ]);
         } catch (ValidationException $exception) {
             Notification::make()

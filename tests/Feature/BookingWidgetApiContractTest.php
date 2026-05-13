@@ -729,6 +729,8 @@ class BookingWidgetApiContractTest extends TestCase
             'promo_code' => 'PROMO',
             'comment' => 'Комментарий',
             'appointment_source' => 'site',
+            'source' => 'site',
+            'type' => 'Онлайн-запись',
         ]);
 
         $response->assertCreated()
@@ -749,6 +751,8 @@ class BookingWidgetApiContractTest extends TestCase
                     'tg_user_id',
                     'tg_chat_id',
                     'send_to_1c',
+                    'source',
+                    'type',
                     'integration_type',
                     'integration_status',
                     'external_appointment_id',
@@ -763,6 +767,8 @@ class BookingWidgetApiContractTest extends TestCase
             ->assertJsonPath('data.doctor_id', $context['doctor']->id)
             ->assertJsonPath('data.cabinet_id', $context['cabinet']->id)
             ->assertJsonPath('data.full_name', 'Тестовый Пациент')
+            ->assertJsonPath('data.source', 'site')
+            ->assertJsonPath('data.type', 'Онлайн-запись')
             ->assertJsonPath('data.integration_type', Application::INTEGRATION_TYPE_LOCAL);
 
         $this->assertDatabaseHas('applications', [
@@ -773,6 +779,9 @@ class BookingWidgetApiContractTest extends TestCase
             'cabinet_id' => $context['cabinet']->id,
             'full_name' => 'Тестовый Пациент',
             'phone' => '79990000000',
+            'source' => Application::SOURCE_FRONTEND,
+            'submission_source' => 'site',
+            'submission_type' => 'Онлайн-запись',
             'integration_type' => Application::INTEGRATION_TYPE_LOCAL,
         ]);
     }
@@ -812,6 +821,8 @@ class BookingWidgetApiContractTest extends TestCase
                     && ($payload['utm_campaign'] ?? null) === 'kids'
                     && ($payload['utm_content'] ?? null) === 'button-a'
                     && ($payload['utm_term'] ?? null) === 'child ophthalmologist'
+                    && ($payload['source'] ?? null) === 'vk_mini_app'
+                    && ($payload['type'] ?? null) === 'Онлайн-запись'
                 )
             )
             ->andReturn(['status' => 'booked']);
@@ -831,6 +842,8 @@ class BookingWidgetApiContractTest extends TestCase
             'utm_campaign' => 'kids',
             'utm_content' => 'button-a',
             'utm_term' => 'child ophthalmologist',
+            'source' => 'vk_mini_app',
+            'type' => 'Онлайн-запись',
         ]);
 
         $response->assertCreated()
@@ -839,7 +852,41 @@ class BookingWidgetApiContractTest extends TestCase
         Queue::assertNotPushed(SendCrmNotificationJob::class);
         $this->assertDatabaseHas('applications', [
             'full_name' => 'Пациент 1С',
+            'source' => Application::SOURCE_FRONTEND,
+            'submission_source' => 'vk_mini_app',
+            'submission_type' => 'Онлайн-запись',
             'integration_type' => Application::INTEGRATION_TYPE_ONEC,
+        ]);
+    }
+
+    public function test_create_application_from_telegram_mini_app_preserves_internal_and_external_sources(): void
+    {
+        $context = $this->createLocalSchedulingContext();
+
+        $response = $this->postJson('/api/v1/applications', [
+            'city_id' => $context['city']->id,
+            'clinic_id' => $context['clinic']->id,
+            'branch_id' => $context['branch']->id,
+            'doctor_id' => $context['doctor']->id,
+            'cabinet_id' => $context['cabinet']->id,
+            'appointment_datetime' => '2025-01-02 09:00',
+            'full_name' => 'Телеграм Пациент',
+            'phone' => '79990000003',
+            'tg_user_id' => 123456,
+            'tg_chat_id' => 123456,
+            'source' => 'telegram_mini_app',
+            'type' => 'Онлайн-запись',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.source', 'telegram_mini_app')
+            ->assertJsonPath('data.type', 'Онлайн-запись');
+
+        $this->assertDatabaseHas('applications', [
+            'full_name' => 'Телеграм Пациент',
+            'source' => Application::SOURCE_TELEGRAM,
+            'submission_source' => 'telegram_mini_app',
+            'submission_type' => 'Онлайн-запись',
         ]);
     }
 
@@ -1172,6 +1219,8 @@ class BookingWidgetApiContractTest extends TestCase
             $table->boolean('send_to_1c')->default(false);
             $table->string('appointment_status')->nullable();
             $table->string('source')->nullable();
+            $table->string('submission_source')->nullable();
+            $table->string('submission_type')->nullable();
             $table->unsignedBigInteger('status_id')->nullable();
             $table->string('external_appointment_id')->nullable();
             $table->string('integration_type')->nullable();

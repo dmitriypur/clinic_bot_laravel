@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class ApplicationController extends Controller
@@ -74,6 +75,15 @@ class ApplicationController extends Controller
             'onec_slot_id' => 'nullable|string|max:191',
             'comment' => 'nullable|string|max:500',
             'appointment_source' => 'nullable|string|max:100',
+            'source' => ['nullable', 'string', Rule::in([
+                Application::SUBMISSION_SOURCE_SITE,
+                Application::SUBMISSION_SOURCE_VK_MINI_APP,
+                Application::SUBMISSION_SOURCE_TELEGRAM_MINI_APP,
+                Application::SUBMISSION_SOURCE_ADMIN,
+            ])],
+            'type' => ['nullable', 'string', Rule::in([
+                Application::SUBMISSION_TYPE_APPOINTMENT_FORM,
+            ])],
             'utm_source' => 'nullable|string|max:255',
             'utm_medium' => 'nullable|string|max:255',
             'utm_campaign' => 'nullable|string|max:255',
@@ -81,11 +91,16 @@ class ApplicationController extends Controller
             'utm_term' => 'nullable|string|max:255',
         ]);
 
+        $submissionSource = $this->resolveSubmissionSource($validated);
+        $submissionType = $this->resolveSubmissionType($validated);
+
         // Генерируем ID как в Python версии (BigInteger), чтобы совместимость с внешними системами не ломалась.
         $validated['id'] = now()->format('YmdHis').rand(1000, 9999);
 
-        // Автоматически помечаем источник — помогает потом фильтровать заявки в админке.
-        $validated['source'] = Application::SOURCE_FRONTEND;
+        // Внутренний source нужен для логики adminzrenie, а submission_* — это внешние метки для 1С/аналитики.
+        $validated['source'] = $this->resolveInternalSource($submissionSource);
+        $validated['submission_source'] = $submissionSource;
+        $validated['submission_type'] = $submissionType;
 
         $this->normalizeBirthDate($validated);
 
@@ -240,12 +255,31 @@ class ApplicationController extends Controller
             'onec_slot_id' => 'nullable|string|max:191',
             'comment' => 'nullable|string|max:500',
             'appointment_source' => 'nullable|string|max:100',
+            'source' => ['nullable', 'string', Rule::in([
+                Application::SUBMISSION_SOURCE_SITE,
+                Application::SUBMISSION_SOURCE_VK_MINI_APP,
+                Application::SUBMISSION_SOURCE_TELEGRAM_MINI_APP,
+                Application::SUBMISSION_SOURCE_ADMIN,
+            ])],
+            'type' => ['nullable', 'string', Rule::in([
+                Application::SUBMISSION_TYPE_APPOINTMENT_FORM,
+            ])],
             'utm_source' => 'nullable|string|max:255',
             'utm_medium' => 'nullable|string|max:255',
             'utm_campaign' => 'nullable|string|max:255',
             'utm_content' => 'nullable|string|max:255',
             'utm_term' => 'nullable|string|max:255',
         ]);
+
+        if (array_key_exists('source', $validated)) {
+            $validated['submission_source'] = $validated['source'];
+            unset($validated['source']);
+        }
+
+        if (array_key_exists('type', $validated)) {
+            $validated['submission_type'] = $validated['type'];
+            unset($validated['type']);
+        }
 
         $this->normalizeBirthDate($validated);
 
@@ -412,6 +446,17 @@ class ApplicationController extends Controller
             }
         }
 
+        $submissionSource = Arr::get($payload, 'submission_source');
+        $submissionType = Arr::get($payload, 'submission_type');
+
+        if (filled($submissionSource)) {
+            $extraPayload['source'] = $submissionSource;
+        }
+
+        if (filled($submissionType)) {
+            $extraPayload['type'] = $submissionType;
+        }
+
         return [
             Arr::pull($payload, 'onec_slot_id'),
             Arr::pull($payload, 'comment'),
@@ -446,6 +491,33 @@ class ApplicationController extends Controller
     protected function shouldUseManualBooking(bool $shouldSendToOneC, bool $isPushMode, ?string $slotExternalId): bool
     {
         return $shouldSendToOneC && $isPushMode && empty($slotExternalId);
+    }
+
+    protected function resolveInternalSource(string $submissionSource): string
+    {
+        return $submissionSource === Application::SUBMISSION_SOURCE_TELEGRAM_MINI_APP
+            ? Application::SOURCE_TELEGRAM
+            : Application::SOURCE_FRONTEND;
+    }
+
+    protected function resolveSubmissionSource(array $payload): string
+    {
+        if (filled($payload['source'] ?? null)) {
+            return (string) $payload['source'];
+        }
+
+        if (filled($payload['tg_user_id'] ?? null) || filled($payload['tg_chat_id'] ?? null)) {
+            return Application::SUBMISSION_SOURCE_TELEGRAM_MINI_APP;
+        }
+
+        return Application::SUBMISSION_SOURCE_SITE;
+    }
+
+    protected function resolveSubmissionType(array $payload): string
+    {
+        return filled($payload['type'] ?? null)
+            ? (string) $payload['type']
+            : Application::SUBMISSION_TYPE_APPOINTMENT_FORM;
     }
 
     protected function bookOneCApplication(

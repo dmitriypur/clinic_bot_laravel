@@ -43,6 +43,16 @@ class Application extends Model
 
     const SOURCE_FRONTEND = "frontend";
 
+    public const SUBMISSION_SOURCE_SITE = "site";
+
+    public const SUBMISSION_SOURCE_VK_MINI_APP = "vk_mini_app";
+
+    public const SUBMISSION_SOURCE_TELEGRAM_MINI_APP = "telegram_mini_app";
+
+    public const SUBMISSION_SOURCE_ADMIN = "admin";
+
+    public const SUBMISSION_TYPE_APPOINTMENT_FORM = "Онлайн-запись";
+
     public const INTEGRATION_TYPE_LOCAL = "local";
 
     public const INTEGRATION_TYPE_ONEC = "onec";
@@ -64,6 +74,8 @@ class Application extends Model
         "send_to_1c",
         "appointment_status",
         "source",
+        "submission_source",
+        "submission_type",
         "status_id",
         "external_appointment_id",
         "integration_type",

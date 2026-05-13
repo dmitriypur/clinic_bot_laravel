@@ -233,6 +233,8 @@ class CreateBid extends CreateRecord
             $application = app(AdminApplicationService::class)->create($data, [
                 'onec_slot_id' => $slotExternalId,
                 'appointment_source' => 'Админка',
+                'source' => \App\Models\Application::SUBMISSION_SOURCE_ADMIN,
+                'type' => \App\Models\Application::SUBMISSION_TYPE_APPOINTMENT_FORM,
             ]);
 
             if ($another) {

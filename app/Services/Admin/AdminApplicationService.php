@@ -24,9 +24,19 @@ class AdminApplicationService
         $slotExternalId = Arr::get($options, 'onec_slot_id');
         $comment = Arr::get($options, 'comment');
         $appointmentSource = Arr::get($options, 'appointment_source', 'Админка');
+        $submissionSource = Arr::get($options, 'source', Application::SUBMISSION_SOURCE_ADMIN);
+        $submissionType = Arr::get($options, 'type', Application::SUBMISSION_TYPE_APPOINTMENT_FORM);
 
         if (array_key_exists('onec_slot_id', $data)) {
             unset($data['onec_slot_id']);
+        }
+
+        if ($submissionSource && ! array_key_exists('submission_source', $data)) {
+            $data['submission_source'] = $submissionSource;
+        }
+
+        if ($submissionType && ! array_key_exists('submission_type', $data)) {
+            $data['submission_type'] = $submissionType;
         }
 
         $application = Application::create($data);
@@ -57,9 +67,19 @@ class AdminApplicationService
         $slotExternalId = Arr::get($options, 'onec_slot_id');
         $comment = Arr::get($options, 'comment');
         $appointmentSource = Arr::get($options, 'appointment_source', 'Админка');
+        $submissionSource = Arr::get($options, 'source', Application::SUBMISSION_SOURCE_ADMIN);
+        $submissionType = Arr::get($options, 'type', Application::SUBMISSION_TYPE_APPOINTMENT_FORM);
 
         if (array_key_exists('onec_slot_id', $data)) {
             unset($data['onec_slot_id']);
+        }
+
+        if ($submissionSource && ! array_key_exists('submission_source', $data)) {
+            $data['submission_source'] = $submissionSource;
+        }
+
+        if ($submissionType && ! array_key_exists('submission_type', $data)) {
+            $data['submission_type'] = $submissionType;
         }
 
         $application->update($data);
@@ -151,6 +171,8 @@ class AdminApplicationService
             $this->bookingService->book($application, $slot, [
                 'comment' => $comment,
                 'appointment_source' => $appointmentSource,
+                'source' => $application->submission_source,
+                'type' => $application->submission_type,
             ]);
 
             return;
@@ -165,6 +187,8 @@ class AdminApplicationService
         $this->bookingService->bookDirect($application, $branch, [
             'comment' => $comment,
             'appointment_source' => $appointmentSource,
+            'source' => $application->submission_source,
+            'type' => $application->submission_type,
         ]);
         \Log::info('OneC rebook: bookDirect', [
             'application_id' => $application->id,
@@ -254,6 +278,8 @@ class AdminApplicationService
             $this->bookingService->book($application, $slot, [
                 'comment' => $comment,
                 'appointment_source' => $appointmentSource,
+                'source' => $application->submission_source,
+                'type' => $application->submission_type,
             ]);
 
             return;
@@ -268,6 +294,8 @@ class AdminApplicationService
         $this->bookingService->bookDirect($application, $branch, [
             'comment' => $comment,
             'appointment_source' => $appointmentSource,
+            'source' => $application->submission_source,
+            'type' => $application->submission_type,
         ]);
         \Log::info('OneC create: bookDirect', [
             'application_id' => $application->id,

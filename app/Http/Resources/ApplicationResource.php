@@ -28,6 +28,8 @@ class ApplicationResource extends JsonResource
             'tg_user_id' => $this->tg_user_id,
             'tg_chat_id' => $this->tg_chat_id,
             'send_to_1c' => $this->send_to_1c,
+            'source' => $this->submission_source,
+            'type' => $this->submission_type,
             'integration_type' => $this->integration_type,
             'integration_status' => $this->integration_status,
             'external_appointment_id' => $this->external_appointment_id,

@@ -1236,6 +1236,8 @@ class AppointmentCalendarWidget extends BaseAppointmentCalendarWidget
                         $application = app(AdminApplicationService::class)->create($applicationData, [
                             'onec_slot_id' => $onecSlotId,
                             'appointment_source' => 'Админка',
+                            'source' => \App\Models\Application::SUBMISSION_SOURCE_ADMIN,
+                            'type' => \App\Models\Application::SUBMISSION_TYPE_APPOINTMENT_FORM,
                         ]);
                     } catch (ValidationException $e) {
                         Notification::make()

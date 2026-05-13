@@ -207,6 +207,9 @@ class CalendarEventServiceTest extends TestCase
             $table->string('full_name')->nullable();
             $table->string('phone')->nullable();
             $table->string('appointment_status')->nullable();
+            $table->string('source')->nullable();
+            $table->string('submission_source')->nullable();
+            $table->string('submission_type')->nullable();
             $table->timestamps();
         });
     }

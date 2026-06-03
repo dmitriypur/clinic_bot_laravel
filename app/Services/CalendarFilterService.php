@@ -2,6 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\Branch;
+use App\Models\Doctor;
+use App\Models\DoctorShift;
+use App\Models\OnecSlot;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -175,20 +179,88 @@ class CalendarFilterService
      */
     public function getAvailableDoctors(User $user, ?array $branchIds = null): array
     {
-        $query = \App\Models\Doctor::query();
-
         if ($user->isDoctor()) {
-            $query->where('id', $user->doctor_id);
-        } elseif (! empty($branchIds)) {
-            $query->whereHas('branches', function ($q) use ($branchIds) {
-                $q->whereIn('branch_doctor.branch_id', $branchIds);
-            });
-        } else {
-            // Если не указаны филиалы и пользователь не врач, возвращаем пустой массив
+            $doctor = Doctor::query()
+                ->where('id', $user->doctor_id)
+                ->first();
+
+            return $doctor ? [$doctor->id => $doctor->full_name] : [];
+        }
+
+        $branchIds = collect($branchIds)
+            ->filter(fn ($id) => is_numeric($id))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($branchIds === []) {
             return [];
         }
 
-        $doctors = $query->get();
+        $branches = Branch::query()
+            ->with('clinic:id,integration_mode')
+            ->whereIn('id', $branchIds)
+            ->get(['id', 'clinic_id', 'integration_mode']);
+
+        if ($branches->isEmpty()) {
+            return [];
+        }
+
+        $onecBranchIds = $branches
+            ->filter(fn (Branch $branch) => $branch->isOnecPushMode())
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $localBranchIds = $branches
+            ->reject(fn (Branch $branch) => $branch->isOnecPushMode())
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $doctorIds = collect();
+        $now = now();
+
+        if ($onecBranchIds !== []) {
+            $doctorIds = $doctorIds->merge(
+                OnecSlot::query()
+                    ->whereIn('branch_id', $onecBranchIds)
+                    ->where('status', OnecSlot::STATUS_FREE)
+                    ->where('start_at', '>=', $now)
+                    ->whereNotNull('doctor_id')
+                    ->distinct()
+                    ->pluck('doctor_id')
+            );
+        }
+
+        if ($localBranchIds !== []) {
+            $doctorIds = $doctorIds->merge(
+                DoctorShift::query()
+                    ->whereHas('cabinet', fn ($query) => $query->whereIn('branch_id', $localBranchIds))
+                    ->where('end_time', '>=', $now)
+                    ->distinct()
+                    ->pluck('doctor_id')
+            );
+        }
+
+        $doctorIds = $doctorIds
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($doctorIds === []) {
+            return [];
+        }
+
+        $doctors = Doctor::query()
+            ->whereIn('id', $doctorIds)
+            ->where('status', 1)
+            ->orderBy('last_name')
+            ->get();
+
         $result = [];
 
         foreach ($doctors as $doctor) {

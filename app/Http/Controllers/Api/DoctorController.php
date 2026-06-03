@@ -54,14 +54,39 @@ class DoctorController extends Controller
     {
         $age = $this->getAge($request);
 
-        $doctorsQuery = $clinic->doctors()
+        $doctorsQuery = Doctor::query()
             ->where('doctors.status', 1);
         $branchId = $request->input('branch_id');
+        $availabilityVersionStamp = 'none';
+
         if ($branchId) {
-            $doctorsQuery->whereHas('branches', function ($query) use ($branchId, $clinic) {
-                $query->where('branches.id', $branchId)
-                    ->where('branches.clinic_id', $clinic->id);
-            });
+            $branch = Branch::query()
+                ->where('clinic_id', $clinic->id)
+                ->find($branchId);
+
+            if ($branch?->isOnecPushMode()) {
+                $doctorIdsWithFreeSlots = OnecSlot::query()
+                    ->where('clinic_id', $clinic->id)
+                    ->where('branch_id', $branch->id)
+                    ->where('status', OnecSlot::STATUS_FREE)
+                    ->where('start_at', '>=', now())
+                    ->whereNotNull('doctor_id')
+                    ->distinct()
+                    ->pluck('doctor_id')
+                    ->all();
+
+                sort($doctorIdsWithFreeSlots);
+                $availabilityVersionStamp = md5(json_encode($doctorIdsWithFreeSlots, JSON_THROW_ON_ERROR));
+
+                $doctorsQuery->whereIn('doctors.id', $doctorIdsWithFreeSlots);
+            } else {
+                $availabilityVersionStamp = 'local-branch';
+
+                $doctorsQuery->whereHas('branches', function ($query) use ($branchId, $clinic) {
+                    $query->where('branches.id', $branchId)
+                        ->where('branches.clinic_id', $clinic->id);
+                });
+            }
         }
         $this->applyDoctorAgeFilter($doctorsQuery, $age);
 
@@ -70,6 +95,7 @@ class DoctorController extends Controller
         $cacheKey = 'doctors:by-clinic:'.$clinic->id
             .':'.($branchId ?: 'any')
             .':'.($age !== null ? $age : 'any')
+            .':'.$availabilityVersionStamp
             .':'.$versionStamp;
 
         if ($cached = Cache::get($cacheKey)) {

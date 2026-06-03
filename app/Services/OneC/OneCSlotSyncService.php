@@ -36,6 +36,7 @@ class OneCSlotSyncService
         return DB::transaction(function () use ($clinic, $branch, $endpoint, $payloads) {
             $existing = $this->loadExistingSlots($clinic, $branch);
             $processedExternalIds = [];
+            $resolvedDoctorIds = [];
 
             $created = 0;
             $updated = 0;
@@ -60,10 +61,16 @@ class OneCSlotSyncService
 
                 $bookingUuid = (string) Arr::get($payload, 'appointment_id', '');
 
+                $doctorId = $this->resolveLocalId($clinic, 'doctor', Arr::get($payload, 'doctor.external_id', Arr::get($payload, 'doctor_id')), $payload, $branch);
+
+                if ($doctorId) {
+                    $resolvedDoctorIds[(int) $doctorId] = (int) $doctorId;
+                }
+
                 $slotData = [
                     'clinic_id' => $clinic->id,
                     'branch_id' => $branch->id,
-                    'doctor_id' => $this->resolveLocalId($clinic, 'doctor', Arr::get($payload, 'doctor.external_id', Arr::get($payload, 'doctor_id')), $payload, $branch),
+                    'doctor_id' => $doctorId,
                     'cabinet_id' => $this->resolveLocalId($clinic, 'cabinet', Arr::get($payload, 'cabinet.external_id', Arr::get($payload, 'cabinet_id'))),
                     'start_at' => $this->parseDate(Arr::get($payload, 'start_at')),
                     'end_at' => $this->parseDate(Arr::get($payload, 'end_at')),
@@ -126,6 +133,8 @@ class OneCSlotSyncService
             // сайт должен показывать только актуальный срез расписания из 1С.
             $deleted = $this->deleteMissingSlots($clinic, $branch, $processedExternalIds);
 
+            $this->syncBranchDoctors($branch, array_values($resolvedDoctorIds));
+
             $this->markEndpointSuccess($endpoint);
 
             return [
@@ -167,6 +176,15 @@ class OneCSlotSyncService
             ->where('branch_id', $branch->id)
             ->whereNotIn('external_slot_id', $processedExternalIds)
             ->delete();
+    }
+
+    protected function syncBranchDoctors(Branch $branch, array $doctorIds): void
+    {
+        if (! $branch->isOnecPushMode()) {
+            return;
+        }
+
+        $branch->doctors()->sync($doctorIds);
     }
 
     protected function resolveLocalId(Clinic $clinic, string $type, mixed $externalId, array $payloadContext = [], ?Branch $branch = null): ?int

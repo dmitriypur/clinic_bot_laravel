@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\CabinetShiftController;
 use App\Http\Controllers\Bot\BotController;
+use App\Http\Controllers\DatabaseBackupDownloadController;
 use App\Http\Controllers\ExportDownloadController;
 use App\Models\Branch;
 use App\Models\OnecSlot;
@@ -18,6 +19,10 @@ Route::match(['get', 'post'], '/botman', [BotController::class, 'handle']);
 // Export download
 Route::get('/download/export/{exportId}', [ExportDownloadController::class, 'download'])
     ->name('export.download')
+    ->middleware(['auth']);
+
+Route::get('/download/database-backup', DatabaseBackupDownloadController::class)
+    ->name('database-backups.download')
     ->middleware(['auth']);
 
 Route::middleware(['web', 'auth', 'verified'])->group(function () {

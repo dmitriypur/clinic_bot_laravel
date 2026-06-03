@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\DoctorResource\Pages;
 use App\Models\Doctor;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -98,32 +99,30 @@ class DoctorResource extends Resource
                     ->live()
                     ->searchable()
                     ->preload()
-                    ->afterStateUpdated(function (callable $set) {
-                        // Сбрасываем филиалы при изменении клиник
-                        $set('branch_ids', []);
-                    })
                     ->columnSpanFull(),
 
-                Select::make('branch_ids')
+                Placeholder::make('branch_ids_readonly')
                     ->label('Филиалы')
-                    ->multiple()
-                    ->live()
-                    ->options(function (callable $get) {
-                        $clinicIds = $get('clinic_id');
-
-                        if (empty($clinicIds)) {
-                            return [];
+                    ->content(function (?Doctor $record): string {
+                        if (! $record) {
+                            return 'Филиалы будут назначены автоматически после импорта расписания 1С.';
                         }
 
-                        return \App\Models\Branch::with(['clinic', 'city'])
-                            ->whereIn('clinic_id', $clinicIds)
+                        $branches = $record->branches()
+                            ->with(['clinic', 'city'])
                             ->get()
-                            ->mapWithKeys(function ($branch) {
-                                return [$branch->id => $branch->clinic->name.' - '.$branch->name.' ('.$branch->city->name.')'];
-                            });
+                            ->map(function ($branch) {
+                                $city = $branch->city?->name ? ' ('.$branch->city->name.')' : '';
+
+                                return $branch->clinic?->name.' - '.$branch->name.$city;
+                            })
+                            ->filter()
+                            ->join(', ');
+
+                        return $branches !== ''
+                            ? $branches
+                            : 'Филиалы не назначены. Они обновятся автоматически после импорта расписания 1С.';
                     })
-                    ->searchable()
-                    ->disabled($isDoctor)
                     ->columnSpanFull(),
                 TextInput::make('age_admission_from')
                     ->label('Возраст приёма с')

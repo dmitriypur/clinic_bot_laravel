@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Enums\IntegrationMode;
 use App\Models\Branch;
+use App\Models\Cabinet;
 use App\Models\Clinic;
 use App\Models\Doctor;
+use App\Models\DoctorShift;
 use App\Models\IntegrationEndpoint;
 use App\Models\OnecSlot;
 use App\Models\User;
@@ -137,6 +139,213 @@ class OneCScheduleWebhookCompatibilityTest extends TestCase
         ]);
     }
 
+    public function test_schedule_webhook_replaces_branch_doctors_with_doctors_from_latest_batch(): void
+    {
+        $context = $this->createPushSchedulingContext();
+        $payload = $this->loadFixture('tests/Fixtures/onec/legacy_schedule_payload.json');
+
+        $staleDoctor = Doctor::create([
+            'last_name' => 'Старый',
+            'first_name' => 'Врач',
+            'second_name' => null,
+            'status' => 1,
+            'external_id' => 'stale-doctor-ext',
+        ]);
+
+        $context['branch']->doctors()->attach($staleDoctor->id);
+
+        $this->withHeader('X-Integration-Token', 'secret-1')
+            ->postJson(sprintf('/api/v1/integrations/%d/schedule', $context['clinic']->id), $payload)
+            ->assertOk();
+
+        $this->assertDatabaseHas('branch_doctor', [
+            'branch_id' => $context['branch']->id,
+            'doctor_id' => $context['doctor']->id,
+        ]);
+
+        $this->assertDatabaseMissing('branch_doctor', [
+            'branch_id' => $context['branch']->id,
+            'doctor_id' => $staleDoctor->id,
+        ]);
+    }
+
+    public function test_clinic_doctors_endpoint_hides_stale_doctors_for_onec_branch_without_free_slots(): void
+    {
+        $context = $this->createPushSchedulingContext();
+
+        $staleDoctor = Doctor::create([
+            'last_name' => 'Старый',
+            'first_name' => 'Врач',
+            'second_name' => null,
+            'status' => 1,
+            'external_id' => 'stale-doctor-ext',
+        ]);
+
+        $context['clinic']->doctors()->attach([$context['doctor']->id, $staleDoctor->id]);
+        $context['branch']->doctors()->attach([$context['doctor']->id, $staleDoctor->id]);
+
+        OnecSlot::create([
+            'clinic_id' => $context['clinic']->id,
+            'doctor_id' => $context['doctor']->id,
+            'branch_id' => $context['branch']->id,
+            'start_at' => now()->addDay(),
+            'end_at' => now()->addDay()->addMinutes(30),
+            'status' => OnecSlot::STATUS_FREE,
+            'external_slot_id' => 'future-free-slot',
+            'synced_at' => now(),
+        ]);
+
+        $response = $this->getJson(sprintf(
+            '/api/v1/clinics/%d/doctors?branch_id=%d',
+            $context['clinic']->id,
+            $context['branch']->id
+        ));
+
+        $response->assertOk();
+
+        $doctorIds = collect($response->json('data'))->pluck('id')->all();
+
+        $this->assertContains($context['doctor']->id, $doctorIds);
+        $this->assertNotContains($staleDoctor->id, $doctorIds);
+    }
+
+    public function test_clinic_doctors_endpoint_refreshes_cache_when_onec_branch_free_doctors_change(): void
+    {
+        $context = $this->createPushSchedulingContext();
+
+        $slot = OnecSlot::create([
+            'clinic_id' => $context['clinic']->id,
+            'doctor_id' => $context['doctor']->id,
+            'branch_id' => $context['branch']->id,
+            'start_at' => now()->addDay(),
+            'end_at' => now()->addDay()->addMinutes(30),
+            'status' => OnecSlot::STATUS_FREE,
+            'external_slot_id' => 'cached-future-free-slot',
+            'synced_at' => now(),
+        ]);
+
+        $url = sprintf(
+            '/api/v1/clinics/%d/doctors?branch_id=%d',
+            $context['clinic']->id,
+            $context['branch']->id
+        );
+
+        $firstResponse = $this->getJson($url);
+        $firstResponse->assertOk();
+        $this->assertContains($context['doctor']->id, collect($firstResponse->json('data'))->pluck('id')->all());
+
+        $slot->update([
+            'status' => OnecSlot::STATUS_BLOCKED,
+            'synced_at' => now()->addSecond(),
+        ]);
+
+        $secondResponse = $this->getJson($url);
+        $secondResponse->assertOk();
+
+        $this->assertNotContains($context['doctor']->id, collect($secondResponse->json('data'))->pluck('id')->all());
+    }
+
+    public function test_admin_doctor_filter_uses_future_free_onec_slots_for_branch_options(): void
+    {
+        $context = $this->createPushSchedulingContext();
+
+        $staleDoctor = Doctor::create([
+            'last_name' => 'Старый',
+            'first_name' => 'Врач',
+            'second_name' => null,
+            'status' => 1,
+            'external_id' => 'stale-doctor-ext',
+        ]);
+
+        $context['branch']->doctors()->attach([$context['doctor']->id, $staleDoctor->id]);
+
+        OnecSlot::create([
+            'clinic_id' => $context['clinic']->id,
+            'doctor_id' => $context['doctor']->id,
+            'branch_id' => $context['branch']->id,
+            'start_at' => now()->addDay(),
+            'end_at' => now()->addDay()->addMinutes(30),
+            'status' => OnecSlot::STATUS_FREE,
+            'external_slot_id' => 'admin-filter-future-free-slot',
+            'synced_at' => now(),
+        ]);
+
+        OnecSlot::create([
+            'clinic_id' => $context['clinic']->id,
+            'doctor_id' => $staleDoctor->id,
+            'branch_id' => $context['branch']->id,
+            'start_at' => now()->subDay(),
+            'end_at' => now()->subDay()->addMinutes(30),
+            'status' => OnecSlot::STATUS_FREE,
+            'external_slot_id' => 'admin-filter-past-free-slot',
+            'synced_at' => now(),
+        ]);
+
+        $user = Mockery::mock(User::class);
+        $user->shouldReceive('isDoctor')->andReturnFalse();
+
+        $options = app(CalendarFilterService::class)->getAvailableDoctors($user, [$context['branch']->id]);
+
+        $this->assertArrayHasKey($context['doctor']->id, $options);
+        $this->assertArrayNotHasKey($staleDoctor->id, $options);
+    }
+
+    public function test_admin_doctor_filter_uses_future_local_shifts_for_branch_options(): void
+    {
+        $clinic = Clinic::create([
+            'name' => 'Локальная клиника',
+            'status' => 1,
+            'slot_duration' => 30,
+            'integration_mode' => IntegrationMode::LOCAL->value,
+        ]);
+
+        $branch = Branch::create([
+            'clinic_id' => $clinic->id,
+            'city_id' => 1,
+            'name' => 'Local branch',
+            'status' => 1,
+            'slot_duration' => 30,
+            'integration_mode' => IntegrationMode::LOCAL->value,
+        ]);
+
+        $doctorWithShift = Doctor::create([
+            'last_name' => 'Будущий',
+            'first_name' => 'Врач',
+            'second_name' => null,
+            'status' => 1,
+        ]);
+
+        $doctorWithoutShift = Doctor::create([
+            'last_name' => 'Пустой',
+            'first_name' => 'Врач',
+            'second_name' => null,
+            'status' => 1,
+        ]);
+
+        $branch->doctors()->attach([$doctorWithShift->id, $doctorWithoutShift->id]);
+
+        $cabinet = Cabinet::create([
+            'branch_id' => $branch->id,
+            'name' => 'Кабинет 1',
+            'status' => 1,
+        ]);
+
+        DoctorShift::create([
+            'cabinet_id' => $cabinet->id,
+            'doctor_id' => $doctorWithShift->id,
+            'start_time' => now()->addDay(),
+            'end_time' => now()->addDay()->addHour(),
+        ]);
+
+        $user = Mockery::mock(User::class);
+        $user->shouldReceive('isDoctor')->andReturnFalse();
+
+        $options = app(CalendarFilterService::class)->getAvailableDoctors($user, [$branch->id]);
+
+        $this->assertArrayHasKey($doctorWithShift->id, $options);
+        $this->assertArrayNotHasKey($doctorWithoutShift->id, $options);
+    }
+
     public function test_onec_slot_provider_treats_blocked_slots_as_unavailable(): void
     {
         $context = $this->createPushSchedulingContext();
@@ -246,6 +455,8 @@ class OneCScheduleWebhookCompatibilityTest extends TestCase
 
         foreach ([
             'onec_slots',
+            'doctor_shifts',
+            'cabinets',
             'external_mappings',
             'integration_endpoints',
             'branch_doctor',
@@ -323,6 +534,24 @@ class OneCScheduleWebhookCompatibilityTest extends TestCase
             $table->id();
             $table->unsignedBigInteger('branch_id');
             $table->unsignedBigInteger('doctor_id');
+        });
+
+        Schema::create('cabinets', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('branch_id');
+            $table->string('name');
+            $table->integer('status')->default(1);
+            $table->timestamps();
+        });
+
+        Schema::create('doctor_shifts', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('cabinet_id');
+            $table->unsignedBigInteger('doctor_id');
+            $table->timestamp('start_time')->nullable();
+            $table->timestamp('end_time')->nullable();
+            $table->softDeletes();
+            $table->timestamps();
         });
 
         Schema::create('integration_endpoints', function (Blueprint $table) {

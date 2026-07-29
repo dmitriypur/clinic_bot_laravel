@@ -7,10 +7,14 @@ use App\Http\Resources\ApplicationResource;
 use App\Models\Application;
 use App\Models\Branch;
 use App\Models\Clinic;
+use App\Models\Doctor;
 use App\Models\IntegrationEndpoint;
 use App\Models\OnecSlot;
 use App\Modules\OnecSync\Contracts\CancellationConflictResolver;
 use App\Services\ApplicationRoutingService;
+use App\Services\BookingMonitoring\BookingAvailabilityChecker;
+use App\Services\BookingMonitoring\BookingMonitoringNotifier;
+use App\Services\BookingMonitoring\OneCBookingFailureClassifier;
 use App\Services\OneC\Exceptions\OneCBookingException;
 use App\Services\OneC\OneCBookingService;
 use Illuminate\Http\Request;
@@ -23,13 +27,16 @@ use Illuminate\Validation\ValidationException;
 class ApplicationController extends Controller
 {
     /**
-     * @param  OneCBookingService            $bookingService              Исходящие операции с 1С.
-     * @param  CancellationConflictResolver  $cancellationConflictResolver Парсер конфликтов отмены.
+     * @param  OneCBookingService  $bookingService  Исходящие операции с 1С.
+     * @param  CancellationConflictResolver  $cancellationConflictResolver  Парсер конфликтов отмены.
      */
     public function __construct(
         private readonly OneCBookingService $bookingService,
         private readonly CancellationConflictResolver $cancellationConflictResolver,
         private readonly ApplicationRoutingService $routingService,
+        private readonly BookingAvailabilityChecker $availabilityChecker,
+        private readonly BookingMonitoringNotifier $monitoringNotifier,
+        private readonly OneCBookingFailureClassifier $bookingFailureClassifier,
     ) {}
 
     /**
@@ -134,6 +141,20 @@ class ApplicationController extends Controller
                 : Application::INTEGRATION_TYPE_LOCAL;
         }
 
+        if ($shouldSendToOneC && config('booking-monitoring.enabled')) {
+            $availability = $this->availabilityChecker->check();
+
+            if (! $availability->available) {
+                $this->monitoringNotifier->bookingFailure($this->bookingFailureContext(
+                    branch: $branch,
+                    validated: $validated,
+                    reason: $availability->error ?? 'Нет ответа от 1С',
+                ));
+
+                return $this->bookingServiceUnavailableResponse();
+            }
+        }
+
         $application = null;
 
         try {
@@ -158,6 +179,20 @@ class ApplicationController extends Controller
             $this->cleanupFailedApplicationCreation($application);
             report($exception);
 
+            if (
+                config('booking-monitoring.enabled')
+                && $this->bookingFailureClassifier->isTechnicalUnavailable($exception)
+            ) {
+                $this->monitoringNotifier->bookingFailure($this->bookingFailureContext(
+                    branch: $branch,
+                    validated: $validated,
+                    reason: $this->bookingFailureClassifier->safeReason($exception),
+                    application: $application,
+                ));
+
+                return $this->bookingServiceUnavailableResponse();
+            }
+
             $errorField = $manualOnecBooking ? 'appointment_datetime' : 'onec_slot_id';
 
             throw ValidationException::withMessages([
@@ -172,6 +207,33 @@ class ApplicationController extends Controller
         // TODO: Отправка уведомлений через вебхуки
 
         return new ApplicationResource($application->load(['city', 'clinic', 'branch', 'cabinet', 'doctor']));
+    }
+
+    private function bookingServiceUnavailableResponse()
+    {
+        return response()->json([
+            'code' => 'booking_service_unavailable',
+            'message' => 'Онлайн-запись временно недоступна. Попробуйте позже или свяжитесь с клиникой по телефону.',
+        ], 503);
+    }
+
+    private function bookingFailureContext(
+        ?Branch $branch,
+        array $validated,
+        string $reason,
+        ?Application $application = null,
+    ): array {
+        $doctor = isset($validated['doctor_id'])
+            ? Doctor::query()->find($validated['doctor_id'])
+            : null;
+
+        return [
+            'branch' => $branch?->name,
+            'doctor' => $doctor?->full_name,
+            'appointment_at' => $validated['appointment_datetime'] ?? null,
+            'application_id' => $application?->id,
+            'reason' => $reason,
+        ];
     }
 
     /**

@@ -146,7 +146,7 @@ run_laravel_commands() {
     log "Выполнение Laravel команд..."
     
     cd "$APP_DIR"
-    
+
     # Миграции
     php artisan migrate --force
     
@@ -154,6 +154,7 @@ run_laravel_commands() {
     php artisan config:cache
     php artisan route:cache
     php artisan view:cache
+    php artisan booking:verify-monitoring-config
     
     # Перезапуск очередей
     php artisan queue:restart
@@ -164,6 +165,11 @@ run_laravel_commands() {
 # Перезапуск сервисов
 restart_services() {
     log "Перезапуск сервисов..."
+
+    cd "$APP_DIR"
+
+    # Гарантируем работу очереди и Laravel Scheduler после каждого деплоя.
+    MEDICAL_CENTER_APP_DIR="$APP_DIR" bash scripts/setup-production-processes.sh
     
     # Перезапуск PHP-FPM
     if command -v systemctl >/dev/null 2>&1; then
@@ -177,14 +183,6 @@ restart_services() {
         else
             warning "PHP-FPM не найден или не запущен"
         fi
-    fi
-    
-    # Перезапуск Supervisor воркеров (если установлен)
-    if command -v supervisorctl >/dev/null 2>&1; then
-        supervisorctl restart laravel-worker:* || log "Supervisor воркеры не настроены"
-        log "Supervisor воркеры перезапущены"
-    else
-        warning "Supervisor не установлен, пропускаем перезапуск воркеров"
     fi
     
     # Очистка Redis кеша (если нужно)

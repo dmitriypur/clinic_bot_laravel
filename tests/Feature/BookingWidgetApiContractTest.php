@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendBookingMonitoringMessage;
+use App\Jobs\SendCrmNotificationJob;
 use App\Models\Application;
 use App\Models\Branch;
 use App\Models\Cabinet;
@@ -10,13 +12,14 @@ use App\Models\Clinic;
 use App\Models\Doctor;
 use App\Models\DoctorShift;
 use App\Models\IntegrationEndpoint;
-use App\Jobs\SendCrmNotificationJob;
+use App\Services\OneC\Exceptions\OneCBookingException;
 use App\Services\OneC\OneCBookingService;
 use Carbon\Carbon;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
 use Mockery;
 use Tests\TestCase;
 
@@ -27,6 +30,7 @@ class BookingWidgetApiContractTest extends TestCase
         parent::setUp();
 
         config(['app.timezone' => 'Europe/Moscow']);
+        config(['booking-monitoring.enabled' => true]);
         $this->rebuildTestSchema();
         Cache::flush();
         Carbon::setTestNow(Carbon::create(2025, 1, 1, 8, 0, 0, 'Europe/Moscow'));
@@ -805,6 +809,7 @@ class BookingWidgetApiContractTest extends TestCase
     public function test_create_application_with_onec_and_crm_sends_only_to_onec_and_stays_local(): void
     {
         Queue::fake();
+        Http::fake(['*' => Http::response('', 200)]);
 
         $context = $this->createLocalSchedulingContext();
         $this->enableCrm($context['clinic']);
@@ -857,6 +862,107 @@ class BookingWidgetApiContractTest extends TestCase
             'submission_type' => 'Онлайн-запись',
             'integration_type' => Application::INTEGRATION_TYPE_ONEC,
         ]);
+    }
+
+    public function test_onec_booking_returns_a_friendly_503_when_preflight_is_unavailable(): void
+    {
+        Queue::fake();
+        Http::fake(['*' => Http::response('', 503)]);
+
+        $context = $this->createLocalSchedulingContext();
+        $this->enableOneC($context['clinic'], $context['branch']);
+
+        $bookingService = Mockery::mock(OneCBookingService::class);
+        $bookingService->shouldNotReceive('book');
+        $bookingService->shouldNotReceive('bookDirect');
+        $this->app->instance(OneCBookingService::class, $bookingService);
+
+        $response = $this->postJson('/api/v1/applications', $this->onecBookingPayload($context));
+
+        $response->assertStatus(503)
+            ->assertJsonPath('code', 'booking_service_unavailable')
+            ->assertJsonPath(
+                'message',
+                'Онлайн-запись временно недоступна. Попробуйте позже или свяжитесь с клиникой по телефону.'
+            );
+
+        $this->assertDatabaseMissing('applications', ['phone' => '79990000009']);
+        Queue::assertPushed(SendBookingMonitoringMessage::class, function ($job): bool {
+            return str_contains($job->message(), 'ОШИБКА ЗАПИСИ КЛИЕНТА')
+                && str_contains($job->message(), 'HTTP 503');
+        });
+    }
+
+    public function test_onec_booking_returns_503_when_the_real_booking_has_a_technical_error(): void
+    {
+        Queue::fake();
+        Http::fake(['*' => Http::response('', 200)]);
+
+        $context = $this->createLocalSchedulingContext();
+        $this->enableOneC($context['clinic'], $context['branch']);
+
+        $bookingService = Mockery::mock(OneCBookingService::class);
+        $bookingService->shouldReceive('bookDirect')
+            ->once()
+            ->andThrow(new OneCBookingException('1С вернула ошибку.', [
+                'api_error' => ['status' => 500],
+            ]));
+        $this->app->instance(OneCBookingService::class, $bookingService);
+
+        $response = $this->postJson('/api/v1/applications', $this->onecBookingPayload($context));
+
+        $response->assertStatus(503)
+            ->assertJsonPath('code', 'booking_service_unavailable');
+        $this->assertDatabaseMissing('applications', ['phone' => '79990000009']);
+        Queue::assertPushed(SendBookingMonitoringMessage::class);
+    }
+
+    public function test_onec_domain_rejection_remains_a_422_without_a_monitoring_alert(): void
+    {
+        Queue::fake();
+        Http::fake(['*' => Http::response('', 200)]);
+
+        $context = $this->createLocalSchedulingContext();
+        $this->enableOneC($context['clinic'], $context['branch']);
+
+        $bookingService = Mockery::mock(OneCBookingService::class);
+        $bookingService->shouldReceive('bookDirect')
+            ->once()
+            ->andThrow(new OneCBookingException('Это время уже занято.', [
+                'api_error' => ['status' => 422],
+            ]));
+        $this->app->instance(OneCBookingService::class, $bookingService);
+
+        $response = $this->postJson('/api/v1/applications', $this->onecBookingPayload($context));
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['appointment_datetime']);
+        Queue::assertNotPushed(SendBookingMonitoringMessage::class);
+    }
+
+    public function test_disabled_monitoring_preserves_the_previous_onec_booking_behaviour(): void
+    {
+        config(['booking-monitoring.enabled' => false]);
+        Queue::fake();
+        Http::fake();
+
+        $context = $this->createLocalSchedulingContext();
+        $this->enableOneC($context['clinic'], $context['branch']);
+
+        $bookingService = Mockery::mock(OneCBookingService::class);
+        $bookingService->shouldReceive('bookDirect')
+            ->once()
+            ->andThrow(new OneCBookingException('1С вернула ошибку.', [
+                'api_error' => ['status' => 500],
+            ]));
+        $this->app->instance(OneCBookingService::class, $bookingService);
+
+        $response = $this->postJson('/api/v1/applications', $this->onecBookingPayload($context));
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['appointment_datetime']);
+        Http::assertNothingSent();
+        Queue::assertNotPushed(SendBookingMonitoringMessage::class);
     }
 
     public function test_create_application_from_telegram_mini_app_preserves_internal_and_external_sources(): void
@@ -1068,6 +1174,20 @@ class BookingWidgetApiContractTest extends TestCase
             'type' => IntegrationEndpoint::TYPE_ONEC,
             'is_active' => true,
         ]);
+    }
+
+    private function onecBookingPayload(array $context): array
+    {
+        return [
+            'city_id' => $context['city']->id,
+            'clinic_id' => $context['clinic']->id,
+            'branch_id' => $context['branch']->id,
+            'doctor_id' => $context['doctor']->id,
+            'cabinet_id' => $context['cabinet']->id,
+            'appointment_datetime' => '2025-01-02 09:00',
+            'full_name' => 'Пациент проверки',
+            'phone' => '79990000009',
+        ];
     }
 
     /**

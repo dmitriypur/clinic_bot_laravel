@@ -65,11 +65,12 @@ jobs:
           
           # Включаем режим обслуживания
           php artisan down --retry=60
+          trap 'php artisan up || true' EXIT
           
           # Обновляем код из git
           git fetch origin "${BRANCH}"
           git reset --hard "origin/${BRANCH}"
-          
+
           # Устанавливаем зависимости
           composer install --no-dev --optimize-autoloader --no-interaction
           npm ci --legacy-peer-deps
@@ -86,17 +87,15 @@ jobs:
           php artisan config:cache
           php artisan route:cache
           php artisan view:cache
+          php artisan booking:verify-monitoring-config
           php artisan queue:restart
-          
-          # Перезапускаем сервисы (если supervisor установлен)
-          if command -v supervisorctl >/dev/null 2>&1; then
-            supervisorctl restart laravel-worker:* || echo "Supervisor воркеры не настроены"
-          else
-            echo "Supervisor не установлен, пропускаем перезапуск воркеров"
-          fi
+
+          # Автоматически настраиваем и проверяем cron + очередь
+          bash scripts/setup-production-processes.sh
           
           # Отключаем режим обслуживания
           php artisan up
+          trap - EXIT
           
           # Удаляем старые бэкапы (оставляем последние 5)
           cd /var/www/backups

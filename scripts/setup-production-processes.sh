@@ -5,6 +5,7 @@ set -euo pipefail
 PROCESSES_APP_DIR="${MEDICAL_CENTER_APP_DIR:-/var/www/medical-center}"
 PROCESSES_USER="${MEDICAL_CENTER_PROCESS_USER:-www-data}"
 PROCESSES_PHP_BIN="$(command -v php)"
+PROCESSES_WORKER_WAIT_SECONDS=30
 
 if [[ "${EUID}" -ne 0 ]]; then
     echo "ERROR: настройка cron и Supervisor должна выполняться от root."
@@ -47,13 +48,25 @@ else
     fi
 fi
 
-PROCESSES_WORKER_STATUS="$(supervisorctl status 'laravel-worker:*' 2>&1)" || {
-    echo "ERROR: существующие Laravel queue worker не найдены."
-    exit 1
-}
+PROCESSES_WORKERS_RUNNING=false
+PROCESSES_WORKER_STATUS=""
 
-if [[ -z "${PROCESSES_WORKER_STATUS}" ]] || echo "${PROCESSES_WORKER_STATUS}" | grep -qv 'RUNNING'; then
-    echo "ERROR: не все существующие Laravel queue worker находятся в состоянии RUNNING."
+for ((PROCESSES_WORKER_ATTEMPT = 1; PROCESSES_WORKER_ATTEMPT <= PROCESSES_WORKER_WAIT_SECONDS; PROCESSES_WORKER_ATTEMPT++)); do
+    if PROCESSES_WORKER_STATUS="$(supervisorctl status 'laravel-worker:*' 2>&1)" \
+        && [[ -n "${PROCESSES_WORKER_STATUS}" ]] \
+        && ! grep -qv 'RUNNING' <<< "${PROCESSES_WORKER_STATUS}"; then
+        PROCESSES_WORKERS_RUNNING=true
+        break
+    fi
+
+    if ((PROCESSES_WORKER_ATTEMPT < PROCESSES_WORKER_WAIT_SECONDS)); then
+        sleep 1
+    fi
+done
+
+if [[ "${PROCESSES_WORKERS_RUNNING}" != true ]]; then
+    echo "${PROCESSES_WORKER_STATUS}"
+    echo "ERROR: Laravel queue worker не перешли в состояние RUNNING за ${PROCESSES_WORKER_WAIT_SECONDS} секунд."
     exit 1
 fi
 

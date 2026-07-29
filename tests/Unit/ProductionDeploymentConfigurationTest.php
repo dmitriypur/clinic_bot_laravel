@@ -28,4 +28,13 @@ class ProductionDeploymentConfigurationTest extends TestCase
         $this->assertStringNotContainsString('supervisorctl restart', $script);
         $this->assertStringNotContainsString('apt-get', $script);
     }
+
+    public function test_process_setup_waits_for_workers_to_finish_graceful_restart(): void
+    {
+        $script = file_get_contents(dirname(__DIR__, 2).'/scripts/setup-production-processes.sh');
+
+        $this->assertStringContainsString('PROCESSES_WORKER_WAIT_SECONDS=30', $script);
+        $this->assertStringContainsString('sleep 1', $script);
+        $this->assertStringContainsString('Laravel queue worker не перешли в состояние RUNNING за', $script);
+    }
 }

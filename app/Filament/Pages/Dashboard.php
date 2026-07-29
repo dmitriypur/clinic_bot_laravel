@@ -2,9 +2,14 @@
 
 namespace App\Filament\Pages;
 
+use App\Services\BookingMonitoring\BookingAvailabilityChecker;
+use App\Services\BookingMonitoring\BookingMonitoringNotifier;
 use App\Support\CalendarSettings;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class Dashboard extends Page
 {
@@ -39,6 +44,73 @@ class Dashboard extends Page
             $this->activeTab = 'schedule';
         } elseif (! $this->activeTab) {
             $this->activeTab = 'appointments';
+        }
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('checkBookingAvailability')
+                ->label('Проверить доступность 1С')
+                ->icon('heroicon-o-signal')
+                ->visible(fn (): bool => auth()->user()?->isSuperAdmin() ?? false)
+                ->action(function (
+                    BookingAvailabilityChecker $checker,
+                    BookingMonitoringNotifier $notifier,
+                ): void {
+                    $this->checkBookingAvailability($checker, $notifier);
+                }),
+        ];
+    }
+
+    public function checkBookingAvailability(
+        BookingAvailabilityChecker $checker,
+        BookingMonitoringNotifier $notifier,
+    ): void {
+        abort_unless(auth()->user()?->isSuperAdmin(), 403);
+
+        if (! config('booking-monitoring.enabled')) {
+            Notification::make()
+                ->title('Мониторинг отключён')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $lock = Cache::lock(
+            'booking-monitoring:availability-check',
+            (int) config('booking-monitoring.lock_seconds', 60),
+        );
+
+        if (! $lock->get()) {
+            Notification::make()
+                ->title('Проверка уже выполняется')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        try {
+            $result = $checker->check();
+            $notifier->manualCheck($result);
+
+            $notification = Notification::make()
+                ->title($result->available ? 'Запись в 1С доступна' : 'Запись в 1С недоступна')
+                ->body($result->available
+                    ? "HTTP {$result->statusCode}, время ответа: {$result->durationMs} мс."
+                    : ($result->error ?? 'Сервер 1С не ответил.'));
+
+            if ($result->available) {
+                $notification->success();
+            } else {
+                $notification->danger();
+            }
+
+            $notification->send();
+        } finally {
+            $lock->release();
         }
     }
 

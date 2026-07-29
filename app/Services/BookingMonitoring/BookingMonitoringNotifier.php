@@ -19,6 +19,15 @@ final class BookingMonitoringNotifier
         $this->dispatch($this->messages->scheduledCheck($result));
     }
 
+    public function manualCheck(BookingAvailabilityCheckResult $result): void
+    {
+        if (! config('booking-monitoring.enabled')) {
+            return;
+        }
+
+        $this->dispatch($this->messages->manualCheck($result));
+    }
+
     public function bookingFailure(array $safeContext): void
     {
         if (! config('booking-monitoring.enabled')) {

@@ -8,12 +8,22 @@ final class BookingAvailabilityMessageFactory
 {
     public function scheduledCheck(BookingAvailabilityCheckResult $result): string
     {
+        return $this->availabilityCheck($result, 'Плановая проверка 1С');
+    }
+
+    public function manualCheck(BookingAvailabilityCheckResult $result): string
+    {
+        return $this->availabilityCheck($result, 'Ручная проверка 1С');
+    }
+
+    private function availabilityCheck(BookingAvailabilityCheckResult $result, string $checkLabel): string
+    {
         $status = $result->available ? '🟢 ЗАПИСЬ ДОСТУПНА' : '🔴 ЗАПИСЬ НЕДОСТУПНА';
         $http = $result->statusCode === null ? 'нет ответа' : "HTTP {$result->statusCode}";
 
         $lines = [
             $status,
-            'Плановая проверка 1С',
+            $checkLabel,
             'Время: '.Carbon::now()->format('d.m.Y H:i:s'),
             'Адрес: '.config('booking-monitoring.url'),
             "Ответ: {$http}",

@@ -34,6 +34,22 @@ class BookingMonitoringNotifierTest extends TestCase
         });
     }
 
+    public function test_it_queues_a_clearly_labeled_manual_check_result(): void
+    {
+        Queue::fake();
+
+        app(BookingMonitoringNotifier::class)->manualCheck(
+            new BookingAvailabilityCheckResult(true, 200, 37)
+        );
+
+        Queue::assertPushed(SendBookingMonitoringMessage::class, function ($job): bool {
+            return str_contains($job->message(), 'Ручная проверка 1С')
+                && str_contains($job->message(), 'ДОСТУПНА')
+                && str_contains($job->message(), 'HTTP 200')
+                && str_contains($job->message(), '37 мс');
+        });
+    }
+
     public function test_it_queues_a_safe_booking_failure_without_patient_personal_data(): void
     {
         Queue::fake();
@@ -67,6 +83,9 @@ class BookingMonitoringNotifierTest extends TestCase
         Http::fake();
 
         app(BookingMonitoringNotifier::class)->scheduledCheck(
+            new BookingAvailabilityCheckResult(true, 200, 10)
+        );
+        app(BookingMonitoringNotifier::class)->manualCheck(
             new BookingAvailabilityCheckResult(true, 200, 10)
         );
         (new SendBookingMonitoringMessage('Старое сообщение'))

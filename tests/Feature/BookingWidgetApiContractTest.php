@@ -905,16 +905,23 @@ class BookingWidgetApiContractTest extends TestCase
         $bookingService->shouldReceive('bookDirect')
             ->once()
             ->andThrow(new OneCBookingException('1С вернула ошибку.', [
-                'api_error' => ['status' => 500],
+                'api_error' => ['status' => 502],
             ]));
         $this->app->instance(OneCBookingService::class, $bookingService);
 
         $response = $this->postJson('/api/v1/applications', $this->onecBookingPayload($context));
 
         $response->assertStatus(503)
-            ->assertJsonPath('code', 'booking_service_unavailable');
+            ->assertJsonPath('code', 'booking_service_unavailable')
+            ->assertJsonPath(
+                'message',
+                'Онлайн-запись временно недоступна. Попробуйте позже или свяжитесь с клиникой по телефону.'
+            );
         $this->assertDatabaseMissing('applications', ['phone' => '79990000009']);
-        Queue::assertPushed(SendBookingMonitoringMessage::class);
+        Queue::assertPushed(SendBookingMonitoringMessage::class, function ($job): bool {
+            return str_contains($job->message(), 'Этап: Передача записи клиента в 1С')
+                && str_contains($job->message(), 'Сервер 1С или промежуточный сервер вернул HTTP 502');
+        });
     }
 
     public function test_onec_domain_rejection_remains_a_422_without_a_monitoring_alert(): void

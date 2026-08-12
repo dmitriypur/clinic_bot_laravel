@@ -27,13 +27,19 @@ final class OneCTransportErrorClassifier
 
     private function curlCode(Throwable $exception): ?int
     {
-        if (! method_exists($exception, 'getHandlerContext')) {
-            return null;
-        }
+        do {
+            if (method_exists($exception, 'getHandlerContext')) {
+                $value = $exception->getHandlerContext()['errno'] ?? null;
 
-        $value = $exception->getHandlerContext()['errno'] ?? null;
+                if (is_numeric($value)) {
+                    return (int) $value;
+                }
+            }
 
-        return is_numeric($value) ? (int) $value : null;
+            $exception = $exception->getPrevious();
+        } while ($exception !== null);
+
+        return null;
     }
 
     private function category(?int $curlCode, string $message): string

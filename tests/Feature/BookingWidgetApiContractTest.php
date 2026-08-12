@@ -889,6 +889,8 @@ class BookingWidgetApiContractTest extends TestCase
         $this->assertDatabaseMissing('applications', ['phone' => '79990000009']);
         Queue::assertPushed(SendBookingMonitoringMessage::class, function ($job): bool {
             return str_contains($job->message(), 'ОШИБКА ЗАПИСИ КЛИЕНТА')
+                && str_contains($job->message(), 'Клиент: Пациент проверки')
+                && str_contains($job->message(), 'Телефон: 79990000009')
                 && str_contains($job->message(), 'HTTP 503');
         });
     }
@@ -920,6 +922,8 @@ class BookingWidgetApiContractTest extends TestCase
         $this->assertDatabaseMissing('applications', ['phone' => '79990000009']);
         Queue::assertPushed(SendBookingMonitoringMessage::class, function ($job): bool {
             return str_contains($job->message(), 'Этап: Передача записи клиента в 1С')
+                && str_contains($job->message(), 'Клиент: Пациент проверки')
+                && str_contains($job->message(), 'Телефон: 79990000009')
                 && str_contains($job->message(), 'Сервер 1С или промежуточный сервер вернул HTTP 502');
         });
     }

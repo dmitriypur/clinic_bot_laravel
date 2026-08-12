@@ -38,7 +38,7 @@ final class BookingAvailabilityMessageFactory
     }
 
     /**
-     * Формирует сообщение только из технических данных — без ФИО, телефона и даты рождения пациента.
+     * Формирует сообщение только из явно разрешённых данных заявки.
      */
     public function bookingFailure(array $context): string
     {
@@ -50,6 +50,8 @@ final class BookingAvailabilityMessageFactory
         ];
 
         $labels = [
+            'patient_name' => 'Клиент',
+            'phone' => 'Телефон',
             'branch' => 'Филиал',
             'doctor' => 'Врач',
             'appointment_at' => 'Желаемое время',

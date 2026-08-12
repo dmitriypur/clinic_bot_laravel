@@ -228,6 +228,8 @@ class ApplicationController extends Controller
             : null;
 
         return [
+            'patient_name' => $validated['full_name'] ?? null,
+            'phone' => $validated['phone'] ?? null,
             'branch' => $branch?->name,
             'doctor' => $doctor?->full_name,
             'appointment_at' => $validated['appointment_datetime'] ?? null,

@@ -13,7 +13,10 @@ use Illuminate\Support\Str;
 
 class OneCApiClient
 {
-    public function __construct(private readonly HttpFactory $http) {}
+    public function __construct(
+        private readonly HttpFactory $http,
+        private readonly OneCTransportErrorClassifier $transportErrors,
+    ) {}
 
     protected function decodeResponse(Response $response): array
     {
@@ -30,7 +33,7 @@ class OneCApiClient
         }
 
         throw new OneCApiException('Некорректный формат ответа 1С.', [
-            'response' => $response->body(),
+            'error_category' => 'invalid_response',
         ]);
     }
 
@@ -68,7 +71,7 @@ class OneCApiClient
         if (! is_array($data)) {
             throw new OneCApiException('Некорректный формат ответа 1С при бронировании слота.', [
                 'endpoint_id' => $endpoint->id,
-                'response' => $response->body(),
+                'error_category' => 'invalid_response',
             ]);
         }
 
@@ -166,17 +169,19 @@ class OneCApiClient
             // Используем Http\Client\Factory, чтобы единообразно логировать и ловить ошибки сети.
             $response = $pending->send($method, $this->buildUri($endpoint, $uri), $options);
         } catch (\Throwable $exception) {
+            $timeout = (int) (($endpoint->credentials['timeout'] ?? null) ?? config('services.onec.timeout', 15));
+
             Log::error('Ошибка сети при обращении к 1С.', [
                 'endpoint_id' => $endpoint->id,
                 'method' => $method,
                 'uri' => $uri,
                 'error' => $exception->getMessage(),
+                ...$this->transportErrors->context($exception, $timeout),
             ]);
 
             throw new OneCApiException('Не удалось связаться с 1С.', [
                 'endpoint_id' => $endpoint->id,
-                'method' => $method,
-                'uri' => $uri,
+                ...$this->transportErrors->context($exception, $timeout),
             ], 0, $exception);
         }
 

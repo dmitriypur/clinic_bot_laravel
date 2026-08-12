@@ -45,6 +45,7 @@ final class BookingAvailabilityMessageFactory
         $lines = [
             '🔴 ОШИБКА ЗАПИСИ КЛИЕНТА',
             'Сайт не смог передать запись в 1С.',
+            'Этап: Передача записи клиента в 1С',
             'Время ошибки: '.Carbon::now()->format('d.m.Y H:i:s'),
         ];
 

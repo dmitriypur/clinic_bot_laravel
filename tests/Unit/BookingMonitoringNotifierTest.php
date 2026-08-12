@@ -63,8 +63,37 @@ class BookingMonitoringNotifierTest extends TestCase
 
         Queue::assertPushed(SendBookingMonitoringMessage::class, function ($job): bool {
             return str_contains($job->message(), 'ОШИБКА ЗАПИСИ КЛИЕНТА')
+                && str_contains($job->message(), 'Этап: Передача записи клиента в 1С')
                 && str_contains($job->message(), 'Филиал на Ленина')
                 && str_contains($job->message(), 'HTTP 503');
+        });
+    }
+
+    public function test_booking_failure_message_does_not_expose_secrets_or_patient_data(): void
+    {
+        Queue::fake();
+
+        app(BookingMonitoringNotifier::class)->bookingFailure([
+            'branch' => 'Филиал на Ленина',
+            'doctor' => 'Иванов И.И.',
+            'appointment_at' => '29.07.2026 12:30',
+            'application_id' => 123,
+            'reason' => 'Сетевая ошибка между сервером сайта и 1С',
+            'url' => 'https://onec.example/secret-handler',
+            'token' => 'super-secret-token',
+            'response_body' => 'patient Иван Петров phone 79990000000',
+            'patient_name' => 'Иван Петров',
+            'phone' => '79990000000',
+        ]);
+
+        Queue::assertPushed(SendBookingMonitoringMessage::class, function ($job): bool {
+            $message = $job->message();
+
+            return str_contains($message, 'Сетевая ошибка между сервером сайта и 1С')
+                && ! str_contains($message, 'secret-handler')
+                && ! str_contains($message, 'super-secret-token')
+                && ! str_contains($message, 'Иван Петров')
+                && ! str_contains($message, '79990000000');
         });
     }
 

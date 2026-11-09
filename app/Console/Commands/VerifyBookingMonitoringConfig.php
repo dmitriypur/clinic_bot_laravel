@@ -26,8 +26,8 @@ final class VerifyBookingMonitoringConfig extends Command
         }
 
         $runTimes = config('booking-monitoring.run_times', []);
-        if (! is_array($runTimes) || count($runTimes) !== 3) {
-            $errors[] = 'BOOKING_MONITORING_RUN_TIMES должен содержать три времени запуска.';
+        if (! is_array($runTimes) || count($runTimes) < 1) {
+            $errors[] = 'BOOKING_MONITORING_RUN_TIMES должен содержать хотя бы одно время запуска.';
         } else {
             foreach ($runTimes as $runTime) {
                 if (! preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', (string) $runTime)) {

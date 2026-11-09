@@ -12,7 +12,7 @@ class VerifyBookingMonitoringConfigCommandTest extends TestCase
         config([
             'booking-monitoring.enabled' => true,
             'booking-monitoring.url' => 'http://85.93.54.201:5490/unf_telephony',
-            'booking-monitoring.run_times' => ['07:00', '12:00', '17:00'],
+            'booking-monitoring.run_times' => ['07:00', '12:00', '17:00', '21:30'],
             'booking-monitoring.bitrix.webhook_url' => 'https://clinic.bitrix24.ru/rest/7/top-secret/',
             'booking-monitoring.bitrix.dialog_id' => 'chat42',
             'queue.default' => 'database',

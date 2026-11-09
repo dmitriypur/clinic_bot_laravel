@@ -22,9 +22,14 @@ php artisan key:generate
 # База данных
 php artisan migrate --seed
 
-# Админ панель
-php artisan filament:create-user
+# Первый администратор на чистой базе
+php artisan shield:super-admin --panel=admin
 ```
+
+При необходимости импорта из старого приложения поместите доверенные SQL-файлы
+в закрытый каталог `storage/app/private/legacy-sql` и запустите
+`php artisan db:seed --class=LegacySqlImportSeeder`. Новым импортированным
+пользователям нужно отдельно настроить доступ. Храните дампы вне Git.
 
 ### Тестирование Telegram бота
 ```bash

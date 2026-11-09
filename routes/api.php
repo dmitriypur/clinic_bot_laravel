@@ -15,14 +15,13 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-// Additional RESTful API routes for full CRUD
 Route::prefix('v1')->group(function () {
-    Route::apiResource('cities', CityController::class);
+    Route::apiResource('cities', CityController::class)->only(['index', 'show']);
     Route::get('cities/{city}/clinics', [ClinicController::class, 'byCity']);
-    Route::apiResource('applications', ApplicationController::class);
+    Route::post('applications', [ApplicationController::class, 'store'])->name('applications.store');
     Route::post('applications/check-slot', [ApplicationController::class, 'checkSlot'])
         ->name('applications.checkSlot');
-    Route::apiResource('doctors', DoctorController::class);
+    Route::apiResource('doctors', DoctorController::class)->only(['index']);
     Route::get('/doctors/{doctor}/branches-availability', DoctorBranchesAvailabilityController::class);
     Route::get('/doctors/{doctor}/slots', [DoctorController::class, 'slots']);
     Route::get('/booking/calendar-availability', [DoctorController::class, 'calendarAvailability']);
@@ -31,7 +30,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/clinics/{clinic}/branches', [ClinicController::class, 'branches']);
     Route::get('/clinics/{clinic}/doctors', [DoctorController::class, 'byClinic']);
     Route::get('/cities/{city}/doctors', [DoctorController::class, 'byCity']);
-    Route::apiResource('clinics', ClinicController::class);
+    Route::apiResource('clinics', ClinicController::class)->only(['index']);
 
     // Protected webhook routes (require authentication)
     Route::middleware('auth:sanctum')->group(function () {

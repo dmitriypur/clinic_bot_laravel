@@ -806,6 +806,35 @@ class BookingWidgetApiContractTest extends TestCase
             ->assertJsonValidationErrors(['city_id', 'full_name', 'phone']);
     }
 
+    public function test_guest_cannot_read_modify_or_delete_an_application(): void
+    {
+        $context = $this->createLocalSchedulingContext();
+        $application = $this->createOccupiedApplication($context, Carbon::parse('2025-01-02 09:00'));
+        $url = '/api/v1/applications/'.$application->id;
+
+        $this->getJson($url)->assertNotFound();
+        $this->patchJson($url, ['full_name' => 'Changed'])->assertNotFound();
+        $this->deleteJson($url)->assertNotFound();
+
+        $this->assertDatabaseHas('applications', [
+            'id' => $application->id,
+            'full_name' => $application->full_name,
+        ]);
+    }
+
+    public function test_guest_cannot_write_to_the_city_catalog(): void
+    {
+        $city = City::create(['name' => 'Test city', 'status' => 1]);
+        $url = '/api/v1/cities/'.$city->id;
+
+        $this->postJson('/api/v1/cities', ['name' => 'New city', 'status' => 1])->assertMethodNotAllowed();
+        $this->patchJson($url, ['status' => 0])->assertMethodNotAllowed();
+        $this->deleteJson($url)->assertMethodNotAllowed();
+
+        $this->assertDatabaseHas('cities', ['id' => $city->id, 'status' => 1]);
+        $this->assertDatabaseCount('cities', 1);
+    }
+
     public function test_create_application_with_onec_and_crm_sends_only_to_onec_and_stays_local(): void
     {
         Queue::fake();

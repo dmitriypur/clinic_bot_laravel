@@ -2,8 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -21,15 +19,5 @@ class DatabaseSeeder extends Seeder
             DoctorSeeder::class,
             BranchSeeder::class,
         ]);
-
-        // Создаем админ-пользователя
-        $admin = User::create([
-            'name' => 'Admin',
-            'email' => 'admin@admin.ru',
-            'password' => bcrypt('password'),
-        ]);
-
-        // Назначаем роль super_admin
-        $admin->assignRole('super_admin');
     }
 }

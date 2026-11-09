@@ -176,7 +176,7 @@
 
 ## Основные API маршруты
 Файл: `routes/api.php`
-- `cities`, `clinics`, `doctors`, `applications` (REST + доп. роуты).
+- `cities`, `clinics`, `doctors` предоставляют публичное чтение справочников. Заявки и справочники редактируются в Filament.
 - `GET /api/v1/doctors/{doctor}/slots`.
 - `GET /api/v1/cities/{city}/doctors-by-date`.
 - `GET /api/v1/cities/{city}/doctors-by-date/calendar`.
@@ -274,6 +274,7 @@
 3. При необходимости обновить разделы: маршруты, сервисы, env, ограничения.
 
 ## Что изменилось (последнее)
+- 2026-11-09: публичное API оставляет создание заявки, проверку слота и чтение справочников. SQL-дампы вынесены из Git, первый администратор создаётся через Shield.
 - 2026-04-09: monthly endpoint `GET /api/v1/cities/{city}/doctors-by-date/calendar` стал принимать опциональный `doctor_uuids` (comma-separated), чтобы внешние multi-source клиенты вроде `zrenie.clinic-7` могли считать календарную подсветку только по локально видимым врачам и не подсвечивать даты из-за скрытых/непубличных специалистов. Для совместимости фильтр теперь матчится и по внутреннему `uuid`, и по внешнему `external_id` врача, потому что сайт передаёт именно внешние doctor identifiers. Контракт закреплён в [docs/API_CONTRACT_BOOKING_WIDGET.md](/Users/dmitriypur/Desktop/adminzrenie-laravel/docs/API_CONTRACT_BOOKING_WIDGET.md) и [tests/Feature/BookingWidgetApiContractTest.php](/Users/dmitriypur/Desktop/adminzrenie-laravel/tests/Feature/BookingWidgetApiContractTest.php).
 - 2026-04-10: для ветки `Выбрать врача` добавлен новый агрегирующий endpoint `GET /api/v1/doctors/{doctor}/branches-availability`, который одним запросом возвращает филиалы выбранного врача на конкретную дату с `available_slots`, `first_available_time`, `has_available_slots` и `meta.default_branch_id`. Он нужен внешнему `BookingWidgetV3`, чтобы убрать `N+1` по `clinics/{clinic}/doctors` и `doctors/{doctor}/slots` при первом открытии doctor-flow. Контракт закреплён в [docs/API_CONTRACT_BOOKING_WIDGET.md](/Users/dmitriypur/Desktop/adminzrenie-laravel/docs/API_CONTRACT_BOOKING_WIDGET.md) и [tests/Feature/BookingWidgetApiContractTest.php](/Users/dmitriypur/Desktop/adminzrenie-laravel/tests/Feature/BookingWidgetApiContractTest.php).
 - 2026-04-09: для ветки `выбор по дате` добавлен отдельный агрегированный monthly endpoint `GET /api/v1/cities/{city}/doctors-by-date/calendar`. В отличие от дневного `doctors-by-date`, он сразу считает доступность по всему диапазону дат города одним серверным проходом по локальным сменам и `onec_slots`, учитывает `birth_date`, `clinic_id` и `branch_id`, возвращает `available_doctors` и больше не требует fan-out клиента по каждому дню месяца. Добавлены contract-тесты в [tests/Feature/BookingWidgetApiContractTest.php](/Users/dmitriypur/Desktop/adminzrenie-laravel/tests/Feature/BookingWidgetApiContractTest.php).
@@ -281,6 +282,9 @@
 - 2026-02-13: создан `docs/APP_CONTEXT.md` с подробным контекстом проекта (архитектура, домен, интеграции 1С/CRM/Telegram, API, правила и операционные заметки).
 
 ## Журнал изменений
+- 2026-11-09:
+  - закрыты публичные маршруты управления заявками и справочниками;
+  - основной сидер создаёт роли и справочники, legacy-импорт читает дампы из закрытого каталога.
 - 2026-04-09:
   - monthly endpoint `/api/v1/cities/{city}/doctors-by-date/calendar` расширен опциональным фильтром `doctor_uuids`;
   - `DoctorsByDateCalendarService` теперь умеет ограничивать local/onec агрегацию указанным набором UUID врачей;

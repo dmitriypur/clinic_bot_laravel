@@ -27,7 +27,7 @@
 
 ## API endpoints (Flask-совместимые)
 - GET /api/v1/cities/ - список городов
-- POST /api/v1/applications/create/ - создание заявки
+- POST /api/v1/applications - создание заявки
 - GET /api/v1/webhook/ - webhook CRUD
 
 ## Важные команды
@@ -38,7 +38,7 @@
 ## Настройки
 - CSRF исключения: botman, api/*
 - BotMan storage: file (storage/botman/)
-- Админка: http://127.0.0.1:8000/admin (admin@admin.ru/password)
+- Админка: http://127.0.0.1:8000/login. Первый администратор создаётся через `php artisan shield:super-admin --panel=admin`.
 - Бот: https://t.me/medical_center_test_bot
 
 ## При работе с проектом

@@ -19,7 +19,7 @@ class LegacySqlImportSeeder extends Seeder
 
     public function __construct()
     {
-        $this->dumpDirectory = base_path('sql_dump');
+        $this->dumpDirectory = storage_path('app/private/legacy-sql');
     }
 
     public function run(): void
@@ -173,9 +173,12 @@ class LegacySqlImportSeeder extends Seeder
             $attributes = [
                 'name' => $username ?: ('Legacy User #'.$id),
                 'email' => $email,
-                'password' => '123456',
                 'clinic_id' => $clinicId !== null ? (int) $clinicId : null,
             ];
+
+            if (! $user->exists) {
+                $attributes['password'] = Str::random(64);
+            }
 
             if (Schema::hasColumn('users', 'username')) {
                 $attributes['username'] = $username;

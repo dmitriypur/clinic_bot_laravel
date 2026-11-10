@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\ApplicationController;
+use App\Http\Controllers\Api\BookingIntegrationController;
 use App\Http\Controllers\Api\CityController;
 use App\Http\Controllers\Api\ClinicController;
 use App\Http\Controllers\Api\DoctorBranchesAvailabilityController;
@@ -8,12 +9,20 @@ use App\Http\Controllers\Api\DoctorController;
 use App\Http\Controllers\Api\DoctorDateCalendarController;
 use App\Http\Controllers\Api\IntegrationWebhookController;
 use App\Http\Controllers\Api\WebhookController;
+use App\Http\Middleware\RequireBookingIntegrationAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
+
+Route::prefix('integrations/v1')->middleware('throttle:120,1,booking-integrations')->group(function () {
+    Route::get('catalog/search', [BookingIntegrationController::class, 'catalog'])
+        ->middleware(RequireBookingIntegrationAccess::class.':catalog:read');
+    Route::post('availability/search', [BookingIntegrationController::class, 'availability'])
+        ->middleware(RequireBookingIntegrationAccess::class.':availability:read');
+});
 
 Route::prefix('v1')->group(function () {
     Route::apiResource('cities', CityController::class)->only(['index', 'show']);

@@ -1,0 +1,1345 @@
+{
+  "info": {
+    "name": "Laravel Booking · каталог и свободные окна",
+    "description": "Запустите bash scripts/booking-postman.sh, импортируйте созданное окружение и выберите его перед запуском коллекции. Все ID и расписание относятся к демо-базе.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{booking_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Каталог",
+      "item": [
+        {
+          "name": "Видлацкой · два кандидата",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "catalog",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "doctor"
+                },
+                {
+                  "key": "q",
+                  "value": "%D0%92%D0%B8%D0%B4%D0%BB%D0%B0%D1%86%D0%BA%D0%BE%D0%B9"
+                }
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/catalog/search?type=doctor&q=%D0%92%D0%B8%D0%B4%D0%BB%D0%B0%D1%86%D0%BA%D0%BE%D0%B9"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(item => item.id)).to.eql([1, 2]);",
+                  "    pm.expect(result.meta.ambiguous).to.eql(true);",
+                  "    pm.expect(result.data[0].name).to.eql(\"Видлацкая Анна\");",
+                  "    pm.expect(result.data[0].branches[0].address).to.eql(\"ул. Ленина, 1\");",
+                  "    pm.expect(result.data[1].branches[0].city.name).to.eql(\"Москва\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Офтальмологи в Кирове",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "catalog",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "doctor"
+                },
+                {
+                  "key": "q",
+                  "value": "%D0%BE%D1%84%D1%82%D0%B0%D0%BB%D1%8C%D0%BC%D0%BE%D0%BB%D0%BE%D0%B3"
+                },
+                {
+                  "key": "city_id",
+                  "value": "1"
+                }
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/catalog/search?type=doctor&q=%D0%BE%D1%84%D1%82%D0%B0%D0%BB%D1%8C%D0%BC%D0%BE%D0%BB%D0%BE%D0%B3&city_id=1"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(item => item.id)).to.eql([1, 3, 6]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Филиал по названию",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "catalog",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "branch"
+                },
+                {
+                  "key": "q",
+                  "value": "%D0%A1%D0%B5%D0%B2%D0%B5%D1%80"
+                }
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/catalog/search?type=branch&q=%D0%A1%D0%B5%D0%B2%D0%B5%D1%80"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(item => item.id)).to.eql([2]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Филиал по адресу",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "catalog",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "branch"
+                },
+                {
+                  "key": "q",
+                  "value": "%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0%201"
+                }
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/catalog/search?type=branch&q=%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0%201"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(item => item.id)).to.eql([1]);",
+                  "    pm.expect(result.data[0].address).to.eql(\"ул. Ленина, 1\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Город",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "catalog",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "city"
+                },
+                {
+                  "key": "q",
+                  "value": "%D0%9A%D0%B8%D1%80%D0%BE%D0%B2"
+                }
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/catalog/search?type=city&q=%D0%9A%D0%B8%D1%80%D0%BE%D0%B2"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(item => item.id)).to.eql([1]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиники",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "catalog",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "clinic"
+                },
+                {
+                  "key": "q",
+                  "value": "%D0%97%D1%80%D0%B5%D0%BD%D0%B8%D0%B5"
+                }
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/catalog/search?type=clinic&q=%D0%97%D1%80%D0%B5%D0%BD%D0%B8%D0%B5"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(item => item.id)).to.eql([1, 2]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Отдельные фильтры",
+      "item": [
+        {
+          "name": "Клиника",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\",\n  \"clinic_ids\": [\n    2\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([2, 5]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Один филиал",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\",\n  \"branch_ids\": [\n    2\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([3]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Два филиала",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\",\n  \"branch_ids\": [\n    2,\n    3\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([2, 5, 3]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Врач",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\",\n  \"doctor_ids\": [\n    5\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([5]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Два врача",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\",\n  \"doctor_ids\": [\n    2,\n    5\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([2, 5]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Один день",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{day_after_tomorrow}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([1, 3, 1]);",
+                  "    pm.expect(result.data.every(slot => slot.starts_at.startsWith(pm.environment.get(\"day_after_tomorrow\")))).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Время начала",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\",\n  \"time_from\": \"17:00\",\n  \"time_to\": \"18:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([3]);",
+                  "    pm.expect(result.data[0].starts_at.slice(11, 16)).to.eql(\"17:00\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Возраст 7 лет",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\",\n  \"patient_age\": 7\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([3, 3, 5, 4, 3, 3, 3]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Филиал из другой клиники",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\",\n  \"clinic_ids\": [\n    1\n  ],\n  \"branch_ids\": [\n    3\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 422\", () => pm.response.to.have.status(422));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.errors).to.have.property(\"branch_ids\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Сценарии",
+      "item": [
+        {
+          "name": "1а · К Видлацкой сегодня или завтра",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doctor_ids\": [\n    1\n  ],\n  \"date_from\": \"{{today}}\",\n  \"date_to\": \"{{tomorrow}}\",\n  \"limit\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "В демо после уточнения выбрана Видлацкая Анна, ID 1."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([]);",
+                  "    pm.expect(result.meta.schedule_status).to.eql(\"complete\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1б · Ближайшее у той же Видлацкой",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doctor_ids\": [\n    1\n  ],\n  \"date_from\": \"{{day_after_tomorrow}}\",\n  \"date_to\": \"{{fallback_end}}\",\n  \"limit\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Повторите поиск, когда 1а вернул полный пустой результат. Если пациент уже выбрал филиал, передайте тот же branch_ids."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([1]);",
+                  "    pm.expect(result.data[0].starts_at).to.eql(pm.environment.get(\"day_after_tomorrow\") + \"T15:00:00+03:00\");",
+                  "    pm.expect(result.data[0].branch.id).to.eql(2);",
+                  "    pm.expect(result.data[0].branch.address).to.eql(\"ул. Московская, 2\");",
+                  "    pm.expect(result.meta.has_more).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2 · Офтальмолог, 7 лет, Киров, строго после 15:00",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"city_id\": 1,\n  \"specialty\": \"офтальмолог\",\n  \"patient_age\": 7,\n  \"date_from\": \"{{yesterday}}\",\n  \"date_to\": \"{{tomorrow}}\",\n  \"time_from\": \"15:01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([3, 3, 3]);",
+                  "    pm.expect(result.data.map(slot => slot.branch.id)).to.eql([2, 1, 1]);",
+                  "    pm.expect(result.data.every(slot => slot.branch.city.name === \"Киров\" && slot.starts_at.startsWith(pm.environment.get(\"tomorrow\")))).to.eql(true);",
+                  "    pm.expect(result.data.map(slot => slot.starts_at.slice(11, 16))).to.eql([\"16:30\", \"17:00\", \"19:00\"]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Все фильтры вместе",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\",\n  \"city_id\": 1,\n  \"clinic_ids\": [\n    1\n  ],\n  \"branch_ids\": [\n    1,\n    2\n  ],\n  \"doctor_ids\": [\n    1,\n    3,\n    4\n  ],\n  \"specialty\": \"офтальмолог\",\n  \"patient_age\": 7,\n  \"time_from\": \"15:00\",\n  \"time_to\": \"17:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([3, 3, 3]);",
+                  "    pm.expect(result.data.map(slot => slot.starts_at.slice(11, 16))).to.eql([\"15:00\", \"16:30\", \"17:00\"]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Доступ",
+      "item": [
+        {
+          "name": "Ключ чтения",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\",\n  \"doctor_ids\": [\n    5\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(slot => slot.doctor.id)).to.eql([5]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Без ключа",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.code).to.eql(\"unauthenticated\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Неверный ключ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "postman.0000000000000000000000000000000000000000000000000000000000000000",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.code).to.eql(\"unauthenticated\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ключ каталога · каталог доступен",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "catalog",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "branch"
+                },
+                {
+                  "key": "q",
+                  "value": "%D0%A1%D0%B5%D0%B2%D0%B5%D1%80"
+                }
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/catalog/search?type=branch&q=%D0%A1%D0%B5%D0%B2%D0%B5%D1%80"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{catalog_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.data.map(item => item.id)).to.eql([2]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ключ каталога · нет права на расписание",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "integrations",
+                "v1",
+                "availability",
+                "search"
+              ],
+              "raw": "{{base_url}}/api/integrations/v1/availability/search"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_from\": \"{{tomorrow}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{catalog_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                  "pm.test(\"Ожидаемый ответ\", () => {",
+                  "    const result = pm.response.json();",
+                  "    pm.expect(result.code).to.eql(\"insufficient_scope\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

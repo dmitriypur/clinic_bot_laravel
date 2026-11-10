@@ -21,6 +21,7 @@ class Branch extends Model
         'slot_duration',
         'external_id',
         'integration_mode',
+        'timezone',
     ];
 
     protected $casts = [
@@ -80,5 +81,10 @@ class Branch extends Model
     public function isOnecPushMode(): bool
     {
         return $this->integrationMode() === IntegrationMode::ONEC_PUSH;
+    }
+
+    public function bookingTimezone(): string
+    {
+        return $this->timezone ?: config('app.timezone');
     }
 }

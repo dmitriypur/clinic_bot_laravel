@@ -25,6 +25,7 @@ class Doctor extends Model
         'uuid',
         'review_link',
         'external_id',
+        'specialty',
     ];
 
     protected $casts = [
@@ -86,5 +87,11 @@ class Doctor extends Model
     public function getFullNameAttribute(): string
     {
         return trim($this->last_name.' '.$this->first_name.' '.$this->second_name);
+    }
+
+    public function admitsAge(int $age): bool
+    {
+        return ($this->age_admission_from === null || $age >= $this->age_admission_from)
+            && ($this->age_admission_to === null || $age <= $this->age_admission_to);
     }
 }

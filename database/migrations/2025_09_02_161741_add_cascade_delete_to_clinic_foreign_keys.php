@@ -18,6 +18,12 @@ return new class extends Migration
 
         $driver = Schema::getConnection()->getDriverName();
 
+        if ($driver === 'sqlite') {
+            Schema::table($table, fn (Blueprint $blueprint) => $blueprint->dropForeign(['clinic_id']));
+
+            return;
+        }
+
         if ($driver === 'mysql') {
             $database = DB::getDatabaseName();
             $exists = DB::selectOne(

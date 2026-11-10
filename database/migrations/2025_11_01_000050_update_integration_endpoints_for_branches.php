@@ -13,7 +13,7 @@ return new class extends Migration
             return;
         }
 
-        $this->dropForeignIfExists('integration_endpoints', 'integration_endpoints_clinic_id_foreign');
+        $this->dropForeignIfExists('integration_endpoints', 'clinic_id');
         $this->dropUniqueIfExists('integration_endpoints', 'integration_endpoints_clinic_id_unique');
 
         Schema::table('integration_endpoints', function (Blueprint $table) {
@@ -39,7 +39,7 @@ return new class extends Migration
             return;
         }
 
-        $this->dropForeignIfExists('integration_endpoints', 'integration_endpoints_branch_id_foreign');
+        $this->dropForeignIfExists('integration_endpoints', 'branch_id');
 
         Schema::table('integration_endpoints', function (Blueprint $table) {
             $table->dropIndex('integration_endpoints_branch_id_index');
@@ -50,9 +50,16 @@ return new class extends Migration
         $this->addForeign('integration_endpoints', 'clinic_id', 'clinics', 'cascade');
     }
 
-    private function dropForeignIfExists(string $table, string $constraint): void
+    private function dropForeignIfExists(string $table, string $column): void
     {
         $driver = Schema::getConnection()->getDriverName();
+        $constraint = $table.'_'.$column.'_foreign';
+
+        if ($driver === 'sqlite') {
+            Schema::table($table, fn (Blueprint $blueprint) => $blueprint->dropForeign([$column]));
+
+            return;
+        }
 
         if ($driver === 'mysql') {
             $database = DB::getDatabaseName();

@@ -84,6 +84,38 @@ class BookingIntegrationApiTest extends TestCase
             ->assertOk()->assertJsonCount(1, 'data')->assertJsonCount(1, 'data.0.branches');
     }
 
+    public function test_catalog_suggests_names_with_small_spelling_differences(): void
+    {
+        $this->seed(BookingIntegrationDemoSeeder::class);
+
+        foreach (['Ведлацкая', 'Виделацкая', 'Виделацкой'] as $surname) {
+            $this->catalog('doctor', $surname)
+                ->assertOk()->assertJsonPath('meta.approximate', true)
+                ->assertJsonPath('meta.ambiguous', true)
+                ->assertJsonCount(2, 'data')
+                ->assertJsonPath('data.0.name', 'Видлацкая Анна');
+        }
+
+        foreach ([
+            ['doctor', 'Питрова', 'Петрова Ирина'],
+            ['clinic', 'Зрениие Киров', 'Зрение Киров'],
+            ['clinic', 'Зрениие', 'Зрение Киров'],
+            ['branch', 'Татянин парк', 'Татьянин парк'],
+            ['city', 'Кироф', 'Киров'],
+        ] as [$type, $query, $name]) {
+            $this->catalog($type, $query)
+                ->assertOk()->assertJsonPath('meta.approximate', true)
+                ->assertJsonPath('data.0.name', $name);
+        }
+
+        $this->catalog('doctor', 'Видлацкой')->assertOk()->assertJsonMissingPath('meta.approximate');
+        $this->catalog('doctor', 'Неизвестная')->assertOk()->assertJsonCount(0, 'data');
+        $this->catalog('branch', 'Ленина 2')->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson(self::CATALOG.'?type=doctor&q=Ведлацкая', ['Authorization' => 'Bearer '.$this->catalogToken])
+            ->assertOk()->assertJsonPath('meta.approximate', true)
+            ->assertJsonCount(1, 'data')->assertJsonCount(1, 'data.0.branches');
+    }
+
     public function test_same_doctor_is_used_for_the_wider_period(): void
     {
         $this->seed(BookingIntegrationDemoSeeder::class);

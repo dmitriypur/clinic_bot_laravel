@@ -1,0 +1,2271 @@
+{
+  "info": {
+    "name": "Adminzrenie · проверка фильтров на сервере · v2",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Запускайте всю коллекцию по порядку. В Authorization коллекции укажите серверный Bearer-ключ чтения. Даты рассчитываются по Москве. Контрольные ID берутся из рабочих ответов. Пропуски показывают случаи, для которых в текущем расписании не хватило данных. Все операции читают каталог и расписание."
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://adminzrenie.ru"
+    },
+    {
+      "key": "booking_token",
+      "value": ""
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{booking_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Эти флаги относятся только к текущему запросу. Postman Runner сохраняет локальные переменные между запросами.",
+          "pm.variables.unset('booking_skip');",
+          "pm.variables.unset('booking_expected_error');"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+          "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+          "const normalize = value => String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();",
+          "if (pm.request.method === 'POST') {",
+          "  const skip = pm.variables.get('booking_skip');",
+          "  const expectedError = pm.variables.get('booking_expected_error');",
+          "  if (skip) {",
+          "    pm.test.skip(skip);",
+          "  } else if (expectedError) {",
+          "    pm.test('HTTP 422 и ошибка поля ' + expectedError, () => {",
+          "      pm.response.to.have.status(422);",
+          "      pm.expect(pm.response.json().errors).to.have.property(expectedError);",
+          "    });",
+          "  } else {",
+          "    pm.test('API вернул расписание или явный статус его недоступности', () => {",
+          "      pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+          "    });",
+          "    if ([200, 503].includes(pm.response.code)) {",
+          "      const result = pm.response.json();",
+          "      const filters = JSON.parse(pm.variables.get('filters'));",
+          "      const slots = result.data;",
+          "      const meta = result.meta;",
+          "      pm.test('Формат ответа и статус расписания', () => {",
+          "        pm.expect(slots).to.be.an('array');",
+          "        pm.expect(meta.has_more).to.be.a('boolean');",
+          "        pm.expect(meta.unverified_branches).to.be.an('array');",
+          "        pm.expect(meta.schedule_status).to.be.oneOf(pm.response.code === 200",
+          "          ? ['complete', 'partial'] : ['schedule_unavailable']);",
+          "        pm.expect(slots.length).to.be.at.most(filters.limit || 20);",
+          "      });",
+          "      if (meta.schedule_status !== 'complete') {",
+          "        const unverified = meta.unverified_branches || [];",
+          "        const examples = unverified.slice(0, 3).map(branch =>",
+          "          '#' + branch.branch_id + ' (' + branch.dates.slice(0, 3).join(', ') + (branch.dates.length > 3 ? ', …' : '') + ')');",
+          "        const details = examples.length ? ' · филиалов: ' + unverified.length + ' · ' + examples.join(', ') : '';",
+          "        pm.test.skip('Полнота расписания 1С не подтверждена: ' + meta.schedule_status + details);",
+          "      }",
+          "      const fields = {",
+          "        city_id: slot => slot.branch.city.id === filters.city_id,",
+          "        clinic_ids: slot => filters.clinic_ids.includes(slot.branch.clinic.id),",
+          "        branch_ids: slot => filters.branch_ids.includes(slot.branch.id),",
+          "        doctor_ids: slot => filters.doctor_ids.includes(slot.doctor.id),",
+          "        specialty: slot => normalize(slot.doctor.specialty).includes(normalize(filters.specialty)),",
+          "        date_from: slot => slot.starts_at.slice(0, 10) >= filters.date_from",
+          "          && slot.starts_at.slice(0, 10) <= (filters.date_to || filters.date_from),",
+          "        time_from: slot => slot.starts_at.slice(11, 16) >= filters.time_from,",
+          "        time_to: slot => slot.starts_at.slice(11, 16) <= filters.time_to",
+          "      };",
+          "      const ageOn = (birth, date) => Number(date.slice(0, 4)) - Number(birth.slice(0, 4))",
+          "        - Number(date.slice(5) < birth.slice(5));",
+          "      const rules = state('ageRules') || {};",
+          "      for (const field of ['patient_age', 'birth_date']) {",
+          "        if (filters[field] === undefined) continue;",
+          "        if (slots.length && slots.every(slot => rules[slot.doctor.id])) {",
+          "          fields[field] = slot => {",
+          "            const age = field === 'birth_date' ? ageOn(filters.birth_date, slot.starts_at.slice(0, 10)) : filters.patient_age;",
+          "            const rule = rules[slot.doctor.id];",
+          "            return (rule.from == null || age >= rule.from) && (rule.to == null || age <= rule.to);",
+          "          };",
+          "        } else if (slots.length) {",
+          "          pm.test.skip('Для проверки ' + field + ' нужны возрастные границы всех врачей из ответа');",
+          "        }",
+          "      }",
+          "      if (slots.length === 0) {",
+          "        pm.test.skip('Проверка совпадений: подходящих окон в выдаче нет');",
+          "      } else {",
+          "        pm.test('Окна будущие, отсортированы и содержат адрес', () => {",
+          "          const checkedAt = Date.parse(meta.checked_at);",
+          "          slots.forEach((slot, index) => {",
+          "            pm.expect(slot.branch.address).to.be.a('string').and.not.empty;",
+          "            const start = Date.parse(slot.starts_at);",
+          "            pm.expect(start).to.be.at.least(checkedAt);",
+          "            if (index > 0) pm.expect(start).to.be.at.least(Date.parse(slots[index - 1].starts_at));",
+          "          });",
+          "        });",
+          "        for (const [field, matches] of Object.entries(fields)) {",
+          "          if (filters[field] === undefined) continue;",
+          "          pm.test('Все окна соответствуют ' + field, () => {",
+          "            pm.expect(slots.filter(slot => !matches(slot)).map(slot => slot.id)).to.eql([]);",
+          "          });",
+          "          const range = state('date');",
+          "          if (field === 'date_from' && filters.date_from === range?.tomorrow && filters.date_to === range?.week) continue;",
+          "          const control = ['baseline', 'branchSlots', 'kirovSlots'].flatMap(key => state(key) || []);",
+          "          if (!control.some(slot => (field !== 'patient_age' && field !== 'birth_date' || rules[slot.doctor.id]) && !matches(slot))) {",
+          "            pm.test.skip('Для проверки исключения по ' + field + ' нужно контрольное окно с другим значением');",
+          "          }",
+          "        }",
+          "        for (const [field, id] of Object.entries({branch_ids: slot => slot.branch.id, doctor_ids: slot => slot.doctor.id})) {",
+          "          if ((filters[field] || []).length > 1) {",
+          "            if (filters[field].every(value => slots.some(slot => id(slot) === value))) {",
+          "              pm.test('В выдаче присутствуют все выбранные значения ' + field, () => pm.expect(true).to.equal(true));",
+          "            } else {",
+          "              pm.test.skip('Нужны окна по каждому из выбранных значений ' + field);",
+          "            }",
+          "          }",
+          "        }",
+          "      }",
+          "    }",
+          "  }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Каталог",
+      "item": [
+        {
+          "name": "01 · Найти Видлацкую и сохранить филиал",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/integrations/v1/catalog/search?type=doctor&q={{catalog_q}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "let query;",
+                  "",
+                  "for (const key of ['date', 'anchor', 'kirov', 'baseline', 'branchSlots', 'kirovSlots', 'ageRules', 'preferred']) {",
+                  "  pm.collectionVariables.unset(key);",
+                  "}",
+                  "const today = new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10);",
+                  "const midnight = Date.parse(today + 'T00:00:00Z');",
+                  "const day = offset => new Date(midnight + offset * 86400000).toISOString().slice(0, 10);",
+                  "save('date', {today: day(0), tomorrow: day(1), next: day(2), week: day(7), month: day(31), past: day(-40)});",
+                  "query = 'Видлацкой';",
+                  "pm.variables.set('catalog_q', encodeURIComponent(query || 'запись для проверки отсутствует'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const normalize = value => String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();",
+                  "pm.test('Каталог отвечает 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const result = pm.response.json();",
+                  "  pm.test('Каталог возвращает список и признаки неоднозначности', () => {",
+                  "    pm.expect(result.data).to.be.an('array');",
+                  "    pm.expect(result.meta.ambiguous).to.be.a('boolean');",
+                  "    pm.expect(result.meta.has_more).to.be.a('boolean');",
+                  "  });",
+                  "  ",
+                  "pm.test('Найдена Видлацкая с филиалом', () => {",
+                  "  pm.expect(result.data.some(row => /видлацкая/i.test(row.name) && row.branches.length)).to.equal(true);",
+                  "});",
+                  "const doctor = result.data.find(row => /видлацкая/i.test(row.name) && /анастасия/i.test(row.name) && row.branches.length)",
+                  "  || result.data.find(row => /видлацкая/i.test(row.name) && row.branches.length);",
+                  "if (doctor) save('anchor', {doctor, branch: doctor.branches[0]});",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 · Врачи по специальности",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/integrations/v1/catalog/search?type=doctor&q={{catalog_q}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "let query;",
+                  "query = 'офтальмолог';",
+                  "pm.variables.set('catalog_q', encodeURIComponent(query || 'запись для проверки отсутствует'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const normalize = value => String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();",
+                  "pm.test('Каталог отвечает 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const result = pm.response.json();",
+                  "  pm.test('Каталог возвращает список и признаки неоднозначности', () => {",
+                  "    pm.expect(result.data).to.be.an('array');",
+                  "    pm.expect(result.meta.ambiguous).to.be.a('boolean');",
+                  "    pm.expect(result.meta.has_more).to.be.a('boolean');",
+                  "  });",
+                  "  ",
+                  "pm.test('Найдены офтальмологи', () => {",
+                  "  pm.expect(result.data.length).to.be.greaterThan(0);",
+                  "  pm.expect(result.data.every(doctor => doctor.specialties.some(value => normalize(value).includes('офтальмолог')))).to.equal(true);",
+                  "});",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 · Филиал по названию",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/integrations/v1/catalog/search?type=branch&q={{catalog_q}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "let query;",
+                  "query = state('anchor')?.branch.name;",
+                  "pm.variables.set('catalog_q', encodeURIComponent(query || 'запись для проверки отсутствует'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const normalize = value => String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();",
+                  "pm.test('Каталог отвечает 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const result = pm.response.json();",
+                  "  pm.test('Каталог возвращает список и признаки неоднозначности', () => {",
+                  "    pm.expect(result.data).to.be.an('array');",
+                  "    pm.expect(result.meta.ambiguous).to.be.a('boolean');",
+                  "    pm.expect(result.meta.has_more).to.be.a('boolean');",
+                  "  });",
+                  "  ",
+                  "const branch = state('anchor')?.branch;",
+                  "if (branch?.name) {",
+                  "  pm.test('Найден тот же филиал, что у врача', () => pm.expect(result.data.some(row => row.id === branch.id)).to.equal(true));",
+                  "} else {",
+                  "  pm.test.skip('Для проверки нужен филиал из первого запроса');",
+                  "}",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 · Филиал по адресу",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/integrations/v1/catalog/search?type=branch&q={{catalog_q}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "let query;",
+                  "query = state('anchor')?.branch.address;",
+                  "pm.variables.set('catalog_q', encodeURIComponent(query || 'запись для проверки отсутствует'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const normalize = value => String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();",
+                  "pm.test('Каталог отвечает 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const result = pm.response.json();",
+                  "  pm.test('Каталог возвращает список и признаки неоднозначности', () => {",
+                  "    pm.expect(result.data).to.be.an('array');",
+                  "    pm.expect(result.meta.ambiguous).to.be.a('boolean');",
+                  "    pm.expect(result.meta.has_more).to.be.a('boolean');",
+                  "  });",
+                  "  ",
+                  "const branch = state('anchor')?.branch;",
+                  "if (branch?.address) {",
+                  "  pm.test('Найден тот же филиал, что у врача', () => pm.expect(result.data.some(row => row.id === branch.id)).to.equal(true));",
+                  "} else {",
+                  "  pm.test.skip('Для проверки нужен филиал из первого запроса');",
+                  "}",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 · Найти Киров",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/integrations/v1/catalog/search?type=city&q={{catalog_q}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "let query;",
+                  "query = 'Киров';",
+                  "pm.variables.set('catalog_q', encodeURIComponent(query || 'запись для проверки отсутствует'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const normalize = value => String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();",
+                  "pm.test('Каталог отвечает 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const result = pm.response.json();",
+                  "  pm.test('Каталог возвращает список и признаки неоднозначности', () => {",
+                  "    pm.expect(result.data).to.be.an('array');",
+                  "    pm.expect(result.meta.ambiguous).to.be.a('boolean');",
+                  "    pm.expect(result.meta.has_more).to.be.a('boolean');",
+                  "  });",
+                  "  ",
+                  "const city = result.data.find(row => normalize(row.name) === 'киров');",
+                  "save('kirov', city || null);",
+                  "if (city) pm.test('Получен ID Кирова', () => pm.expect(city.id).to.be.a('number'));",
+                  "else pm.test.skip('Киров недоступен для этого ключа');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Контрольная выдача",
+      "item": [
+        {
+          "name": "06 · Окна на неделю без фильтров",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  filters = period;",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "if (!pm.variables.get('booking_skip') && [200, 503].includes(pm.response.code)) {",
+                  "  const result = pm.response.json();",
+                  "  save('baseline', result.data || []);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 · Филиал Видлацкой",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (anchor) filters = {...period, branch_ids: [anchor.branch.id]};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "if (!pm.variables.get('booking_skip') && [200, 503].includes(pm.response.code)) {",
+                  "  const result = pm.response.json();",
+                  "  save('branchSlots', result.data || []);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 · Город Киров",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (kirov) filters = {...period, city_id: kirov.id};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "if (!pm.variables.get('booking_skip') && [200, 503].includes(pm.response.code)) {",
+                  "  const result = pm.response.json();",
+                  "  save('kirovSlots', result.data || []);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09 · Возрастные границы из действующего каталога",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/clinics/{{age_clinic_id}}/doctors",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const sample = (state('kirovSlots') || [])[0] || (state('baseline') || [])[0] || (state('branchSlots') || [])[0];",
+                  "pm.variables.set('age_clinic_id', sample?.branch.clinic.id || '0');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "if (pm.variables.get('age_clinic_id') === '0') {",
+                  "  pm.test.skip('Нет контрольных окон для выбора клиники');",
+                  "} else {",
+                  "  pm.test('Каталог клиники возвращает возрастные границы', () => pm.response.to.have.status(200));",
+                  "  if (pm.response.code === 200) {",
+                  "    const doctors = pm.response.json().data;",
+                  "    save('ageRules', Object.fromEntries(doctors.map(doctor => [doctor.id, {",
+                  "      from: doctor.age_admission_from, to: doctor.age_admission_to",
+                  "    }])));",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Фильтры по отдельности",
+      "item": [
+        {
+          "name": "10 · Один врач, кроме Видлацкой",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (other) filters = {...period, doctor_ids: [other.doctor.id]};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 · Два врача",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (doctors.length === 2) filters = {...period, doctor_ids: doctors};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12 · Два филиала",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (branches.length === 2) filters = {...period, branch_ids: branches};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "13 · Одна клиника",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (sample) filters = {...period, clinic_ids: [sample.branch.clinic.id]};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14 · Один город из контрольной выдачи",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (sample) filters = {...period, city_id: sample.branch.city.id};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "15 · Специальность",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (sample) filters = {...period, specialty: 'офтальмолог'};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "16 · Один день",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (sample) filters = {date_from: day(sample), limit: 50};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "17 · Время от",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (sample) filters = {...period, time_from: time(all.find(slot => time(slot) > time(sample)) || sample)};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "18 · Время до",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (sample) filters = {...period, time_to: time(sample)};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "19 · Время от и до",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (sample) filters = {...period, time_from: time(sample), time_to: time(sample)};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "20 · Возраст 7 лет",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (clinicId) filters = {...{...period, clinic_ids: [clinicId]}, patient_age: 7};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "21 · Дата рождения для ребёнка 7 лет",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (clinicId) filters = {...{...period, clinic_ids: [clinicId]}, birth_date: (Number(date.today.slice(0, 4)) - 7) + '-01-01'};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "22 · Лимит в одно окно",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  if (sample) filters = {...period, limit: 1};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "if (!pm.variables.get('booking_skip') && [200, 503].includes(pm.response.code)) {",
+                  "  const result = pm.response.json();",
+                  "  ",
+                  "const control = state('baseline') || [];",
+                  "if (control.length > 1 && result.data.length) {",
+                  "  pm.test('Есть дополнительные окна за пределами лимита', () => pm.expect(result.meta.has_more).to.equal(true));",
+                  "} else {",
+                  "  pm.test.skip('Для проверки has_more нужны два окна в контрольной выдаче');",
+                  "}",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Сценарии",
+      "item": [
+        {
+          "name": "23 · Киров, офтальмолог, 7 лет, строго после 15:00",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  ",
+                  "if (kirov) filters = {",
+                  "  ...period, city_id: kirov.id, specialty: 'офтальмолог', patient_age: 7, time_from: '15:01'",
+                  "};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "24 · Врач, филиал, город, клиника, дата и время вместе",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  ",
+                  "if (sample) filters = {",
+                  "  city_id: sample.branch.city.id, clinic_ids: [sample.branch.clinic.id], branch_ids: [sample.branch.id],",
+                  "  doctor_ids: [sample.doctor.id], date_from: day(sample), time_from: time(sample), time_to: time(sample),",
+                  "  ...(sample.doctor.specialty ? {specialty: sample.doctor.specialty} : {})",
+                  "};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "25 · Видлацкая сегодня или завтра",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  ",
+                  "if (anchor) filters = {doctor_ids: [anchor.doctor.id], branch_ids: [anchor.branch.id],",
+                  "  date_from: date.today, date_to: date.tomorrow, limit: 5};",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "if (!pm.variables.get('booking_skip') && [200, 503].includes(pm.response.code)) {",
+                  "  const result = pm.response.json();",
+                  "  ",
+                  "save('preferred', {count: result.data.length, status: result.meta.schedule_status});",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "26 · Ближайшее окно у той же Видлацкой",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  ",
+                  "const preferred = state('preferred');",
+                  "if (anchor && preferred?.count === 0 && preferred.status === 'complete') {",
+                  "  filters = {doctor_ids: [anchor.doctor.id], branch_ids: [anchor.branch.id],",
+                  "    date_from: date.next, date_to: date.month, limit: 1};",
+                  "} else {",
+                  "  if (!anchor || !preferred) missing('Для расширения периода нужен результат запроса 25');",
+                  "  else if (preferred.count > 0) missing('На сегодня или завтра уже есть окна');",
+                  "  else missing('Для расширения периода не подтверждена полнота расписания на сегодня и завтра: ' + preferred.status);",
+                  "}",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ошибочные фильтры и доступ",
+      "item": [
+        {
+          "name": "27 · Пустой список врачей",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  filters = {doctor_ids: []}; pm.variables.set('booking_expected_error', 'doctor_ids');",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "28 · Перепутаны границы времени",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  filters = {time_from: '18:00', time_to: '15:00'}; pm.variables.set('booking_expected_error', 'time_to');",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "29 · Возраст и дата рождения вместе",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  filters = {patient_age: 7, birth_date: '2019-01-01'}; pm.variables.set('booking_expected_error', 'birth_date');",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "30 · Превышен лимит окон",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  filters = {limit: 51}; pm.variables.set('booking_expected_error', 'limit');",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "31 · Период больше 31 дня",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  filters = {date_from: date.past, date_to: date.today}; pm.variables.set('booking_expected_error', 'date_to');",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "32 · Филиал из другого города",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/integrations/v1/availability/search",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{filters}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const state = key => JSON.parse(pm.collectionVariables.get(key) || 'null');",
+                  "const save = (key, value) => pm.collectionVariables.set(key, JSON.stringify(value));",
+                  "const date = state('date');",
+                  "const anchor = state('anchor');",
+                  "const kirov = state('kirov');",
+                  "const base = state('baseline') || [];",
+                  "const branchSlots = state('branchSlots') || [];",
+                  "const kirovSlots = state('kirovSlots') || [];",
+                  "const all = [...base, ...branchSlots, ...kirovSlots];",
+                  "const sample = all[0];",
+                  "const other = all.find(slot => slot.doctor.id !== (anchor?.doctor.id ?? sample?.doctor.id));",
+                  "const branches = [...new Set(all.map(slot => slot.branch.id))].slice(0, 2);",
+                  "const doctors = [...new Set(all.map(slot => slot.doctor.id))].slice(0, 2);",
+                  "const period = date && {date_from: date.tomorrow, date_to: date.week, limit: 50};",
+                  "const day = slot => slot.starts_at.slice(0, 10);",
+                  "const time = slot => slot.starts_at.slice(11, 16);",
+                  "const clinicSample = kirovSlots[0] || sample;",
+                  "const clinicId = clinicSample?.branch.clinic.id;",
+                  "const missing = message => pm.variables.set('booking_skip', message);",
+                  "let filters;",
+                  "if (date) {",
+                  "  ",
+                  "const pair = all.find(slot => sample && slot.branch.city.id !== sample.branch.city.id);",
+                  "if (pair) {",
+                  "  filters = {...period, city_id: pair.branch.city.id, branch_ids: [sample.branch.id]};",
+                  "  pm.variables.set('booking_expected_error', 'branch_ids');",
+                  "}",
+                  "} else {",
+                  "  missing('Запустите всю коллекцию с первого запроса');",
+                  "}",
+                  "if (!filters && !pm.variables.get('booking_skip')) missing('В контрольной выдаче нет данных для этого сценария');",
+                  "pm.variables.set('filters', JSON.stringify(filters || {date_from: date?.past || '2000-01-01', limit: 1}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "33 · Без ключа",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/integrations/v1/catalog/search?type=doctor&q=test",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Без ключа HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

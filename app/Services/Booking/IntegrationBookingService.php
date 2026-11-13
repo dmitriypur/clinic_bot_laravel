@@ -114,6 +114,13 @@ class IntegrationBookingService
 
         $externalId = $reply['claim_id'] ?? $reply['appointment_id'] ?? null;
         $bodyStatus = filter_var($reply['status_code'] ?? null, FILTER_VALIDATE_INT);
+        if (in_array($reply['http_status'], [200, 201], true)
+            && in_array($reply['status'] ?? null, ['fail', 'failed', 'error'], true)
+            && blank($reply['claim_id'] ?? null) && blank($reply['appointment_id'] ?? null)) {
+            $operation->reject('source_rejected', 422);
+
+            return $this->result($operation);
+        }
         if (! in_array($reply['http_status'], [200, 201], true)
             || ! in_array($bodyStatus, [200, 201], true)
             || ! in_array($reply['status'] ?? null, ['success', 'booked', 'confirmed'], true)

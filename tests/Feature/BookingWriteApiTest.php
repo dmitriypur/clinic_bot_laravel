@@ -172,6 +172,35 @@ class BookingWriteApiTest extends TestCase
         Http::assertSent(fn ($request) => $request['comment'] === 'ТЕСТ. Не связываться.');
     }
 
+    public function test_legacy_manual_booking_confirms_claim_with_body_status_204(): void
+    {
+        IntegrationEndpoint::where('branch_id', 3)->firstOrFail()->update([
+            'credentials' => ['manual_booking_path' => 'events?action=newrecord'],
+        ]);
+        Http::fake(['*' => Http::response(['status_code' => 204, 'claim_id' => 'demo-legacy-claim'], 200)]);
+
+        $body = $this->body();
+        $key = (string) Str::uuid();
+        $this->withHeader('Idempotency-Key', $key)->postJson(self::API.'bookings', $body)
+            ->assertCreated()->assertJsonPath('status', 'confirmed');
+        $this->assertDatabaseHas('applications', ['external_appointment_id' => 'demo-legacy-claim']);
+    }
+
+    public function test_legacy_manual_booking_returns_explicit_rejection(): void
+    {
+        IntegrationEndpoint::where('branch_id', 3)->firstOrFail()->update([
+            'credentials' => ['manual_booking_path' => 'events?action=newrecord'],
+        ]);
+        Http::fake(['*' => Http::response(['status' => 'fail', 'status_code' => 200], 200)]);
+
+        $body = $this->body();
+        $key = (string) Str::uuid();
+        $this->withHeader('Idempotency-Key', $key)->postJson(self::API.'bookings', $body)
+            ->assertUnprocessable()->assertJsonPath('status', 'rejected')->assertJsonPath('code', 'source_rejected');
+        $this->getJson(self::API.'operations/'.$key)->assertOk()->assertJsonPath('status', 'rejected');
+        $this->assertDatabaseMissing('applications', ['integration_type' => 'onec']);
+    }
+
     private function body(string $time = '16:00'): array
     {
         $result = $this->withToken($this->token)->postJson(self::API.'availability/search', [

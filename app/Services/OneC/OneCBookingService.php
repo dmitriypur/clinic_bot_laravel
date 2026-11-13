@@ -27,7 +27,18 @@ class OneCBookingService
         if ($this->shouldUseLegacyManualSlotBooking($endpoint)) {
             $payload = $this->buildManualBookingPayload($patient, $slot->doctor->external_id, $slot->start_at, $context + ['comment' => $comment]);
 
-            return $this->apiClient->createManualBooking($endpoint, $payload, strict: true);
+            $response = $this->apiClient->createManualBooking($endpoint, $payload, strict: true);
+
+            // Legacy newrecord returns a claim_id and a JSON status_code of 204 on success.
+            if (! array_key_exists('status', $response)
+                && in_array($response['http_status'], [200, 201], true)
+                && filter_var($response['status_code'], FILTER_VALIDATE_INT) === 204
+                && is_string($response['claim_id'] ?? null) && trim($response['claim_id']) !== '') {
+                $response['status'] = 'confirmed';
+                $response['status_code'] = $response['http_status'];
+            }
+
+            return $response;
         }
 
         $payload = $this->buildBookingPayload($patient, $slot, $branch, $context);

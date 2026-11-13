@@ -149,7 +149,7 @@ print(size)
 PY
 )
 require_disk "$((expanded + 1280 * 1024 * 1024))"
-tar --no-same-owner --no-same-permissions -xzf "$pending" -C "$new_release"
+(umask 022; tar --no-same-owner --no-same-permissions -xzf "$pending" -C "$new_release")
 [[ "$(< "$new_release/public/release.txt")" == "$sha" ]]
 test -s "$new_release/vendor/autoload.php"
 test -s "$new_release/public/build/manifest.json"

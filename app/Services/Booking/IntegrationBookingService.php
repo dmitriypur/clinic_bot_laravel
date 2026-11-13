@@ -27,8 +27,16 @@ class IntegrationBookingService
         private readonly OneCBookingService $onec,
     ) {}
 
-    public function create(string $clientId, ?array $allowedBranchIds, string $key, array $data): array
+    public function create(string $clientId, ?array $allowedBranchIds, ?string $key, array $data): array
     {
+        $offer = null;
+        if ($key === null) {
+            $offer = $this->offers->read($data['offer_token'], $clientId, $allowedBranchIds);
+            $key = $offer['operation_id'] ?? throw ValidationException::withMessages([
+                'idempotency_key' => 'Передайте Idempotency-Key или заново найдите свободное окно.',
+            ]);
+        }
+
         $hash = hash_hmac('sha256', json_encode($data, JSON_THROW_ON_ERROR), config('app.key'));
         $existing = $this->operation($clientId, $key);
         if ($existing) {
@@ -37,7 +45,7 @@ class IntegrationBookingService
             return $this->replay($existing, $hash);
         }
 
-        $offer = $this->offers->read($data['offer_token'], $clientId, $allowedBranchIds);
+        $offer ??= $this->offers->read($data['offer_token'], $clientId, $allowedBranchIds);
         if ($offer['expires'] <= now()->timestamp) {
             return [['code' => 'offer_expired'], 409];
         }

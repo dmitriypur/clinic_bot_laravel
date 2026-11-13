@@ -11,7 +11,7 @@ paths:
   /availability/search:
     post:
       summary: Find windows using the existing availability filters
-      description: In the enabled test branch, a client with bookings:write receives offer_token and offer_expires_at on eligible 1C windows.
+      description: In the enabled test branch, a client with bookings:write receives offer_token, offer_expires_at and operation_id on eligible 1C windows.
       responses:
         '200':
           description: Windows and schedule metadata
@@ -21,8 +21,8 @@ paths:
       parameters:
         - in: header
           name: Idempotency-Key
-          required: true
-          description: UUID v4 generated before the first send. Reuse it and the original body after a lost response.
+          required: false
+          description: Optional UUID v4 override for existing clients. When omitted, the server uses the operation_id embedded in the offer token. Reuse the original body and header settings after a lost response.
           schema: {type: string, format: uuid}
       requestBody:
         required: true

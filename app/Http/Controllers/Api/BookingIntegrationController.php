@@ -81,13 +81,13 @@ class BookingIntegrationController extends Controller
 
         $header = Validator::validate(
             ['idempotency_key' => $request->header('Idempotency-Key')],
-            ['idempotency_key' => ['required', 'uuid:4']],
+            ['idempotency_key' => ['nullable', 'uuid:4']],
         );
 
         [$result, $status] = $booking->create(
             $request->attributes->get('booking_integration_client_id'),
             $request->attributes->get('booking_integration_branch_ids'),
-            strtolower($header['idempotency_key']),
+            isset($header['idempotency_key']) ? strtolower($header['idempotency_key']) : null,
             $data,
         );
 

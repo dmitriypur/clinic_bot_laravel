@@ -79,6 +79,20 @@ class BookingWriteApiTest extends TestCase
         $this->assertDatabaseHas('onec_slots', ['external_slot_id' => 'demo-slot', 'status' => 'booked']);
     }
 
+    public function test_offer_supplies_stable_operation_id_without_a_header(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 'success', 'claim_id' => 'voice-claim'], 201)]);
+        $body = $this->body();
+        $operationId = $body['operation_id'];
+        unset($body['operation_id']);
+
+        $this->postJson(self::API.'bookings', $body)
+            ->assertCreated()->assertJsonPath('operation_id', $operationId);
+        $this->getJson(self::API.'operations/'.$operationId)->assertOk()->assertJsonPath('status', 'confirmed');
+        $this->postJson(self::API.'bookings', $body)->assertOk()->assertJsonPath('operation_id', $operationId);
+        Http::assertSentCount(1);
+    }
+
     public function test_slot_taken_after_search_is_rejected_before_sending(): void
     {
         Http::fake();
@@ -206,10 +220,11 @@ class BookingWriteApiTest extends TestCase
         $result = $this->withToken($this->token)->postJson(self::API.'availability/search', [
             'branch_ids' => [3], 'doctor_ids' => [2], 'date_from' => '2026-11-11',
             'time_from' => $time, 'time_to' => $time,
-        ])->assertOk()->assertJsonStructure(['data' => [['offer_token', 'offer_expires_at']]]);
+        ])->assertOk()->assertJsonStructure(['data' => [['offer_token', 'offer_expires_at', 'operation_id']]]);
 
         return [
             'offer_token' => $result->json('data.0.offer_token'),
+            'operation_id' => $result->json('data.0.operation_id'),
             'full_name' => 'Пациент Тестовый',
             'birth_date' => '1990-01-01',
             'phone' => '+70000000000',

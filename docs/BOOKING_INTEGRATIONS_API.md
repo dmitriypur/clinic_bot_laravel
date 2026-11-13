@@ -184,6 +184,38 @@ npx --yes newman run docs/postman/booking-write.postman_collection.json -e /пу
 3. Задайте `operation_id` как новый UUID v4. Введите данные для теста в `test_full_name_json` (имя в двойных кавычках как JSON-строка), `test_birth_date` (`YYYY-MM-DD`) и `test_phone` (`+7` и 10 цифр). Откройте **2. Create one test booking** и нажмите **Send** один раз. В запрос уже включён комментарий `ТЕСТ. Не связываться.` Он передаётся в 1С. При `201 confirmed` проверьте запись. При `202 unknown` откройте **3. Check the same operation** и нажмите **Send**. Для проверки повтора используйте то же тело и тот же `operation_id`.
 4. Отмените тестовую запись штатно через админку и проверьте отмену в 1С. Если исход `unknown`, найдите запись в 1С по врачу и времени перед повторной попыткой. Для ElevenLabs после проверки выдаётся отдельный ключ со своим списком филиалов.
 
+## Голосовая проверка в ElevenLabs
+
+После выкладки добавьте отдельного клиента `elevenlabs-pilot` в `BOOKING_INTEGRATION_CLIENTS` со списком `branch_ids: [8]` и правами `availability:read`, `bookings:write`, `operations:read`. Сохраните хэш полного ключа `elevenlabs-pilot.…` на сервере и выполните `php artisan config:cache`. Для `search_catalog` используется действующий ключ. В `search_slots` и новых инструментах используйте один Secret со значением `Bearer <полный ключ elevenlabs-pilot>`. Если `search_slots` используется другими агентами, создайте его копию для тестового агента. [Настройка Webhook Tools](https://elevenlabs.io/docs/eleven-agents/customization/tools/webhook-tools).
+
+В агенте **Тест расписания** откройте **Agent → Add Tool** и выберите **Webhook**. Для обоих инструментов добавьте заголовок **Authorization** с типом **Secret**.
+
+| **Name** | **Method** | **URL** |
+| --- | --- | --- |
+| `create_booking` | `POST` | `https://adminzrenie.ru/api/integrations/v1/bookings` |
+| `get_booking_status` | `GET` | `https://adminzrenie.ru/api/integrations/v1/operations/{operation_id}` |
+
+В **Description** инструмента `create_booking` вставьте «Создаёт запись на выбранное окно после явного согласия пациента на запись и на обработку данных». В **Body parameters** добавьте параметры с **Value Type → LLM Prompt**:
+
+| **Identifier** | **Data Type** | **Required** | **Description** |
+| --- | --- | --- | --- |
+| `offer_token` | `string` | да | Точный токен выбранного окна из последнего результата search_slots. |
+| `full_name` | `string` | да | Фамилия, имя и отчество пациента, если есть. |
+| `birth_date` | `string` | да | Дата рождения пациента в формате YYYY-MM-DD. |
+| `phone` | `string` | да | Контактный номер в формате +7 и десять цифр. |
+| `full_name_parent` | `string` | нет | ФИО родителя или представителя, если сообщено. |
+| `confirmed` | `boolean` | да | true после явного подтверждения выбранного врача, адреса, даты и времени. |
+| `privacy_consent` | `boolean` | да | true после явного согласия на обработку данных для записи. |
+| `comment` | `string` | нет | Для согласованного теста передай «ТЕСТ. Не связываться.». |
+
+Для `get_booking_status` в **Description** вставьте «Проверяет исход уже отправленной записи». В **Path parameters** задайте `operation_id` типа `string`, **Value Type → LLM Prompt**. Описание поля «UUID выбранного окна из search_slots или ответа create_booking для этой же попытки».
+
+Добавьте в **System prompt**:
+
+> Найди врача через search_catalog, затем окна через search_slots. Уточни месяц и год, если дата неоднозначна. Озвучь врача, дату, время и адрес выбранного окна. Уточни ФИО пациента, дату рождения и телефон, а при записи ребёнка — ФИО представителя. Спроси согласие на обработку данных и явное подтверждение записи. Только после обоих согласий вызови create_booking с точным offer_token этого окна. Запомни operation_id из того же окна. При потере ответа или status unknown вызови get_booking_status с этим operation_id. Пока исход неизвестен, скажи «Запись пока не подтверждена» и остановись. При confirmed скажи «Вы записаны». При slot_unavailable предложи другое время из нового поиска.
+
+В **Test AI agent** скажите «Найди свободное время у Видлацкой на Эйзенштейна, 6, на 15 ноября 2026 года». Выберите одно из предложенных окон, попросите тестовую запись и подтвердите её. В **Call history** проверьте `search_catalog → search_slots → create_booking`, ответ `confirmed` и реплику агента. Найдите запись в календаре админки и отмените её.
+
 ### Что подтверждает 1С
 
 Виджет сайта отправляет `POST /api/v1/applications` и показывает успех после ответа Laravel. При активном endpoint Laravel вызывает `bookSlot` (`bookslot`) или ручную запись (`newrecord`). Старый путь через `OneCBookingService::book` может принять JSON без статуса и использовать отправленный UUID вместо полученного ID. `bookDirect` требует возвращённый `claim_id` или `appointment_id`, но тоже допускает отсутствие статуса. В действующем HTTP-клиенте 1С отсутствует метод проверки результата по отправленному UUID.

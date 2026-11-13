@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\OnecSlot;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Str;
 
 class BookingOffer
 {
@@ -25,9 +26,11 @@ class BookingOffer
             }
 
             $window['offer_expires_at'] = $expiresAt->toIso8601String();
+            $window['operation_id'] = (string) Str::uuid();
             $window['offer_token'] = Crypt::encryptString(json_encode([
                 'purpose' => 'booking_offer',
                 'client_id' => $clientId,
+                'operation_id' => $window['operation_id'],
                 'slot' => $window['id'],
                 'branch' => $window['branch']['id'],
                 'doctor' => $window['doctor']['id'],

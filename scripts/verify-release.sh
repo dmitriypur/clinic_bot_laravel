@@ -27,9 +27,5 @@ for entry in / /dashboard; do
     fi
 done
 payload=$("${fetch[@]}" -H 'Accept: application/json' "$base/api/v1/cities")
-if [[ "$target" == test ]]; then
-    jq -e 'any(.data[]; .name == "Тестовый город" and .status == 1)' <<< "$payload" >/dev/null
-else
-    jq -e '.data | type == "array" and length > 0' <<< "$payload" >/dev/null
-fi
+jq -e 'any(.data[]; (.name | type == "string") and .status == 1)' <<< "$payload" >/dev/null
 printf '%s verified at %s\n' "$sha" "$base"

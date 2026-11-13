@@ -1,104 +1,107 @@
-name: Deploy to Production
+name: Deploy test then production
 
 on:
   push:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adminzrenie-deploy-main
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+    environment: production
+    timeout-minutes: 25
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      BOOKING_MONITORING_ENABLED: 'false'
+      DEPLOY_HOST: 147.45.184.229
+      DEPLOY_USER: adminzrenie-deploy
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '8.3'
-        extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql, dom, filter, gd, iconv, json, mbstring, pdo, zip, redis
-        coverage: none
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
-    - name: Cache Composer packages
-      id: composer-cache
-      uses: actions/cache@v3
-      with:
-        path: vendor
-        key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-php-
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, intl, pdo_mysql, pdo_sqlite, gd, zip, redis
+          coverage: none
 
-    - name: Install dependencies
-      run: composer install --prefer-dist --no-dev --optimize-autoloader
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-
-    - name: Install NPM dependencies
-      run: npm ci --legacy-peer-deps
-
-    - name: Build assets
-      run: npm run build
-
-    - name: Deploy to server
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USERNAME }}
-        key: ${{ secrets.SSH_KEY }}
-        port: ${{ secrets.PORT }}
-        script: |
-          set -euo pipefail
-
-          BRANCH="${{ github.ref_name }}"
-          echo "Deploying branch: ${BRANCH}"
-
-          # Переходим в директорию приложения
-          cd /var/www/medical-center
-          
-          # Создаем backup текущей версии
-          cp -r /var/www/medical-center /var/www/backups/medical-center-backup-$(date +%Y%m%d_%H%M%S)
-          
-          # Включаем режим обслуживания
-          php artisan down --retry=60
-          trap 'php artisan up || true' EXIT
-          
-          # Обновляем код из git
-          git fetch origin "${BRANCH}"
-          git reset --hard "origin/${BRANCH}"
-
-          # Устанавливаем зависимости
-          composer install --no-dev --optimize-autoloader --no-interaction
+      - name: Build frontend
+        run: |
           npm ci --legacy-peer-deps
           npm run build
-          
-          # Настраиваем права
-          chown -R www-data:www-data /var/www/medical-center
-          chmod -R 755 /var/www/medical-center
-          chmod -R 775 /var/www/medical-center/storage
-          chmod -R 775 /var/www/medical-center/bootstrap/cache
-          
-          # Выполняем Laravel команды
-          php artisan migrate --force
-          php artisan config:cache
-          php artisan route:cache
-          php artisan view:cache
-          php artisan booking:verify-monitoring-config
-          php artisan queue:restart
 
-          # Автоматически настраиваем и проверяем cron + очередь
-          bash scripts/setup-production-processes.sh
-          
-          # Отключаем режим обслуживания
-          php artisan up
-          trap - EXIT
-          
-          # Удаляем старые бэкапы (оставляем последние 5)
-          cd /var/www/backups
-          ls -1t | tail -n +6 | xargs -r rm -rf
-          
-          echo "Деплой завершен успешно!"
+      - name: Run application tests
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          vendor/bin/phpunit
+
+      - name: Package release
+        id: release
+        run: |
+          composer install --no-dev --no-interaction --prefer-dist --no-progress --optimize-autoloader
+          bash scripts/package-release.sh "$GITHUB_SHA" "$RUNNER_TEMP/release.tar.gz"
+          echo "digest=$(sha256sum "$RUNNER_TEMP/release.tar.gz" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: Configure pinned SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          test -n "$DEPLOY_SSH_KEY"
+          test -n "$DEPLOY_KNOWN_HOSTS"
+          umask 077
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$RUNNER_TEMP/deploy-key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$RUNNER_TEMP/deploy-known-hosts"
+          cat > "$RUNNER_TEMP/deploy-ssh-config" <<CONFIG
+          Host adminzrenie-deploy
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            BatchMode yes
+            IdentitiesOnly yes
+            IdentityFile "$RUNNER_TEMP/deploy-key"
+            UserKnownHostsFile "$RUNNER_TEMP/deploy-known-hosts"
+            GlobalKnownHostsFile /dev/null
+            HostKeyAlgorithms ssh-ed25519
+            StrictHostKeyChecking yes
+            ConnectTimeout 10
+            ServerAliveInterval 15
+            ServerAliveCountMax 3
+          CONFIG
+
+      - name: Deploy test
+        env:
+          DIGEST: ${{ steps.release.outputs.digest }}
+        run: |
+          ssh -F "$RUNNER_TEMP/deploy-ssh-config" adminzrenie-deploy \
+            "test $GITHUB_SHA $DIGEST" < "$RUNNER_TEMP/release.tar.gz"
+
+      - name: Verify public test site
+        run: bash scripts/verify-release.sh test "$GITHUB_SHA"
+
+      - name: Promote the verified release to production
+        env:
+          DIGEST: ${{ steps.release.outputs.digest }}
+        run: |
+          ssh -F "$RUNNER_TEMP/deploy-ssh-config" adminzrenie-deploy \
+            "production $GITHUB_SHA $DIGEST"
+
+      - name: Verify public production site
+        run: bash scripts/verify-release.sh production "$GITHUB_SHA"
+
+      - name: Remove SSH credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/deploy-key" "$RUNNER_TEMP/deploy-known-hosts" "$RUNNER_TEMP/deploy-ssh-config"

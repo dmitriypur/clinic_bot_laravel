@@ -1,292 +1,45 @@
-# 🚀 Настройка автоматического деплоя
+# Деплой adminzrenie.ru
 
-Инструкция по настройке автоматического деплоя Laravel приложения с GitHub Actions.
+Пуш в `main` запускает [Deploy test then production](.github/workflows/deploy.yml). GitHub Actions собирает Vite и Composer-зависимости по lock-файлам, запускает PHPUnit и упаковывает релиз с SHA-256. Сервер разворачивает архив на `test.adminzrenie.ru`. Runner проверяет HTTPS, опубликованный SHA, `/up` и JSON от `/api/v1/cities` с тестовым городом. Только после этого сервер принимает команду продвижения, повторяет проверку теста и использует тот же архив и SHA-256 на проде. Перед переключением релиза сервер сверяет SHA с актуальным `main`. Выкладки сериализуются в Actions и на сервере.
 
-## 📋 Что создано
+## Пути и доступ
 
-1. **GitHub Actions workflow** (`.github/workflows/deploy.yml`)
-2. **Деплой скрипт** (`deploy.sh`) для ручного запуска
-3. **Эта инструкция** по настройке
+| | Тест | Прод |
+|---|---|---|
+| URL | `https://test.adminzrenie.ru` | `https://adminzrenie.ru` |
+| Активный релиз | `/var/www/dev-test/current` | `/var/www/medical-center` |
+| Каталог релизов | `/var/www/dev-test/releases` | `/var/www/medical-center-releases/releases` |
+| Постоянные `.env` и `storage` | `/var/www/dev-test/shared` | `/var/www/medical-center-releases/legacy` |
+| MySQL | `adminzrenie_test` | `medical_center` |
 
-## 🔑 Этап 1: Настройка SSH ключей
+В GitHub Environment `production` находятся секреты `DEPLOY_SSH_KEY` и `DEPLOY_KNOWN_HOSTS`. SSH-пользователь `adminzrenie-deploy` принимает только команды выкладки и проверку соединения. Серверные копии `scripts/deploy-release.sh` и `scripts/verify-release.sh` принадлежат root и установлены как `/usr/local/sbin/adminzrenie-deploy` и `/usr/local/lib/adminzrenie/verify-release.sh`. При изменении этих скриптов администратор обновляет их по проверенному SSH до первого запуска, который требует новой версии.
 
-### На сервере
+Тест использует отдельный PHP-FPM-пул, ключ приложения, хранилище, сеансы и кеш. Сидер `StagingSeeder` создаёт вымышленные город, клинику, филиал, врача и кабинет. На тесте отключены 1С, мониторинг записи и фоновые задачи. Почтовый транспорт хранит сообщения только в памяти. Ключи Telegram, CRM и боевых API на тесте отсутствуют. Старая копия `clinic_bot_dev` и её конфигурация Supervisor находятся в закрытом архиве `/var/www/dev-test-archive`. Её MySQL-база `dev_bot` сохранена.
 
-```bash
-# Подключитесь к серверу
-ssh root@your-server-ip
+## Откат кода
 
-# Создайте SSH ключ для деплоя (без пароля)
-ssh-keygen -t rsa -b 4096 -C "deploy@medical-center" -f /root/.ssh/deploy_key -N ""
+Тег `rollback-before-staged-deploy-2026-11-13` фиксирует `bd4ec4677bcf0ca921b43dcae8ef41394258c997`. Исходный каталог этого прода сохранён как `/var/www/medical-center-releases/legacy`. При ошибке серверной проверки после переключения скрипт возвращает прежний путь к коду и подаёт сигнал на перезапуск очереди прода.
 
-# Добавьте публичный ключ в authorized_keys для пользователя laravel
-cat /root/.ssh/deploy_key.pub >> /home/laravel/.ssh/authorized_keys
-
-# Скопируйте приватный ключ (понадобится для GitHub Secrets)
-cat /root/.ssh/deploy_key
-```
-
-### В GitHub репозитории
-
-1. Перейдите в **Settings** → **Secrets and variables** → **Actions**
-2. Создайте следующие секреты:
-
-```
-HOST = IP адрес вашего сервера
-USERNAME = root
-SSH_KEY = ваш приватный SSH ключ для root
-PORT = 22 (или ваш SSH порт)
-```
-
-## 🛠️ Этап 2: Настройка деплой скрипта на сервере
+Для ручного отката после первой успешной выкладки дождитесь завершения активного запуска. На сервере под root возьмите тот же lock и атомарно замените ссылку. Выберите сохранённый каталог релиза или `legacy` для возврата к тегу.
 
 ```bash
-# Скопируйте деплой скрипт на сервер
-scp deploy.sh root@your-server-ip:/usr/local/bin/deploy-medical-center.sh
-
-# Сделайте его исполняемым
-ssh root@your-server-ip
-chmod +x /usr/local/bin/deploy-medical-center.sh
-
-# Создайте директорию для бэкапов
-mkdir -p /var/www/backups
+sudo flock /var/www/medical-center-releases/deploy.lock bash
+test -L /var/www/medical-center || exit 1
+release=/var/www/medical-center-releases/legacy
+test -f "$release/artisan" || exit 1
+ln -s "$release" /var/www/medical-center-releases/rollback-next
+mv -Tf /var/www/medical-center-releases/rollback-next /var/www/medical-center
+cd /var/www/medical-center
+runuser -u www-data -- /usr/bin/php8.3 artisan queue:restart
+curl -fsS https://adminzrenie.ru/up
+curl -fsS https://adminzrenie.ru/api/v1/cities | jq -e '.data | length > 0'
+exit
 ```
 
-## 🔄 Этап 3: Настройка webhook (опционально)
+Следующий пуш в `main` снова запустит выкладку. Для постоянного возврата исправьте код в `main` через `git revert`, сохранив новый workflow.
 
-### Создание webhook endpoint
+## Восстановление базы
 
-```bash
-# На сервере создайте файл webhook
-nano /var/www/webhook-deploy.php
-```
+Перед миграциями сервер создаёт сжатый MySQL-дамп и SHA-256 в `/var/backups/adminzrenie`. Для каждого сайта хранятся пять последних дампов. Выкладка и откат ссылки оставляют применённые миграции в базе.
 
-```php
-<?php
-// Простой webhook для автоматического деплоя
-// Файл: /var/www/webhook-deploy.php
-
-$secret = 'your-webhook-secret-here'; // Замените на ваш секрет
-$payload = file_get_contents('php://input');
-$signature = hash_hmac('sha256', $payload, $secret);
-
-// Проверяем подпись GitHub
-$github_signature = $_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? '';
-
-if (!hash_equals($signature, str_replace('sha256=', '', $github_signature))) {
-    http_response_code(403);
-    exit('Invalid signature');
-}
-
-$data = json_decode($payload, true);
-
-// Проверяем что это push в main/master ветку
-if ($data['ref'] === 'refs/heads/main' || $data['ref'] === 'refs/heads/master') {
-    // Логируем событие
-    file_put_contents('/tmp/webhook.log', date('Y-m-d H:i:s') . " - Deploy triggered\n", FILE_APPEND);
-    
-    // Запускаем деплой в фоне
-    exec('sudo /usr/local/bin/deploy-medical-center.sh > /tmp/deploy.log 2>&1 &');
-    
-    echo "Deploy started";
-} else {
-    echo "Not a main branch push";
-}
-?>
-```
-
-### Настройка Nginx для webhook
-
-```bash
-# Добавьте location в конфигурацию Nginx
-nano /etc/nginx/sites-available/medical-center
-```
-
-Добавьте в секцию server:
-
-```nginx
-# Webhook для автоматического деплоя
-location /webhook-deploy {
-    try_files $uri /webhook-deploy.php$is_args$args;
-}
-
-location ~ ^/webhook-deploy\.php$ {
-    include snippets/fastcgi-php.conf;
-    fastcgi_pass unix:/run/php/php8.2-fpm.sock;
-    fastcgi_param SCRIPT_FILENAME /var/www/webhook-deploy.php;
-    include fastcgi_params;
-}
-```
-
-```bash
-# Перезагрузите Nginx
-systemctl reload nginx
-```
-
-### Настройка webhook в GitHub
-
-1. Перейдите в **Settings** → **Webhooks** → **Add webhook**
-2. Заполните:
-   - **Payload URL**: `https://your-domain.com/webhook-deploy`
-   - **Content type**: `application/json`
-   - **Secret**: ваш секрет из webhook-deploy.php
-   - **Events**: Just the push event
-
-## ⚙️ Этап 4: Настройка GitHub Actions
-
-### Обновите секреты в GitHub
-
-Добавьте дополнительный секрет:
-```
-DOWNLOAD_URL = https://api.github.com/repos/your-username/adminzrenie-laravel/actions/artifacts
-```
-
-### Настройте доступ к GitHub API
-
-Создайте Personal Access Token:
-1. GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**
-2. Создайте токен с правами `repo` и `actions:read`
-3. Добавьте в GitHub Secrets как `GITHUB_TOKEN`
-
-## 🧪 Этап 5: Тестирование
-
-### Тест 1: Ручной деплой
-
-```bash
-# На сервере
-sudo /usr/local/bin/deploy-medical-center.sh
-```
-
-### Тест 2: Автоматический деплой
-
-1. Сделайте изменения в коде
-2. Закоммитьте в main/master ветку
-3. Запушьте в GitHub
-4. Проверьте выполнение в **Actions** tab
-
-### Тест 3: Webhook (если настроен)
-
-```bash
-# Тест webhook вручную
-curl -X POST https://your-domain.com/webhook-deploy \
-  -H "Content-Type: application/json" \
-  -H "X-Hub-Signature-256: sha256=test" \
-  -d '{"ref":"refs/heads/main"}'
-```
-
-## 📊 Мониторинг деплоев
-
-### Проверка логов
-
-```bash
-# Логи деплоя
-tail -f /tmp/deploy.log
-
-# Логи webhook
-tail -f /tmp/webhook.log
-
-# Логи Laravel
-tail -f /var/www/medical-center/storage/logs/laravel.log
-
-# Логи Nginx
-tail -f /var/log/nginx/medical-center_error.log
-```
-
-### Проверка статуса сервисов
-
-```bash
-# Статус всех сервисов
-sudo systemctl status nginx php8.2-fpm mysql redis-server supervisor
-
-# Статус воркеров
-sudo supervisorctl status
-```
-
-## 🆘 Откат к предыдущей версии
-
-```bash
-# Автоматический откат
-sudo /usr/local/bin/deploy-medical-center.sh --rollback
-
-# Или ручной откат
-cd /var/www/backups
-ls -la  # Найдите нужный бэкап
-sudo rm -rf /var/www/medical-center
-sudo cp -r medical-center-backup-YYYYMMDD_HHMMSS /var/www/medical-center
-sudo systemctl restart php8.2-fpm
-sudo supervisorctl restart laravel-worker:*
-```
-
-## 🔧 Настройка уведомлений
-
-### Telegram уведомления о деплое
-
-Добавьте в конец деплой скрипта:
-
-```bash
-# Уведомление в Telegram
-send_telegram_notification() {
-    local message="$1"
-    local bot_token="YOUR_BOT_TOKEN"
-    local chat_id="YOUR_CHAT_ID"
-    
-    curl -s -X POST "https://api.telegram.org/bot${bot_token}/sendMessage" \
-        -d chat_id="${chat_id}" \
-        -d text="${message}" \
-        -d parse_mode="HTML" > /dev/null
-}
-
-# В конце функции main()
-send_telegram_notification "✅ <b>Medical Center</b> успешно обновлен до версии $(git rev-parse --short HEAD)"
-```
-
-### Email уведомления
-
-Настройте в Laravel:
-
-```php
-// В AppServiceProvider или создайте Event/Listener
-Event::listen('deployment.completed', function ($version) {
-    Mail::to('admin@your-domain.com')->send(new DeploymentNotification($version));
-});
-```
-
-## 📋 Чек-лист настройки
-
-### ✅ SSH и доступы
-- [ ] SSH ключи созданы
-- [ ] Ключи добавлены в GitHub Secrets
-- [ ] Доступ с GitHub Actions на сервер работает
-
-### ✅ Скрипты
-- [ ] deploy.sh скопирован на сервер
-- [ ] Скрипт исполняемый и работает
-- [ ] Права доступа настроены
-
-### ✅ GitHub Actions
-- [ ] Workflow файл создан
-- [ ] Все секреты настроены
-- [ ] Первый деплой прошел успешно
-
-### ✅ Webhook (опционально)
-- [ ] webhook-deploy.php создан
-- [ ] Nginx настроен
-- [ ] GitHub webhook настроен
-- [ ] Тестирование прошло успешно
-
-### ✅ Мониторинг
-- [ ] Логирование работает
-- [ ] Уведомления настроены
-- [ ] Бэкапы создаются
-
-## 🎯 Результат
-
-После настройки у вас будет:
-
-1. **Автоматический деплой** при push в main/master
-2. **Безопасное обновление** с резервными копиями
-3. **Атомарная замена** без простоя
-4. **Автоматический откат** при ошибках
-5. **Мониторинг и уведомления**
-
-Деплой будет происходить автоматически при каждом обновлении кода в GitHub! 🚀
+Для восстановления БД выберите дамп по времени и SHA, проверьте `sha256sum -c <файл>.sha256` из каталога дампов и `gzip -t <файл>`. Проверьте импорт в отдельную закрытую базу восстановления и сравните схему и контрольные данные. Восстановление боевой БД требует отдельного согласования и остановки записей сайта, планировщика и очереди на время переключения. Оно может потерять изменения после времени дампа.

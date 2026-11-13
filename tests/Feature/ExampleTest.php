@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Filament\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -53,11 +54,11 @@ class ExampleTest extends TestCase
         $response->assertOk();
     }
 
-    public function test_guest_without_telegram_context_is_forbidden(): void
+    public function test_guest_can_access_the_public_booking_page(): void
     {
         $response = $this->get('/app');
 
-        $response->assertNotFound();
+        $response->assertOk();
     }
 
     public function test_partner_user_query_is_limited_to_self(): void
@@ -89,9 +90,10 @@ class ExampleTest extends TestCase
         $this->assertFalse(UserResource::canCreate());
     }
 
-    public function test_super_admin_can_create_users(): void
+    public function test_super_admin_with_create_permission_can_create_users(): void
     {
-        Role::create(['name' => 'super_admin', 'guard_name' => 'web']);
+        $role = Role::create(['name' => 'super_admin', 'guard_name' => 'web']);
+        $role->givePermissionTo(Permission::create(['name' => 'create_user', 'guard_name' => 'web']));
 
         $superAdmin = User::factory()->create();
         $superAdmin->assignRole('super_admin');

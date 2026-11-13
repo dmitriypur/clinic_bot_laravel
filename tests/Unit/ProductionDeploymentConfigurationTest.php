@@ -9,9 +9,11 @@ class ProductionDeploymentConfigurationTest extends TestCase
     public function test_automatic_deploy_validates_monitoring_without_overwriting_server_environment(): void
     {
         $workflow = file_get_contents(dirname(__DIR__, 2).'/.github/workflows/deploy.yml');
+        $deploy = file_get_contents(dirname(__DIR__, 2).'/scripts/deploy-release.sh');
 
-        $this->assertStringContainsString('booking:verify-monitoring-config', $workflow);
-        $this->assertStringContainsString('scripts/setup-production-processes.sh', $workflow);
+        $this->assertStringContainsString('booking:verify-monitoring-config', $deploy);
+        $this->assertStringContainsString('queue:restart', $deploy);
+        $this->assertStringContainsString('systemctl is-active --quiet cron', $deploy);
         $this->assertStringNotContainsString('BOOKING_MONITORING_BITRIX_WEBHOOK_URL:', $workflow);
         $this->assertStringNotContainsString('configure-booking-monitoring-env.sh', $workflow);
     }

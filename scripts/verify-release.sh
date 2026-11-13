@@ -18,6 +18,14 @@ fi
 base="https://$host"
 [[ "$("${fetch[@]}" "$base/release.txt?sha=$sha")" == "$sha" ]]
 "${fetch[@]}" "$base/up" >/dev/null
+for entry in / /dashboard; do
+    landing=$("${fetch[@]}" --location --max-redirs 3 --output /dev/null \
+        --write-out '%{http_code} %{url_effective}' "$base$entry")
+    if [[ "$landing" != "200 $base/login" ]]; then
+        printf 'Unexpected response for %s%s: %s\n' "$base" "$entry" "$landing" >&2
+        exit 1
+    fi
+done
 payload=$("${fetch[@]}" -H 'Accept: application/json' "$base/api/v1/cities")
 if [[ "$target" == test ]]; then
     jq -e 'any(.data[]; .name == "Тестовый город" and .status == 1)' <<< "$payload" >/dev/null

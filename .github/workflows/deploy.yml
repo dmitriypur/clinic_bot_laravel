@@ -52,6 +52,7 @@ jobs:
       - name: Package release
         id: release
         run: |
+          php artisan clear-compiled
           composer install --no-dev --no-interaction --prefer-dist --no-progress --optimize-autoloader
           bash scripts/package-release.sh "$GITHUB_SHA" "$RUNNER_TEMP/release.tar.gz"
           echo "digest=$(sha256sum "$RUNNER_TEMP/release.tar.gz" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"

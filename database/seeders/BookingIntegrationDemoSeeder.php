@@ -8,6 +8,8 @@ use App\Models\City;
 use App\Models\Clinic;
 use App\Models\Doctor;
 use App\Models\DoctorShift;
+use App\Models\IntegrationEndpoint;
+use App\Models\OnecSlot;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -51,7 +53,31 @@ class BookingIntegrationDemoSeeder extends Seeder
             $this->schedule($center, $pediatrician, [[1, '16:15']]);
             $this->schedule($park, $moscowDoctor, [[1, '16:00']]);
             $this->schedule($center, $olderChildrenDoctor, [[1, '16:00']]);
+
+            if ($port = getenv('BOOKING_DEMO_ONEC_PORT')) {
+                $this->writeDemo($park, $elena, (int) $port);
+            }
         });
+    }
+
+    private function writeDemo(Branch $branch, Doctor $doctor, int $port): void
+    {
+        $branch->update(['integration_mode' => 'onec_push']);
+        $doctor->update(['external_id' => 'demo-doctor']);
+        IntegrationEndpoint::create([
+            'branch_id' => $branch->id, 'type' => IntegrationEndpoint::TYPE_ONEC, 'name' => '1C demo',
+            'base_url' => "http://127.0.0.1:{$port}", 'is_active' => true, 'credentials' => ['timeout' => 2],
+        ]);
+
+        $tomorrow = CarbonImmutable::parse(getenv('BOOKING_DEMO_DATE'), 'Europe/Moscow')->addDay()->startOfDay();
+        foreach ([16 => 'demo-free', 17 => 'demo-occupied', 18 => 'demo-unknown'] as $hour => $externalId) {
+            $start = $tomorrow->setHour($hour);
+            OnecSlot::create([
+                'clinic_id' => $branch->clinic_id, 'branch_id' => $branch->id, 'doctor_id' => $doctor->id,
+                'external_slot_id' => $externalId, 'start_at' => $start, 'end_at' => $start->addMinutes(30),
+                'status' => OnecSlot::STATUS_FREE, 'synced_at' => now(),
+            ]);
+        }
     }
 
     private function branch(City $city, Clinic $clinic, string $name, string $address): Branch

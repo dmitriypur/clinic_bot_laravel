@@ -42,7 +42,7 @@ class OneCApiClient
      *
      * @throws OneCApiException
      */
-    public function bookSlot(IntegrationEndpoint $endpoint, array $payload): array
+    public function bookSlot(IntegrationEndpoint $endpoint, array $payload, bool $strict = false): array
     {
         // Сохраняем обратную совместимость со старыми филиалами,
         // где в UI были только manual_booking_* поля.
@@ -64,7 +64,7 @@ class OneCApiClient
             $options['headers']['Authorization'] = $authorization;
         }
 
-        $response = $this->request($endpoint, 'POST', $path, $options);
+        $response = $this->request($endpoint, 'POST', $path, $options, $strict);
 
         $data = $response->json();
 
@@ -73,6 +73,10 @@ class OneCApiClient
                 'endpoint_id' => $endpoint->id,
                 'error_category' => 'invalid_response',
             ]);
+        }
+
+        if ($strict) {
+            $data['http_status'] = $response->status();
         }
 
         if (! array_key_exists('status_code', $data)) {
@@ -126,7 +130,7 @@ class OneCApiClient
      *
      * @throws OneCApiException
      */
-    public function createManualBooking(IntegrationEndpoint $endpoint, array $payload): array
+    public function createManualBooking(IntegrationEndpoint $endpoint, array $payload, bool $strict = false): array
     {
         $path = Arr::get($endpoint->credentials, 'manual_booking_path', 'events?action=newrecord');
 
@@ -141,12 +145,16 @@ class OneCApiClient
             $options['headers']['Authorization'] = $authorization;
         }
 
-        $response = $this->request($endpoint, 'POST', $path, $options);
+        $response = $this->request($endpoint, 'POST', $path, $options, $strict);
 
         $data = $response->json();
 
         if (! is_array($data)) {
             $data = $this->decodeResponse($response);
+        }
+
+        if ($strict) {
+            $data['http_status'] = $response->status();
         }
 
         if (! array_key_exists('status_code', $data)) {
@@ -161,14 +169,21 @@ class OneCApiClient
      *
      * @throws OneCApiException
      */
-    protected function request(IntegrationEndpoint $endpoint, string $method, string $uri, array $options = []): Response
+    protected function request(IntegrationEndpoint $endpoint, string $method, string $uri, array $options = [], bool $strict = false): Response
     {
         $pending = $this->prepareRequest($endpoint);
+        if ($strict) {
+            $pending->withoutRedirecting();
+        }
 
         try {
             // Используем Http\Client\Factory, чтобы единообразно логировать и ловить ошибки сети.
             $response = $pending->send($method, $this->buildUri($endpoint, $uri), $options);
         } catch (\Throwable $exception) {
+            if ($strict) {
+                throw new OneCApiException('Не удалось связаться с 1С.');
+            }
+
             $timeout = (int) (($endpoint->credentials['timeout'] ?? null) ?? config('services.onec.timeout', 15));
 
             Log::error('Ошибка сети при обращении к 1С.', [
@@ -186,11 +201,13 @@ class OneCApiClient
         }
 
         if ($response->failed()) {
-            Log::warning('1С вернула ошибку.', [
-                'endpoint_id' => $endpoint->id,
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
+            if (! $strict) {
+                Log::warning('1С вернула ошибку.', [
+                    'endpoint_id' => $endpoint->id,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+            }
 
             throw new OneCApiException('1С вернула ошибку.', [
                 'endpoint_id' => $endpoint->id,

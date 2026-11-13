@@ -22,6 +22,10 @@ Route::prefix('integrations/v1')->middleware('throttle:120,1,booking-integration
         ->middleware(RequireBookingIntegrationAccess::class.':catalog:read');
     Route::post('availability/search', [BookingIntegrationController::class, 'availability'])
         ->middleware(RequireBookingIntegrationAccess::class.':availability:read');
+    Route::post('bookings', [BookingIntegrationController::class, 'book'])
+        ->middleware(RequireBookingIntegrationAccess::class.':bookings:write');
+    Route::get('operations/{id}', [BookingIntegrationController::class, 'operation'])
+        ->whereUuid('id')->middleware(RequireBookingIntegrationAccess::class.':operations:read');
 });
 
 Route::prefix('v1')->group(function () {

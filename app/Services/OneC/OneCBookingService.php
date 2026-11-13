@@ -18,6 +18,24 @@ class OneCBookingService
 {
     public function __construct(private readonly OneCApiClient $apiClient) {}
 
+    public function requestSelectedSlot(Application $patient, OnecSlot $slot, string $requestId, ?string $comment): array
+    {
+        $branch = $slot->branch;
+        $endpoint = $this->validateEndpoint($branch);
+        $context = ['appointment_id' => $requestId, 'appointment_source' => 'Интеграция'];
+
+        if ($this->shouldUseLegacyManualSlotBooking($endpoint)) {
+            $payload = $this->buildManualBookingPayload($patient, $slot->doctor->external_id, $slot->start_at, $context + ['comment' => $comment]);
+
+            return $this->apiClient->createManualBooking($endpoint, $payload, strict: true);
+        }
+
+        $payload = $this->buildBookingPayload($patient, $slot, $branch, $context);
+        $payload['comment'] = trim(implode('. ', array_filter([$comment, $payload['comment']])));
+
+        return $this->apiClient->bookSlot($endpoint, $payload, strict: true);
+    }
+
     /**
      * Бронирование слота через 1С.
      *

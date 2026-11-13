@@ -1,0 +1,342 @@
+{
+  "info": {
+    "name": "Laravel Booking · test write",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{write_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Search · three test windows",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/integrations/v1/availability/search",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"branch_ids\": [\n    3\n  ],\n  \"doctor_ids\": [\n    2\n  ],\n  \"date_from\": \"{{tomorrow}}\",\n  \"time_from\": \"16:00\",\n  \"time_to\": \"18:00\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set(\"booking_key\", pm.variables.replaceIn(\"{{$guid}}\"));",
+              "pm.collectionVariables.set(\"busy_key\", pm.variables.replaceIn(\"{{$guid}}\"));",
+              "pm.collectionVariables.set(\"unknown_key\", pm.variables.replaceIn(\"{{$guid}}\"));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const windows = pm.response.json().data;",
+              "pm.test(\"Three offers\", () => pm.expect(windows).to.have.lengthOf(3));",
+              "for (const [i, label] of [\"free\", \"busy\", \"unknown\"].entries()) {",
+              "    const token = windows[i] && windows[i].offer_token;",
+              "    pm.test(\"Offer \" + label, () => pm.expect(token).to.be.a(\"string\"));",
+              "    pm.collectionVariables.set(label + \"_offer\", token);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create · confirmed",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{booking_key}}"
+          }
+        ],
+        "url": "{{base_url}}/api/integrations/v1/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"offer_token\": \"{{free_offer}}\",\n  \"full_name\": \"Пациент Тестовый\",\n  \"birth_date\": \"1990-01-01\",\n  \"phone\": \"+70000000000\",\n  \"confirmed\": true,\n  \"privacy_consent\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"status\", () => pm.expect(pm.response.json().status).to.eql(\"confirmed\"));",
+              "pm.test(\"operation_id\", () => pm.expect(pm.response.json().operation_id).to.eql(pm.collectionVariables.get(\"booking_key\")));",
+              "pm.collectionVariables.set(\"booking_id\", pm.response.json().booking_id);",
+              "pm.test(\"Booking ID\", () => pm.expect(pm.response.json().booking_id).to.be.a(\"string\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Status · confirmed",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/integrations/v1/operations/{{booking_key}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"status\", () => pm.expect(pm.response.json().status).to.eql(\"confirmed\"));",
+              "pm.test(\"booking_id\", () => pm.expect(pm.response.json().booking_id).to.eql(pm.collectionVariables.get(\"booking_id\")));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Replay · same booking",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{booking_key}}"
+          }
+        ],
+        "url": "{{base_url}}/api/integrations/v1/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"offer_token\": \"{{free_offer}}\",\n  \"full_name\": \"Пациент Тестовый\",\n  \"birth_date\": \"1990-01-01\",\n  \"phone\": \"+70000000000\",\n  \"confirmed\": true,\n  \"privacy_consent\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"status\", () => pm.expect(pm.response.json().status).to.eql(\"confirmed\"));",
+              "pm.test(\"booking_id\", () => pm.expect(pm.response.json().booking_id).to.eql(pm.collectionVariables.get(\"booking_id\")));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create · source says occupied",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{busy_key}}"
+          }
+        ],
+        "url": "{{base_url}}/api/integrations/v1/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"offer_token\": \"{{busy_offer}}\",\n  \"full_name\": \"Пациент Тестовый\",\n  \"birth_date\": \"1990-01-01\",\n  \"phone\": \"+70000000000\",\n  \"confirmed\": true,\n  \"privacy_consent\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+              "pm.test(\"status\", () => pm.expect(pm.response.json().status).to.eql(\"rejected\"));",
+              "pm.test(\"code\", () => pm.expect(pm.response.json().code).to.eql(\"slot_unavailable\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create · source reply incomplete",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{unknown_key}}"
+          }
+        ],
+        "url": "{{base_url}}/api/integrations/v1/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"offer_token\": \"{{unknown_offer}}\",\n  \"full_name\": \"Пациент Тестовый\",\n  \"birth_date\": \"1990-01-01\",\n  \"phone\": \"+70000000000\",\n  \"confirmed\": true,\n  \"privacy_consent\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 202\", () => pm.response.to.have.status(202));",
+              "pm.test(\"status\", () => pm.expect(pm.response.json().status).to.eql(\"unknown\"));",
+              "pm.test(\"operation_id\", () => pm.expect(pm.response.json().operation_id).to.eql(pm.collectionVariables.get(\"unknown_key\")));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Status · same unresolved operation",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/integrations/v1/operations/{{unknown_key}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 202\", () => pm.response.to.have.status(202));",
+              "pm.test(\"status\", () => pm.expect(pm.response.json().status).to.eql(\"unknown\"));",
+              "pm.test(\"operation_id\", () => pm.expect(pm.response.json().operation_id).to.eql(pm.collectionVariables.get(\"unknown_key\")));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Replay · same unresolved operation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{unknown_key}}"
+          }
+        ],
+        "url": "{{base_url}}/api/integrations/v1/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"offer_token\": \"{{unknown_offer}}\",\n  \"full_name\": \"Пациент Тестовый\",\n  \"birth_date\": \"1990-01-01\",\n  \"phone\": \"+70000000000\",\n  \"confirmed\": true,\n  \"privacy_consent\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 202\", () => pm.response.to.have.status(202));",
+              "pm.test(\"status\", () => pm.expect(pm.response.json().status).to.eql(\"unknown\"));",
+              "pm.test(\"operation_id\", () => pm.expect(pm.response.json().operation_id).to.eql(pm.collectionVariables.get(\"unknown_key\")));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

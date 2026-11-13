@@ -1,0 +1,100 @@
+openapi: 3.0.3
+info:
+  title: Laravel Booking – test write API
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:8011/api/integrations/v1
+  - url: https://adminzrenie.ru/api/integrations/v1
+security:
+  - Bearer: []
+paths:
+  /availability/search:
+    post:
+      summary: Find windows using the existing availability filters
+      description: In the enabled test branch, a client with bookings:write receives offer_token and offer_expires_at on eligible 1C windows.
+      responses:
+        '200':
+          description: Windows and schedule metadata
+  /bookings:
+    post:
+      summary: Book a selected window after confirmation
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          description: UUID v4 generated before the first send. Reuse it and the original body after a lost response.
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [offer_token, full_name, birth_date, phone, confirmed, privacy_consent]
+              properties:
+                offer_token: {type: string, maxLength: 2048}
+                full_name: {type: string, maxLength: 255}
+                full_name_parent: {type: string, maxLength: 255, nullable: true}
+                comment: {type: string, maxLength: 500, nullable: true}
+                birth_date: {type: string, format: date}
+                phone: {type: string, pattern: '^\+?[78][0-9]{10}$'}
+                confirmed: {type: boolean, enum: [true]}
+                privacy_consent: {type: boolean, enum: [true]}
+      responses:
+        '200':
+          description: Replay of a confirmed operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Operation'}
+        '201':
+          description: Source confirmed the booking
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Operation'}
+        '202':
+          description: Result unresolved. Read the same operation and preserve the same key.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Operation'}
+        '401': {description: Invalid or missing Bearer token}
+        '403': {description: 'Missing bookings:write scope'}
+        '404': {description: Offer unavailable to this client or test write disabled}
+        '409': {description: 'slot_unavailable, offer_expired or idempotency_conflict'}
+        '422': {description: Invalid request or patient is outside the admission age range}
+        '429': {description: Rate limit exceeded}
+        '503': {description: Source or schedule unavailable before dispatch}
+  /operations/{id}:
+    get:
+      summary: Read the outcome for the same client and Idempotency-Key
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Known final outcome
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Operation'}
+        '202':
+          description: Outcome unresolved
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Operation'}
+        '401': {description: Invalid or missing Bearer token}
+        '403': {description: 'Missing operations:read scope'}
+        '404': {description: Operation unavailable to this client}
+        '429': {description: Rate limit exceeded}
+components:
+  securitySchemes:
+    Bearer: {type: http, scheme: bearer}
+  schemas:
+    Operation:
+      type: object
+      required: [operation_id, status]
+      properties:
+        operation_id: {type: string, format: uuid}
+        status: {type: string, enum: [confirmed, rejected, unknown]}
+        code: {type: string}
+        booking_id: {type: string}

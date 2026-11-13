@@ -29,6 +29,8 @@ class RequireBookingIntegrationAccess
             return response()->json(['code' => 'insufficient_scope', 'message' => 'Недостаточно прав для запроса.'], 403);
         }
 
+        $request->attributes->set('booking_integration_client_id', $clientId);
+        $request->attributes->set('booking_integration_scopes', $scopes);
         $request->attributes->set('booking_integration_branch_ids', $branchIds);
         $request->headers->set('Accept', 'application/json');
 

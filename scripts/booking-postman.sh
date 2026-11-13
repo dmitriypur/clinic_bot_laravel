@@ -9,6 +9,10 @@ booking_demo_dir="$(mktemp -d "${TMPDIR:-/tmp}/booking-postman.XXXXXX")"
 touch "$booking_demo_dir/booking.sqlite"
 
 export APP_ENV=local APP_DEBUG=false
+export BOOKING_WRITE_BRANCH_IDS='[]' BOOKING_DEMO_ONEC_PORT=""
+if [[ -n "${2:-}" ]]; then
+  export BOOKING_WRITE_BRANCH_IDS='[3]' BOOKING_DEMO_ONEC_PORT="$2"
+fi
 export APP_CONFIG_CACHE="$booking_demo_dir/config.php" APP_ROUTES_CACHE="$booking_demo_dir/routes.php"
 export APP_KEY="base64:$(php -r 'echo base64_encode(random_bytes(32));')"
 export DB_CONNECTION=sqlite DB_URL="" DB_DATABASE="$booking_demo_dir/booking.sqlite"
@@ -30,13 +34,20 @@ export BOOKING_INTEGRATION_CLIENTS="$(php -r '
         "fallback_end" => $today->modify("+31 days")->format("Y-m-d"),
     ];
     $clients = [];
-    foreach ([
+    $demoClients = [
         "postman" => ["booking_token", ["catalog:read", "availability:read"]],
         "catalog-demo" => ["catalog_token", ["catalog:read"]],
-    ] as $clientId => [$key, $scopes]) {
+    ];
+    if (getenv("BOOKING_DEMO_ONEC_PORT")) {
+        $demoClients["postman-write"] = ["write_token", ["availability:read", "bookings:write", "operations:read"]];
+    }
+    foreach ($demoClients as $clientId => [$key, $scopes]) {
         $token = $clientId.".".bin2hex(random_bytes(32));
         $values[$key] = $token;
         $clients[$clientId] = ["token_hash" => hash("sha256", $token), "scopes" => $scopes];
+        if ($clientId === "postman-write") {
+            $clients[$clientId]["branch_ids"] = [3];
+        }
     }
 
     $variables = [];
@@ -62,4 +73,12 @@ export BOOKING_INTEGRATION_CLIENTS="$(php -r '
 printf '\nPostman environment: %s\nTemporary SQLite database: %s\n\n' \
   "$booking_demo_dir/booking.postman_environment.json" "$DB_DATABASE"
 
-exec php artisan serve --host=127.0.0.1 --port="$booking_port" --tries=1 --no-reload
+if [[ -z "$BOOKING_DEMO_ONEC_PORT" ]]; then
+  exec php artisan serve --host=127.0.0.1 --port="$booking_port" --tries=1 --no-reload
+fi
+
+export BOOKING_DEMO_ONEC_STATE="$booking_demo_dir/onec.json"
+php -S "127.0.0.1:$BOOKING_DEMO_ONEC_PORT" "$PWD/scripts/booking-onec-demo.php" >"$booking_demo_dir/onec.log" 2>&1 &
+booking_onec_pid=$!
+trap 'kill "$booking_onec_pid" 2>/dev/null || true' EXIT
+php artisan serve --host=127.0.0.1 --port="$booking_port" --tries=1 --no-reload

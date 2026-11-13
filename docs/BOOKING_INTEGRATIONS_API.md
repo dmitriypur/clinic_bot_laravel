@@ -1,4 +1,4 @@
-# API каталога и свободных окон
+# API каталога, свободных окон и тестовой записи
 
 Этап 1 платформы записи. Оба маршрута используют один каталог Laravel и доступны по Bearer-ключу. `CatalogService` и `AvailabilityService` можно вызывать из будущих адаптеров с их собственным набором разрешённых филиалов.
 
@@ -151,10 +151,49 @@ BOOKING_INTEGRATION_CLIENTS='{"postman":{"token_hash":"<sha256 полного с
 
 Без `branch_ids` ключ действует для всех активных филиалов. Пустой список закрывает доступ ко всем филиалам. Для отзыва удалите запись клиента, для ротации замените хэш. После изменения окружения обновите кэш конфигурации, если он используется. Рабочие ключи и локальные файлы окружения Postman храните за пределами Git.
 
+## Запись в выбранное окно на локальном контуре
+
+1. Выполните `bash scripts/booking-postman.sh 8011 8012`. Laravel слушает на `127.0.0.1:8011`, имитатор 1С — на `127.0.0.1:8012`. Скрипт создаёт временную SQLite-базу с вымышленными пациентами и печатает путь к приватному окружению Postman. Для нового прогона перезапустите скрипт.
+2. В Postman нажмите **Import** и импортируйте [коллекцию Laravel Booking · test write](postman/booking-write.postman_collection.json) и напечатанный файл `booking.postman_environment.json`. В списке окружений выберите **Laravel Booking · local demo**.
+3. Откройте коллекцию и нажмите **Run**. В **Run type** выберите **Functional → Local**, затем нажмите **Start run**. Коллекция ищет три окна у Видлацкой Елены в тестовом филиале 3 и передаёт возвращённые предложения в следующие запросы. [Postman Collection Runner](https://learning.postman.com/latest-v-12/docs/tests-and-scripts/running-collections/intro-to-collection-runs).
+4. Ожидаемые ответы по порядку — поиск `200`, создание `201 confirmed`, статус `200 confirmed`, повтор `200` с тем же `booking_id`, занятое окно `409 slot_unavailable`, затем три ответа `202 unknown` на неполный ответ 1С, проверку статуса и повтор.
+
+Для запуска из терминала:
+
+```sh
+npx --yes newman run docs/postman/booking-write.postman_collection.json -e /путь/к/booking.postman_environment.json
+```
+
+### Контракт записи
+
+[OpenAPI](booking-write.openapi.yaml) описывает создание и проверку статуса. Запись открывается только для филиалов, указанных и в `BOOKING_WRITE_BRANCH_IDS`, и в `branch_ids` клиента. По умолчанию список включённых филиалов пуст. Демо выдаёт отдельный Bearer-ключ с правами `availability:read`, `bookings:write`, `operations:read` и доступом к филиалу 3. Окна `onec_push` для этого ключа содержат `offer_token` и `offer_expires_at`. Предложение привязано к клиенту и действует 10 минут.
+
+- В **Headers** запроса `POST /api/integrations/v1/bookings` передайте `Idempotency-Key` со значением UUID v4, созданным при подтверждении. В **Body → raw → JSON** передайте `offer_token`, `full_name`, `birth_date` в формате `YYYY-MM-DD`, `phone`, при наличии `full_name_parent`, а также `confirmed: true` и `privacy_consent: true`. Эти поля фиксируют полученные подтверждение и согласие.
+- После потери ответа выполните `GET /api/integrations/v1/operations/{id}` с тем же Bearer-ключом, подставив в `{id}` значение исходного `Idempotency-Key`. Если операция ещё не найдена, повторите создание с исходным телом и тем же ключом. Для уже принятой операции повтор работает и после истечения предложения.
+- `confirmed` означает подтверждённую запись. `slot_unavailable` означает, что нужно заново поискать время. `unknown` означает, что исход не установлен. Laravel сохраняет UUID для сверки и блокирует повторную отправку по той же операции и запись в пересекающееся окно через этот API.
+
+## Одна ручная проверка на adminzrenie.ru
+
+1. После выкладки и миграции добавьте на сервере `BOOKING_WRITE_BRANCH_IDS='[8]'`, если выбран филиал 8. В существующий JSON `BOOKING_INTEGRATION_CLIENTS` добавьте отдельного клиента `postman-write`, сохранив текущих клиентов. Используйте ID выбранного филиала в обоих списках. Обновите конфигурацию командой `php artisan config:cache`.
+
+   ```json
+   {"postman-write":{"token_hash":"<sha256 полного токена postman-write.…>","scopes":["availability:read","bookings:write","operations:read"],"branch_ids":[8]}}
+   ```
+
+2. Нажмите **Import** и выберите [коллекцию для ручной проверки](postman/booking-write-production.postman_collection.json). В **Environments** задайте локальные значения `write_token`, `branch_id`, `doctor_id`, `appointment_date` (`YYYY-MM-DD`). Откройте **1. Find an available window** и нажмите **Send**. Проверьте врача, адрес и время, затем скопируйте `offer_token` нужного окна в одноимённую переменную.
+3. Задайте `operation_id` как новый UUID v4. Введите данные для теста в `test_full_name_json` (имя в двойных кавычках как JSON-строка), `test_birth_date` (`YYYY-MM-DD`) и `test_phone` (`+7` и 10 цифр). Откройте **2. Create one test booking** и нажмите **Send** один раз. В запрос уже включён комментарий `ТЕСТ. Не связываться.` Он передаётся в 1С. При `201 confirmed` проверьте запись. При `202 unknown` откройте **3. Check the same operation** и нажмите **Send**. Для проверки повтора используйте то же тело и тот же `operation_id`.
+4. Отмените тестовую запись штатно через админку и проверьте отмену в 1С. Если исход `unknown`, найдите запись в 1С по врачу и времени перед повторной попыткой. Для ElevenLabs после проверки выдаётся отдельный ключ со своим списком филиалов.
+
+### Что подтверждает 1С
+
+Виджет сайта отправляет `POST /api/v1/applications` и показывает успех после ответа Laravel. При активном endpoint Laravel вызывает `bookSlot` (`bookslot`) или ручную запись (`newrecord`). Старый путь через `OneCBookingService::book` может принять JSON без статуса и использовать отправленный UUID вместо полученного ID. `bookDirect` требует возвращённый `claim_id` или `appointment_id`, но тоже допускает отсутствие статуса. В действующем HTTP-клиенте 1С отсутствует метод проверки результата по отправленному UUID.
+
+В API записи успех требует HTTP `200` или `201`, явный `status` со значением `success`, `booked` или `confirmed` и непустой `claim_id` или `appointment_id` в ответе. Для отказа по занятости имитатор возвращает HTTP `409` с `code: slot_unavailable`. Эти признаки нужно сверить с ответами 1С. Проверка статуса читает сохранённый исход в Laravel. Операции `unknown` требуют сверки в источнике и автоматически не переотправляются. API сохраняет подтверждённую заявку без рассылок Laravel.
+
 ## Автоматическая проверка и следующий шаг
 
 ```sh
-php artisan test --filter 'BookingIntegrationApiTest|BookingWidgetApiContractTest|DoctorCalendarAvailabilityTest|OneCScheduleWebhookCompatibilityTest|AdminApplicationRoutingTest|AppointmentConfirmationNotificationTest|AppointmentCalendarWidgetDeleteTest'
+DB_URL= php artisan test --filter 'BookingWriteApiTest|BookingIntegrationApiTest|BookingWidgetApiContractTest|DoctorCalendarAvailabilityTest|OneCScheduleWebhookCompatibilityTest|AdminApplicationRoutingTest|AppointmentConfirmationNotificationTest|AppointmentCalendarWidgetDeleteTest'
 ```
 
-Дальше — сверить справочник специальностей, временные зоны, свежесть и покрытие выгрузки на тестовом контуре 1С, затем перейти к общему ядру записи и подтверждению по контракту 1С. Голосовые инструменты, цены и адаптеры площадок идут отдельными этапами. [План платформы](BOOKING_PLATFORM_IMPLEMENTATION.md).
+Следующий шаг — ручная проверка записи через Postman, затем подключение ElevenLabs. [План платформы](BOOKING_PLATFORM_IMPLEMENTATION.md).

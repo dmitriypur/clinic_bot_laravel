@@ -1,0 +1,99 @@
+{
+  "info": {
+    "name": "Laravel Booking - production manual test",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Send each request manually. Select one offer and set its token and a new UUID v4 in the environment before sending Create. Keep the same UUID and body for status checks and replay."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{write_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Find an available window",
+      "request": {
+        "method": "POST",
+        "url": "https://adminzrenie.ru/api/integrations/v1/availability/search",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"branch_ids\": [{{branch_id}}],\n  \"doctor_ids\": [{{doctor_id}}],\n  \"date_from\": \"{{appointment_date}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "2. Create one test booking",
+      "request": {
+        "method": "POST",
+        "url": "https://adminzrenie.ru/api/integrations/v1/bookings",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{operation_id}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"offer_token\": \"{{offer_token}}\",\n  \"full_name\": {{test_full_name_json}},\n  \"birth_date\": \"{{test_birth_date}}\",\n  \"phone\": \"{{test_phone}}\",\n  \"comment\": \"ТЕСТ. Не связываться.\",\n  \"confirmed\": true,\n  \"privacy_consent\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Booking outcome returned\", () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 409]));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Check the same operation",
+      "request": {
+        "method": "GET",
+        "url": "https://adminzrenie.ru/api/integrations/v1/operations/{{operation_id}}",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -39,6 +39,7 @@ class AvailabilityService
         $now = CarbonImmutable::now('UTC');
         $unverified = [];
         $hasVerifiedSchedule = false;
+        $hasScheduledTime = false;
         $matches = collect();
 
         foreach ($branches->groupBy(fn (Branch $branch) => $branch->bookingTimezone(), preserveKeys: true) as $timezone => $group) {
@@ -54,9 +55,10 @@ class AvailabilityService
             $localBranches = $group->reject(fn (Branch $branch) => $branch->isOnecPushMode());
             $onecBranches = $group->filter(fn (Branch $branch) => $branch->isOnecPushMode());
             $localSlots = $this->localSlots($localBranches, $from, $until);
-            [$onecSlots, $unverifiedDates, $onecVerified] = $this->onecSlots($onecBranches, $from, $until, $now, $criteria->birthDate);
+            [$onecSlots, $unverifiedDates, $onecVerified, $onecScheduled] = $this->onecSlots($onecBranches, $from, $until, $now, $criteria->birthDate);
             array_push($unverified, ...$unverifiedDates);
             $hasVerifiedSchedule = $hasVerifiedSchedule || $localBranches->isNotEmpty() || $onecVerified;
+            $hasScheduledTime = $hasScheduledTime || $onecScheduled;
 
             $occupied = $this->occupancy($group, $from, $until);
             foreach ($localSlots->concat($onecSlots) as $slot) {
@@ -66,11 +68,16 @@ class AvailabilityService
                 $time = $start->format('H:i');
                 $utc = $start->copy()->utc()->format('Y-m-d H:i:s');
 
-                if ($start < $now || $start < $from || $start >= $until || $slot->end <= $slot->start
+                if ($start < $from || $start >= $until || $slot->end <= $slot->start
+                    || ! $this->admitsOnDate($doctor, $start, $criteria->birthDate)) {
+                    continue;
+                }
+
+                $hasScheduledTime = true;
+                if ($start < $now
                     || $time < $criteria->timeFrom || $time > $criteria->timeTo
                     || isset($occupied['cabinet'][$slot->cabinetId][$utc])
-                    || isset($occupied['doctor'][$slot->doctorId][$utc])
-                    || ! $this->admitsOnDate($doctor, $start, $criteria->birthDate)) {
+                    || isset($occupied['doctor'][$slot->doctorId][$utc])) {
                     continue;
                 }
 
@@ -87,6 +94,9 @@ class AvailabilityService
             $hasVerifiedSchedule || $matches->isNotEmpty() => 'partial',
             default => 'schedule_unavailable',
         };
+        $emptyReason = $status === 'complete' && $matches->isEmpty()
+            ? ['empty_reason' => $hasScheduledTime ? 'no_available_slots' : 'no_schedule']
+            : [];
 
         return [
             'data' => $matches->take($criteria->limit)->values()->map(fn (SlotData $slot) => $this->slotDetails($slot, $branches[$slot->branchId]))->all(),
@@ -95,7 +105,7 @@ class AvailabilityService
                 'checked_at' => $now->toIso8601String(),
                 'unverified_branches' => $unverified,
                 'has_more' => $matches->count() > $criteria->limit,
-            ],
+            ] + $emptyReason,
         ];
     }
 
@@ -158,7 +168,7 @@ class AvailabilityService
         ?string $birthDate,
     ): array {
         if ($branches->isEmpty()) {
-            return [collect(), [], false];
+            return [collect(), [], false, false];
         }
 
         // Imports store 1C wall time in the application zone. Local shifts and applications use UTC.
@@ -213,6 +223,7 @@ class AvailabilityService
 
         $unverified = [];
         $hasVerified = false;
+        $hasScheduledTime = false;
         foreach ($branches as $branch) {
             $unverifiedDates = [];
             for ($date = $from; $date < $until; $date = $date->addDay()) {
@@ -222,10 +233,12 @@ class AvailabilityService
                         continue;
                     }
 
-                    if ($coverage[$branch->id][$day][$doctor->id] ?? false) {
-                        $hasVerified = true;
-                    } else {
+                    $fresh = $coverage[$branch->id][$day][$doctor->id] ?? null;
+                    $hasScheduledTime = $hasScheduledTime || $fresh !== null;
+                    if ($fresh === false) {
                         $unverifiedDates[$day] = true;
+                    } else {
+                        $hasVerified = true;
                     }
                 }
             }
@@ -234,7 +247,7 @@ class AvailabilityService
             }
         }
 
-        return [$candidates->filter(), $unverified, $hasVerified];
+        return [$candidates->filter(), $unverified, $hasVerified, $hasScheduledTime];
     }
 
     private function occupancy(EloquentCollection $branches, CarbonImmutable $from, CarbonImmutable $until): array

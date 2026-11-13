@@ -121,7 +121,8 @@ class BookingIntegrationApiTest extends TestCase
         $this->seed(BookingIntegrationDemoSeeder::class);
 
         $this->search(['doctor_ids' => [1], 'date_from' => '2026-11-10', 'date_to' => '2026-11-11', 'limit' => 5])
-            ->assertOk()->assertJsonCount(0, 'data')->assertJsonPath('meta.schedule_status', 'complete');
+            ->assertOk()->assertJsonCount(0, 'data')->assertJsonPath('meta.schedule_status', 'complete')
+            ->assertJsonPath('meta.empty_reason', 'no_available_slots');
 
         $this->search(['doctor_ids' => [1], 'date_from' => '2026-11-12', 'date_to' => '2026-12-11', 'limit' => 1])
             ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('meta.has_more', true)
@@ -260,11 +261,18 @@ class BookingIntegrationApiTest extends TestCase
             ->assertJsonPath('data.0.starts_at', '2026-11-11T15:00:00+03:00')
             ->assertJsonPath('data.0.doctor.specialty', 'Детский офтальмолог')
             ->assertJsonPath('meta.schedule_status', 'partial')
-            ->assertJsonPath('meta.unverified_branches.0.dates', ['2026-11-12', '2026-11-13'])
+            ->assertJsonPath('meta.unverified_branches.0.dates', ['2026-11-12'])
             ->assertJsonMissing(['private' => 'hidden']);
 
         $this->search(['branch_ids' => [1], 'doctor_ids' => [3], 'date_from' => '2026-11-12'])
-            ->assertServiceUnavailable()->assertJsonPath('meta.schedule_status', 'schedule_unavailable');
+            ->assertServiceUnavailable()->assertJsonPath('meta.schedule_status', 'schedule_unavailable')
+            ->assertJsonMissingPath('meta.empty_reason');
+        $this->search(['branch_ids' => [1], 'doctor_ids' => [3], 'date_from' => '2026-11-13'])
+            ->assertOk()->assertJsonCount(0, 'data')->assertJsonPath('meta.schedule_status', 'complete')
+            ->assertJsonPath('meta.empty_reason', 'no_schedule');
+        $this->search(['branch_ids' => [1], 'doctor_ids' => [3], 'date_from' => '2026-11-11', 'time_from' => '16:00'])
+            ->assertOk()->assertJsonCount(0, 'data')->assertJsonPath('meta.schedule_status', 'complete')
+            ->assertJsonPath('meta.empty_reason', 'no_available_slots');
         $this->search(['branch_ids' => [1, 2], 'doctor_ids' => [3], 'date_from' => '2026-11-11'])
             ->assertOk()->assertJsonCount(2, 'data')->assertJsonPath('meta.schedule_status', 'complete');
     }

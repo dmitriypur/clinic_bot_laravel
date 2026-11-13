@@ -2,6 +2,10 @@
 
 Актуальный контекст проекта для быстрого входа в работу без полного повторного анализа кода.
 
+## С чего начать в новом чате
+
+Этот файл описывает приложение целиком. Для работы с записью прочитай [текущее состояние платформы записи](BOOKING_PLATFORM_IMPLEMENTATION.md#текущее-состояние-и-следующий-шаг) и [контракт API и настройки ElevenLabs](BOOKING_INTEGRATIONS_API.md#голосовая-проверка-в-elevenlabs).
+
 ## Что это за проект
 - Продукт: медицинская запись (веб-форма для пациентов в Telegram WebApp + административная панель).
 - Основная пользовательская воронка: пациент выбирает город/клинику/врача/слот, отправляет заявку, далее заявка обрабатывается в админке.
@@ -274,6 +278,7 @@
 3. При необходимости обновить разделы: маршруты, сервисы, env, ограничения.
 
 ## Что изменилось (последнее)
+- 2026-11-13: защищённое API поиска и записи развёрнуто, голосовая запись через ElevenLabs проверена на одном филиале. Пилотный доступ охватывает восемь филиалов «Ангелов зрения». [Состояние пилота](BOOKING_PLATFORM_IMPLEMENTATION.md#текущее-состояние-и-следующий-шаг).
 - 2026-11-09: публичное API оставляет создание заявки, проверку слота и чтение справочников. SQL-дампы вынесены из Git, первый администратор создаётся через Shield.
 - 2026-04-09: monthly endpoint `GET /api/v1/cities/{city}/doctors-by-date/calendar` стал принимать опциональный `doctor_uuids` (comma-separated), чтобы внешние multi-source клиенты вроде `zrenie.clinic-7` могли считать календарную подсветку только по локально видимым врачам и не подсвечивать даты из-за скрытых/непубличных специалистов. Для совместимости фильтр теперь матчится и по внутреннему `uuid`, и по внешнему `external_id` врача, потому что сайт передаёт именно внешние doctor identifiers. Контракт закреплён в [docs/API_CONTRACT_BOOKING_WIDGET.md](/Users/dmitriypur/Desktop/adminzrenie-laravel/docs/API_CONTRACT_BOOKING_WIDGET.md) и [tests/Feature/BookingWidgetApiContractTest.php](/Users/dmitriypur/Desktop/adminzrenie-laravel/tests/Feature/BookingWidgetApiContractTest.php).
 - 2026-04-10: для ветки `Выбрать врача` добавлен новый агрегирующий endpoint `GET /api/v1/doctors/{doctor}/branches-availability`, который одним запросом возвращает филиалы выбранного врача на конкретную дату с `available_slots`, `first_available_time`, `has_available_slots` и `meta.default_branch_id`. Он нужен внешнему `BookingWidgetV3`, чтобы убрать `N+1` по `clinics/{clinic}/doctors` и `doctors/{doctor}/slots` при первом открытии doctor-flow. Контракт закреплён в [docs/API_CONTRACT_BOOKING_WIDGET.md](/Users/dmitriypur/Desktop/adminzrenie-laravel/docs/API_CONTRACT_BOOKING_WIDGET.md) и [tests/Feature/BookingWidgetApiContractTest.php](/Users/dmitriypur/Desktop/adminzrenie-laravel/tests/Feature/BookingWidgetApiContractTest.php).
@@ -282,6 +287,7 @@
 - 2026-02-13: создан `docs/APP_CONTEXT.md` с подробным контекстом проекта (архитектура, домен, интеграции 1С/CRM/Telegram, API, правила и операционные заметки).
 
 ## Журнал изменений
+- 2026-11-13: задокументированы настройки голосового агента, результаты проверки записи и сценарии следующего прогона.
 - 2026-11-09:
   - закрыты публичные маршруты управления заявками и справочниками;
   - основной сидер создаёт роли и справочники, legacy-импорт читает дампы из закрытого каталога.

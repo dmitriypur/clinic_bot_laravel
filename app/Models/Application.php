@@ -199,7 +199,7 @@ class Application extends Model
     /**
      * Очищает кэш календаря
      */
-    protected static function clearCalendarCache(): void
+    public static function clearCalendarCache(): void
     {
         // Очищаем все ключи кэша календаря
         $keys = Cache::get("calendar_cache_keys", []);

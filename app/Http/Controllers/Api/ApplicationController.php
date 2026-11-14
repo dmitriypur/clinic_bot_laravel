@@ -12,6 +12,7 @@ use App\Models\IntegrationEndpoint;
 use App\Models\OnecSlot;
 use App\Modules\OnecSync\Contracts\CancellationConflictResolver;
 use App\Services\ApplicationRoutingService;
+use App\Services\Booking\LocalBooking;
 use App\Services\BookingMonitoring\BookingAvailabilityChecker;
 use App\Services\BookingMonitoring\BookingMonitoringNotifier;
 use App\Services\BookingMonitoring\OneCBookingFailureClassifier;
@@ -37,6 +38,7 @@ class ApplicationController extends Controller
         private readonly BookingAvailabilityChecker $availabilityChecker,
         private readonly BookingMonitoringNotifier $monitoringNotifier,
         private readonly OneCBookingFailureClassifier $bookingFailureClassifier,
+        private readonly LocalBooking $localBooking,
     ) {}
 
     /**
@@ -158,7 +160,9 @@ class ApplicationController extends Controller
         $application = null;
 
         try {
-            $application = Application::create($validated);
+            $application = $shouldSendToOneC
+                ? Application::create($validated)
+                : $this->localBooking->createFromWidget($validated);
 
             if ($shouldSendToOneC) {
                 $this->bookOneCApplication(

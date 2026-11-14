@@ -4,12 +4,15 @@ namespace App\Services\Booking;
 
 use App\Models\Branch;
 use App\Models\OnecSlot;
+use App\Services\ApplicationRoutingService;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
 
 class BookingOffer
 {
+    public function __construct(private readonly ApplicationRoutingService $routing) {}
+
     public function allowsBranch(int $branchId, ?array $allowedBranchIds): bool
     {
         return $allowedBranchIds !== null && in_array($branchId, $allowedBranchIds, true)
@@ -18,10 +21,18 @@ class BookingOffer
 
     public function attach(array $result, string $clientId, ?array $allowedBranchIds): array
     {
+        $localBranches = collect($result['data'])
+            ->filter(fn (array $window) => str_starts_with($window['id'], 'local:')
+                && $this->allowsBranch($window['branch']['id'], $allowedBranchIds))
+            ->pluck('branch.id')->unique();
+        $localBranches = $localBranches->isEmpty() ? collect() : Branch::with(['clinic', 'integrationEndpoint'])
+            ->findMany($localBranches)->filter(fn (Branch $branch) => $this->usesLocalBooking($branch))->keyBy('id');
+
         $expiresAt = now()->addMinutes(10);
         foreach ($result['data'] as &$window) {
-            if (! str_starts_with($window['id'], 'onec:')
-                || ! $this->allowsBranch($window['branch']['id'], $allowedBranchIds)) {
+            $branchId = $window['branch']['id'];
+            if (! $this->allowsBranch($branchId, $allowedBranchIds)
+                || (! str_starts_with($window['id'], 'onec:') && ! $localBranches->has($branchId))) {
                 continue;
             }
 
@@ -41,6 +52,12 @@ class BookingOffer
         }
 
         return $result;
+    }
+
+    public function usesLocalBooking(Branch $branch): bool
+    {
+        return ! $branch->isOnecPushMode()
+            && ! $this->routing->shouldSendToOneC($branch, $branch->clinic, now());
     }
 
     public function read(string $token, string $clientId, ?array $allowedBranchIds): array

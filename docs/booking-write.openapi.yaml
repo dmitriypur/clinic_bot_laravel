@@ -1,9 +1,10 @@
 openapi: 3.0.3
 info:
-  title: Laravel Booking – test write API
+  title: Laravel Booking write API
   version: 1.0.0
 servers:
   - url: http://127.0.0.1:8011/api/integrations/v1
+  - url: https://test.adminzrenie.ru/api/integrations/v1
   - url: https://adminzrenie.ru/api/integrations/v1
 security:
   - Bearer: []
@@ -11,13 +12,14 @@ paths:
   /availability/search:
     post:
       summary: Find windows using the existing availability filters
-      description: In the enabled test branch, a client with bookings:write receives offer_token, offer_expires_at and operation_id on eligible 1C windows.
+      description: 'A client with availability:read and bookings:write receives offer_token, offer_expires_at and operation_id on eligible local and 1C windows in explicitly enabled branches. The offer is bound to the client and expires after 10 minutes.'
       responses:
         '200':
           description: Windows and schedule metadata
   /bookings:
     post:
       summary: Book a selected window after confirmation
+      description: Local bookings commit the application and operation together. 1C bookings require confirmation from 1C. Identical retries return the same operation even after the offer expires.
       parameters:
         - in: header
           name: Idempotency-Key
@@ -47,25 +49,25 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Operation'}
         '201':
-          description: Source confirmed the booking
+          description: Booking confirmed and saved
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Operation'}
         '202':
-          description: Result unresolved. Read the same operation and preserve the same key.
+          description: The 1C result is unresolved. Read the same operation and preserve the same key.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Operation'}
         '401': {description: Invalid or missing Bearer token}
         '403': {description: 'Missing bookings:write scope'}
-        '404': {description: Offer unavailable to this client or test write disabled}
+        '404': {description: Offer unavailable to this client or branch write disabled}
         '409': {description: 'slot_unavailable, offer_expired or idempotency_conflict'}
         '422': {description: Invalid request or patient is outside the admission age range}
         '429': {description: Rate limit exceeded}
         '503': {description: Source or schedule unavailable before dispatch}
   /operations/{id}:
     get:
-      summary: Read the outcome for the same client and Idempotency-Key
+      summary: Read the outcome for the same client and operation ID
       parameters:
         - in: path
           name: id

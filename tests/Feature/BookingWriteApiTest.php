@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Application;
 use App\Models\Branch;
 use App\Models\Doctor;
+use App\Models\DoctorShift;
 use App\Models\IntegrationEndpoint;
 use App\Models\OnecSlot;
 use Database\Seeders\BookingIntegrationDemoSeeder;
@@ -12,6 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -91,6 +93,114 @@ class BookingWriteApiTest extends TestCase
         $this->getJson(self::API.'operations/'.$operationId)->assertOk()->assertJsonPath('status', 'confirmed');
         $this->postJson(self::API.'bookings', $body)->assertOk()->assertJsonPath('operation_id', $operationId);
         Http::assertSentCount(1);
+    }
+
+    public function test_local_booking_confirms_and_replays_without_dispatching_integrations(): void
+    {
+        Http::fake();
+        Queue::fake();
+        $window = $this->localWindow();
+        $body = $this->localBody($window);
+        $key = $window['operation_id'];
+
+        $this->postJson(self::API.'bookings', array_replace($body, ['privacy_consent' => false]))
+            ->assertUnprocessable()->assertJsonValidationErrors('privacy_consent');
+        $bookingId = $this->postJson(self::API.'bookings', $body)->assertCreated()
+            ->assertJsonPath('operation_id', $key)->assertJsonPath('status', 'confirmed')->json('booking_id');
+        $this->getJson(self::API.'operations/'.$key)->assertOk()->assertJsonPath('booking_id', $bookingId);
+        $this->travel(11)->minutes();
+        $this->postJson(self::API.'bookings', $body)->assertOk()->assertJsonPath('booking_id', $bookingId);
+        $this->postJson(self::API.'bookings', array_replace($body, ['phone' => '+70000000001']))
+            ->assertConflict()->assertJsonPath('code', 'idempotency_conflict');
+        $this->assertDatabaseHas('applications', [
+            'id' => $bookingId, 'branch_id' => 2, 'doctor_id' => 1, 'submission_source' => 'postman',
+            'integration_type' => 'local', 'send_to_1c' => false, 'appointment_datetime' => '2026-11-12 12:00:00',
+            'full_name' => 'Пациент Тестовый', 'phone' => '+70000000000',
+        ]);
+        $this->assertSame(1, Application::where('submission_source', 'postman')->count());
+        Http::assertNothingSent();
+        Queue::assertNothingPushed();
+    }
+
+    public function test_local_offer_is_rejected_if_expired_or_consumed_by_another_operation(): void
+    {
+        $first = $this->localBody($this->localWindow());
+        $second = $this->localBody($this->localWindow());
+        $expired = $this->localBody($this->localWindow());
+        $this->travel(11)->minutes();
+        $this->postJson(self::API.'bookings', $expired)->assertConflict()->assertJsonPath('code', 'offer_expired');
+        $this->travel(-11)->minutes();
+
+        $this->postJson(self::API.'bookings', $first)->assertCreated();
+        $this->postJson(self::API.'bookings', $second)->assertConflict()->assertJsonPath('code', 'slot_unavailable');
+        $this->assertSame(1, Application::where('submission_source', 'postman')->count());
+    }
+
+    public function test_local_offer_requires_the_same_client_and_branch_permissions(): void
+    {
+        $window = $this->localWindow();
+        $body = $this->localBody($window);
+        $this->withToken($this->otherToken)->postJson(self::API.'bookings', $body)->assertNotFound();
+
+        config(['booking-integrations.write_branch_ids' => [3]]);
+        $this->withToken($this->token)->postJson(self::API.'bookings', $body)->assertNotFound();
+        config(['booking-integrations.write_branch_ids' => [2, 3]]);
+        $this->postJson(self::API.'bookings', $body)->assertCreated();
+        $statusUrl = self::API.'operations/'.$window['operation_id'];
+        $this->withToken($this->otherToken)->getJson($statusUrl)->assertNotFound();
+        config(['booking-integrations.clients.postman.branch_ids' => [3]]);
+        $this->withToken($this->token)->getJson($statusUrl)->assertNotFound();
+    }
+
+    public function test_local_offer_is_rejected_when_the_shift_was_removed(): void
+    {
+        $window = $this->localWindow();
+        [, $shiftId] = explode(':', $window['id']);
+        DoctorShift::findOrFail($shiftId)->delete();
+
+        $this->postJson(self::API.'bookings', $this->localBody($window))->assertConflict()
+            ->assertJsonPath('code', 'slot_unavailable');
+    }
+
+    public function test_widget_and_integration_share_local_occupancy(): void
+    {
+        $window = $this->localWindow();
+        [, $shiftId] = explode(':', $window['id']);
+        $shift = DoctorShift::findOrFail($shiftId);
+        $widget = [
+            'city_id' => 1, 'branch_id' => 2, 'doctor_id' => 1, 'cabinet_id' => $shift->cabinet_id,
+            'appointment_datetime' => '2026-11-12 15:00', 'full_name' => 'Пациент Виджета', 'phone' => '70000000000',
+        ];
+        $this->postJson('/api/v1/applications', $widget)->assertCreated();
+        $this->postJson(self::API.'bookings', $this->localBody($window))->assertConflict()
+            ->assertJsonPath('code', 'slot_unavailable');
+
+        Application::where('full_name', 'Пациент Виджета')->delete();
+        $this->postJson(self::API.'bookings', $this->localBody($this->localWindow()))->assertCreated();
+        $this->postJson('/api/v1/applications', $widget)->assertUnprocessable()
+            ->assertJsonValidationErrors('appointment_datetime');
+    }
+
+    private function localWindow(): array
+    {
+        config([
+            'booking-integrations.write_branch_ids' => [2, 3],
+            'booking-integrations.clients.postman.branch_ids' => [2, 3],
+            'booking-integrations.clients.other.branch_ids' => [2, 3],
+        ]);
+
+        return $this->withToken($this->token)->postJson(self::API.'availability/search', [
+            'branch_ids' => [2], 'doctor_ids' => [1], 'date_from' => '2026-11-12',
+        ])->assertOk()->assertJsonStructure(['data' => [['offer_token', 'offer_expires_at', 'operation_id']]])->json('data.0');
+    }
+
+    private function localBody(array $window): array
+    {
+        return [
+            'offer_token' => $window['offer_token'], 'full_name' => 'Пациент Тестовый',
+            'birth_date' => '2016-01-01', 'phone' => '+70000000000',
+            'confirmed' => true, 'privacy_consent' => true, 'comment' => 'ТЕСТ. Не связываться.',
+        ];
     }
 
     public function test_slot_taken_after_search_is_rejected_before_sending(): void

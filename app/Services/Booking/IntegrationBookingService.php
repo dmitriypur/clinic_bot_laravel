@@ -6,6 +6,7 @@ use App\Models\Application;
 use App\Models\BookingOperation;
 use App\Models\Cabinet;
 use App\Models\Doctor;
+use App\Models\DoctorShift;
 use App\Models\IntegrationEndpoint;
 use App\Models\OnecSlot;
 use App\Services\OneC\Exceptions\OneCApiException;
@@ -25,44 +26,38 @@ class IntegrationBookingService
         private readonly BookingOffer $offers,
         private readonly AvailabilityService $availability,
         private readonly OneCBookingService $onec,
+        private readonly LocalBooking $local,
     ) {}
 
     public function create(string $clientId, ?array $allowedBranchIds, ?string $key, array $data): array
     {
-        $offer = null;
-        if ($key === null) {
-            $offer = $this->offers->read($data['offer_token'], $clientId, $allowedBranchIds);
-            $key = $offer['operation_id'] ?? throw ValidationException::withMessages([
-                'idempotency_key' => 'Передайте Idempotency-Key или заново найдите свободное окно.',
-            ]);
-        }
+        $offer = $this->offers->read($data['offer_token'], $clientId, $allowedBranchIds);
+        $key ??= $offer['operation_id'] ?? throw ValidationException::withMessages([
+            'idempotency_key' => 'Передайте Idempotency-Key или заново найдите свободное окно.',
+        ]);
 
         $hash = hash_hmac('sha256', json_encode($data, JSON_THROW_ON_ERROR), config('app.key'));
         $existing = $this->operation($clientId, $key);
         if ($existing) {
-            abort_unless($allowedBranchIds === null || in_array((int) $existing->branch_id, $allowedBranchIds, true), 404);
+            abort_unless($this->offers->allowsBranch((int) $existing->branch_id, $allowedBranchIds), 404);
 
             return $this->replay($existing, $hash);
         }
 
-        $offer ??= $this->offers->read($data['offer_token'], $clientId, $allowedBranchIds);
         if ($offer['expires'] <= now()->timestamp) {
             return [['code' => 'offer_expired'], 409];
         }
 
-        $slot = $this->offers->slot($offer);
         $start = CarbonImmutable::parse($offer['start']);
         $end = CarbonImmutable::parse($offer['end']);
+        if (str_starts_with($offer['slot'], 'local:')) {
+            return $this->createLocal($clientId, $key, $hash, $offer, $start, $end, $data);
+        }
+
+        $slot = $this->offers->slot($offer);
         [$operation, $slot] = DB::transaction(function () use ($clientId, $key, $hash, $offer, $slot, $start, $end, $data) {
             // Insert first so SQLite obtains its write lock before taking a read snapshot.
-            $operation = BookingOperation::query()->createOrFirst(
-                ['client_id' => $clientId, 'operation_key' => $key],
-                [
-                    'request_hash' => $hash, 'onec_request_id' => (string) Str::uuid(),
-                    'branch_id' => $offer['branch'], 'doctor_id' => $offer['doctor'], 'cabinet_id' => $slot->cabinet_id,
-                    'starts_at' => $start->utc(), 'ends_at' => $end->utc(), 'status' => 'unknown',
-                ],
-            );
+            $operation = $this->startOperation($clientId, $key, $hash, $offer, $slot->cabinet_id, $start, $end);
             if (! $operation->wasRecentlyCreated) {
                 return [$operation, null];
             }
@@ -157,6 +152,104 @@ class IntegrationBookingService
         return $this->result($operation, created: true);
     }
 
+    private function createLocal(
+        string $clientId,
+        string $key,
+        string $hash,
+        array $offer,
+        CarbonImmutable $start,
+        CarbonImmutable $end,
+        array $data,
+    ): array {
+        [, $shiftId] = explode(':', $offer['slot']);
+        $cabinetId = DoctorShift::query()->whereKey($shiftId)->value('cabinet_id');
+
+        $operation = DB::transaction(function () use ($clientId, $key, $hash, $offer, $shiftId, $cabinetId, $start, $end, $data) {
+            $operation = $this->startOperation($clientId, $key, $hash, $offer, $cabinetId, $start, $end);
+            if (! $operation->wasRecentlyCreated) {
+                return $operation;
+            }
+
+            $doctor = $this->local->lockResources($offer['doctor'], $cabinetId);
+            $shift = DoctorShift::query()->lockForUpdate()->find($shiftId);
+            $branch = $shift?->cabinet?->branch;
+            if ($offer['expires'] <= now()->timestamp) {
+                $operation->reject('offer_expired', 409);
+
+                return $operation;
+            }
+            if (! $doctor || $branch?->id !== $offer['branch'] || $shift->cabinet_id !== $cabinetId
+                || (int) $shift->doctor_id !== $offer['doctor'] || $start <= now()
+                || ! $this->offers->usesLocalBooking($branch)) {
+                $operation->reject('slot_unavailable', 409);
+
+                return $operation;
+            }
+
+            $birth = CarbonImmutable::parse($data['birth_date'], $start->getTimezone());
+            if (! $doctor->admitsAge((int) $birth->diffInYears($start->startOfDay()))) {
+                $operation->reject('age_not_admitted', 422);
+
+                return $operation;
+            }
+
+            try {
+                $windows = $this->availability->search(new AvailabilityCriteria(
+                    branchIds: [$branch->id], doctorIds: [$doctor->id], dateFrom: $start->toDateString(),
+                    timeFrom: $start->format('H:i'), timeTo: $start->format('H:i'),
+                ))['data'];
+            } catch (ValidationException) {
+                $windows = [];
+            }
+            $matches = collect($windows)->contains(fn (array $window) => $window['id'] === $offer['slot']
+                && $window['starts_at'] === $offer['start'] && $window['ends_at'] === $offer['end']);
+            if (! $matches || $this->hasOverlappingOperation($operation, $start, $end)
+                || $this->local->hasApplicationOverlap($doctor->id, $cabinetId, $start, $end)) {
+                $operation->reject('slot_unavailable', 409);
+
+                return $operation;
+            }
+
+            $application = new Application([
+                'city_id' => $branch->city_id, 'clinic_id' => $branch->clinic_id, 'branch_id' => $branch->id,
+                'doctor_id' => $doctor->id, 'cabinet_id' => $cabinetId, 'appointment_datetime' => $start->utc(),
+                'full_name' => $data['full_name'], 'full_name_parent' => $data['full_name_parent'],
+                'birth_date' => $data['birth_date'], 'phone' => $data['phone'], 'send_to_1c' => false,
+                'source' => Application::SOURCE_FRONTEND, 'submission_source' => $clientId,
+                'submission_type' => Application::SUBMISSION_TYPE_APPOINTMENT_FORM,
+                'integration_type' => Application::INTEGRATION_TYPE_LOCAL,
+                'integration_payload' => array_intersect_key($data, ['comment' => true]),
+            ]);
+            $application->fillStatusFromSlug(Application::STATUS_SLUG_APPOINTMENT_CONFIRMED);
+            $application->saveQuietly();
+            $operation->update(['status' => 'confirmed', 'application_id' => $application->id]);
+            DB::afterCommit(fn () => Application::clearCalendarCache());
+
+            return $operation;
+        }, 3);
+
+        return $operation->wasRecentlyCreated ? $this->result($operation, created: true) : $this->replay($operation, $hash);
+    }
+
+    private function startOperation(
+        string $clientId,
+        string $key,
+        string $hash,
+        array $offer,
+        ?int $cabinetId,
+        CarbonImmutable $start,
+        CarbonImmutable $end,
+    ): BookingOperation {
+        return BookingOperation::query()->createOrFirst(
+            ['client_id' => $clientId, 'operation_key' => $key],
+            [
+                'request_hash' => $hash, 'onec_request_id' => (string) Str::uuid(),
+                'branch_id' => $offer['branch'], 'doctor_id' => $offer['doctor'], 'cabinet_id' => $cabinetId,
+                'starts_at' => $start->utc(), 'ends_at' => $end->utc(), 'status' => 'unknown',
+            ],
+        );
+    }
+
     public function status(string $clientId, ?array $allowedBranchIds, string $key): array
     {
         $operation = $this->operation($clientId, $key);
@@ -238,33 +331,33 @@ class IntegrationBookingService
 
     private function hasOverlap(BookingOperation $operation, CarbonImmutable $start, CarbonImmutable $end): bool
     {
-        $resource = fn (Builder $query) => $query->where('doctor_id', $operation->doctor_id)
-            ->when($operation->cabinet_id, fn (Builder $query, $id) => $query->orWhere('cabinet_id', $id));
-        if (BookingOperation::query()->whereKeyNot($operation->id)
-            ->where(fn (Builder $query) => $query->where('status', 'unknown')
-                ->orWhere(fn (Builder $query) => $query->where('status', 'confirmed')
-                    ->whereIn('application_id', Application::query()->select('id'))))
-            ->where('starts_at', '<', $end->utc())->where('ends_at', '>', $start->utc())->where($resource)->exists()) {
+        if ($this->hasOverlappingOperation($operation, $start, $end)) {
             return true;
         }
 
         $timezone = config('app.timezone');
         if (OnecSlot::query()->where('status', '!=', OnecSlot::STATUS_FREE)
             ->where('start_at', '<', $end->setTimezone($timezone))
-            ->where('end_at', '>', $start->setTimezone($timezone))->where($resource)->exists()) {
+            ->where('end_at', '>', $start->setTimezone($timezone))->where($this->sameResource($operation))->exists()) {
             return true;
         }
 
-        $applications = Application::query()->where('appointment_datetime', '<', $end->utc())
-            ->where(fn (Builder $query) => $query->where('applications.doctor_id', $operation->doctor_id)
-                ->when($operation->cabinet_id, fn (Builder $query, $id) => $query->orWhere('applications.cabinet_id', $id)))
-            ->leftJoin('branches', 'branches.id', '=', 'applications.branch_id')
-            ->leftJoin('clinics', 'clinics.id', '=', 'branches.clinic_id')
-            ->select('applications.appointment_datetime')
-            ->selectRaw('coalesce(branches.slot_duration, clinics.slot_duration, 30) as duration')
-            ->toBase()->cursor();
+        return $this->local->hasApplicationOverlap($operation->doctor_id, $operation->cabinet_id, $start, $end);
+    }
 
-        return $applications->contains(fn ($item) => CarbonImmutable::parse($item->appointment_datetime, 'UTC')
-            ->addMinutes($item->duration)->greaterThan($start));
+    private function hasOverlappingOperation(BookingOperation $operation, CarbonImmutable $start, CarbonImmutable $end): bool
+    {
+        return BookingOperation::query()->whereKeyNot($operation->id)
+            ->where(fn (Builder $query) => $query->where('status', 'unknown')
+                ->orWhere(fn (Builder $query) => $query->where('status', 'confirmed')
+                    ->whereIn('application_id', Application::query()->select('id'))))
+            ->where('starts_at', '<', $end->utc())->where('ends_at', '>', $start->utc())
+            ->where($this->sameResource($operation))->exists();
+    }
+
+    private function sameResource(BookingOperation $operation): \Closure
+    {
+        return fn (Builder $query) => $query->where('doctor_id', $operation->doctor_id)
+            ->when($operation->cabinet_id, fn (Builder $query, $id) => $query->orWhere('cabinet_id', $id));
     }
 }

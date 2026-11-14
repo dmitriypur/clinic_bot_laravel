@@ -234,6 +234,9 @@ if [[ "$target" == production ]]; then
 fi
 verify loopback
 verify
+if [[ "$target" == test ]]; then
+    artisan "$new_release" booking:verify-staging "$shared/elevenlabs-booking-authorization"
+fi
 if [[ "$target" == production ]]; then
     rm -f "$pending"
 fi

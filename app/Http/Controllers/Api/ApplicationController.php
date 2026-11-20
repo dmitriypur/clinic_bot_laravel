@@ -98,6 +98,7 @@ class ApplicationController extends Controller
             'utm_campaign' => 'nullable|string|max:255',
             'utm_content' => 'nullable|string|max:255',
             'utm_term' => 'nullable|string|max:255',
+            'utm_place' => 'nullable|string|max:255',
         ]);
 
         $submissionSource = $this->resolveSubmissionSource($validated);
@@ -337,6 +338,7 @@ class ApplicationController extends Controller
             'utm_campaign' => 'nullable|string|max:255',
             'utm_content' => 'nullable|string|max:255',
             'utm_term' => 'nullable|string|max:255',
+            'utm_place' => 'nullable|string|max:255',
         ]);
 
         if (array_key_exists('source', $validated)) {
@@ -506,6 +508,7 @@ class ApplicationController extends Controller
             'utm_campaign',
             'utm_content',
             'utm_term',
+            'utm_place',
         ] as $key) {
             $value = Arr::pull($payload, $key);
 

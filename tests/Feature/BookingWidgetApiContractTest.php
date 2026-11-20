@@ -855,6 +855,7 @@ class BookingWidgetApiContractTest extends TestCase
                     && ($payload['utm_campaign'] ?? null) === 'kids'
                     && ($payload['utm_content'] ?? null) === 'button-a'
                     && ($payload['utm_term'] ?? null) === 'child ophthalmologist'
+                    && ($payload['utm_place'] ?? null) === 'example.org'
                     && ($payload['source'] ?? null) === 'vk_mini_app'
                     && ($payload['type'] ?? null) === 'Онлайн-запись'
                 )
@@ -876,6 +877,7 @@ class BookingWidgetApiContractTest extends TestCase
             'utm_campaign' => 'kids',
             'utm_content' => 'button-a',
             'utm_term' => 'child ophthalmologist',
+            'utm_place' => 'example.org',
             'source' => 'vk_mini_app',
             'type' => 'Онлайн-запись',
         ]);
